@@ -174,13 +174,13 @@ fn opening_a_database_applies_the_learning_schema() {
     let migration = connection
         .query_row(
             "SELECT id FROM schema_migrations WHERE id = ?1",
-            params!["0004_learning"],
+            params!["0005_learning_source_integrity"],
             |row| row.get::<_, String>(0),
         )
         .optional()
         .expect("query migration");
 
-    assert_eq!(migration.as_deref(), Some("0004_learning"));
+    assert_eq!(migration.as_deref(), Some("0005_learning_source_integrity"));
 
     let table_count = connection
         .query_row(
@@ -336,6 +336,139 @@ fn learning_schema_enforces_scheduler_relations_and_values() {
             .expect("count cascaded rows");
         assert_eq!(count, 0, "{table} rows should cascade with the card");
     }
+    let stale_card_text = connection
+        .query_row(
+            "SELECT card_id FROM card_text WHERE card_text MATCH ?1",
+            params!["energy"],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .expect("check card text deletion");
+    assert_eq!(stale_card_text, None);
+}
+
+#[test]
+fn upgrading_0004_preserves_a_card_source_when_its_document_is_deleted() {
+    let directory = tempdir().expect("create temporary directory");
+    let database_path = directory.path().join("library.sqlite3");
+    let connection = Connection::open(&database_path).expect("open legacy learning database");
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys = ON;
+             CREATE TABLE schema_migrations (id TEXT PRIMARY KEY NOT NULL);",
+        )
+        .expect("create migration table");
+    for (migration_id, migration) in [
+        (
+            "0001_library",
+            include_str!("../migrations/0001_library.sql"),
+        ),
+        (
+            "0002_index_claims",
+            include_str!("../migrations/0002_index_claims.sql"),
+        ),
+        (
+            "0003_drive_source",
+            include_str!("../migrations/0003_drive_source.sql"),
+        ),
+        (
+            "0004_learning",
+            include_str!("../migrations/0004_learning.sql"),
+        ),
+    ] {
+        connection
+            .execute_batch(migration)
+            .expect("apply legacy migration");
+        connection
+            .execute(
+                "INSERT INTO schema_migrations (id) VALUES (?1)",
+                params![migration_id],
+            )
+            .expect("record legacy migration");
+    }
+    let timestamp = "2026-07-10T00:00:00Z";
+    connection
+        .execute(
+            "INSERT INTO documents (
+               id, source, content_hash, title, managed_path, status, index_state, created_at, updated_at
+             ) VALUES (?1, 'local_managed', ?2, ?3, ?4, 'ready', 'ready', ?5, ?5)",
+            params![
+                "document-1",
+                "document-content",
+                "Source document",
+                "/managed/source.pdf",
+                timestamp,
+            ],
+        )
+        .expect("insert source document");
+    connection
+        .execute(
+            "INSERT INTO decks (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            params!["deck-1", "Biology", timestamp],
+        )
+        .expect("insert deck");
+    connection
+        .execute(
+            "INSERT INTO cards (
+               id, deck_id, front, back, state, due_at, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, 'review', ?5, ?6, ?6)",
+            params![
+                "card-1",
+                "deck-1",
+                "What is ATP?",
+                "Energy storage",
+                timestamp,
+                timestamp
+            ],
+        )
+        .expect("insert sourced card");
+    connection
+        .execute(
+            "INSERT INTO card_sources (card_id, document_id, page, quote, rects_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                "card-1",
+                "document-1",
+                7,
+                "ATP stores energy.",
+                "[{\"x\":1}]"
+            ],
+        )
+        .expect("insert card source");
+    drop(connection);
+
+    let mut database = LibraryDatabase::open(directory.path()).expect("upgrade learning database");
+    database
+        .delete_document("document-1")
+        .expect("delete source document");
+    drop(database);
+
+    let connection = Connection::open(&database_path).expect("open upgraded database");
+    let source = connection
+        .query_row(
+            "SELECT cards.id, card_sources.document_id, card_sources.page,
+                    card_sources.quote, card_sources.rects_json
+             FROM cards
+             INNER JOIN card_sources ON card_sources.card_id = cards.id
+             WHERE cards.id = ?1",
+            params!["card-1"],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            },
+        )
+        .expect("retain source anchor");
+
+    assert_eq!(source.0, "card-1");
+    assert_eq!(source.1, None);
+    assert_eq!(source.2, 7);
+    assert_eq!(source.3, "ATP stores energy.");
+    assert_eq!(source.4, "[{\"x\":1}]");
 }
 
 #[test]

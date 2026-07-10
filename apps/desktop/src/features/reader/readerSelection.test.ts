@@ -21,6 +21,14 @@ test("rejects a selection without a positive page", () => {
   expect(selectionDraft({ ...source, page: 0 }, 0)).toBeNull();
 });
 
+test.each(["", " \n\t "])("rejects a selection with a blank source document id", (documentId) => {
+  expect(selectionDraft({ ...source, documentId }, 12)).toBeNull();
+});
+
+test("rejects a selection whose source document is unavailable", () => {
+  expect(selectionDraft({ ...source, documentId: null as never }, 12)).toBeNull();
+});
+
 test("rejects a selection spanning multiple pages", () => {
   expect(selectionDraft(source, 13)).toBeNull();
 });

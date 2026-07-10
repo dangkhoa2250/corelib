@@ -2,10 +2,10 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
-import type { CardSource } from "../reader/readerSelection";
+import type { NewCardSource } from "../reader/readerSelection";
 import { CardComposer } from "./CardComposer";
 
-const draft: CardSource = {
+const draft: NewCardSource = {
   documentId: "linear-algebra",
   page: 12,
   quote: "A vector space is closed under addition.",
@@ -75,6 +75,18 @@ test("requires both card sides before it saves", async () => {
   await user.click(screen.getByRole("button", { name: "Save" }));
 
   expect(screen.getByRole("alert")).toHaveTextContent("Front and Back are required.");
+  expect(onSave).not.toHaveBeenCalled();
+});
+
+test("rejects saving a card with a blank source document id", async () => {
+  const { onSave, user } = renderComposer({
+    draft: { ...draft, documentId: " \n" },
+  });
+
+  await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(screen.getByRole("alert")).toHaveTextContent("Source document is required.");
   expect(onSave).not.toHaveBeenCalled();
 });
 

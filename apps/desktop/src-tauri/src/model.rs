@@ -25,7 +25,7 @@ pub struct SelectionRect {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct CardSourcePayload {
     #[serde(rename = "documentId")]
-    pub document_id: String,
+    pub document_id: Option<String>,
     pub page: i64,
     pub quote: String,
     pub rects: Vec<SelectionRect>,
@@ -115,7 +115,7 @@ mod tests {
             difficulty: Some(6.2),
             last_review_at: Some("2026-07-09T09:00:00Z".into()),
             source: Some(CardSourcePayload {
-                document_id: "document-1".into(),
+                document_id: Some("document-1".into()),
                 page: 7,
                 quote: "ATP stores energy.".into(),
                 rects: vec![SelectionRect {
@@ -198,6 +198,26 @@ mod tests {
                 "id": "card-1",
                 "title": "What is ATP?",
                 "subtitle": null,
+            })
+        );
+    }
+
+    #[test]
+    fn source_payloads_serialize_an_unavailable_document_as_null() {
+        let source = CardSourcePayload {
+            document_id: None,
+            page: 7,
+            quote: "ATP stores energy.".into(),
+            rects: vec![],
+        };
+
+        assert_eq!(
+            serde_json::to_value(source).expect("serialize unavailable source"),
+            json!({
+                "documentId": null,
+                "page": 7,
+                "quote": "ATP stores energy.",
+                "rects": [],
             })
         );
     }

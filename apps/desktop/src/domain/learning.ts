@@ -15,10 +15,14 @@ export interface SelectionRect {
 }
 
 export interface CardSource {
-  documentId: string;
+  documentId: string | null;
   page: number;
   quote: string;
   rects: SelectionRect[];
+}
+
+export interface NewCardSource extends Omit<CardSource, "documentId"> {
+  documentId: string;
 }
 
 export interface LearningCard {

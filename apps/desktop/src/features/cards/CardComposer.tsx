@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-import type { CardSource } from "../reader/readerSelection";
+import type { NewCardSource } from "../reader/readerSelection";
 
 const NEW_DECK_VALUE = "__new_deck__";
 
@@ -16,12 +16,12 @@ export interface CardSaveInput {
   deckName: string;
   front: string;
   back: string;
-  source: CardSource;
+  source: NewCardSource;
   tags: string[];
 }
 
 export interface CardComposerProps {
-  draft: CardSource;
+  draft: NewCardSource;
   decks: CardComposerDeck[];
   onSave: (input: CardSaveInput) => Promise<void>;
   onCancel: () => void;
@@ -69,6 +69,10 @@ export function CardComposer({
     }
     if (!deckName) {
       setError("Choose a deck.");
+      return;
+    }
+    if (!draft.documentId.trim()) {
+      setError("Source document is required.");
       return;
     }
 

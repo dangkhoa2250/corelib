@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use crate::model::DocumentSummary;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATIONS: [(&str, &str); 4] = [
+const MIGRATIONS: [(&str, &str); 5] = [
     (
         "0001_library",
         include_str!("../migrations/0001_library.sql"),
@@ -26,6 +26,10 @@ const MIGRATIONS: [(&str, &str); 4] = [
     (
         "0004_learning",
         include_str!("../migrations/0004_learning.sql"),
+    ),
+    (
+        "0005_learning_source_integrity",
+        include_str!("../migrations/0005_learning_source_integrity.sql"),
     ),
 ];
 const SUMMARY_COLUMNS: &str =
