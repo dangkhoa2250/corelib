@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import type { LearningCard, ReviewPreview, ReviewRating } from "../../domain/learning";
 
 export interface ReviewPageProps {
   cards: LearningCard[];
   previews: Record<string, ReviewPreview>;
   onRate: (card: LearningCard, rating: ReviewRating, elapsedMs: number) => Promise<void>;
-  onShowSource: (card: LearningCard) => void;
+  onShowSource: (card: LearningCard) => void | Promise<void>;
   onBack?: () => void;
 }
 
@@ -20,7 +20,7 @@ export function ReviewPage({ cards, previews, onRate, onShowSource, onBack }: Re
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
-  const [, tick] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const card = cards[index];
   const preview = card ? previews[card.id] : undefined;
   useEffect(() => {
@@ -28,11 +28,12 @@ export function ReviewPage({ cards, previews, onRate, onShowSource, onBack }: Re
   }, [cards.length]);
   useEffect(() => {
     if (!card) return;
-    setStartedAt(Date.now()); setRevealed(false); setError(null);
-    const timer = window.setInterval(() => tick((value) => value + 1), 1000);
+    const start = Date.now();
+    setStartedAt(start); setNow(start); setRevealed(false); setError(null);
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, [card?.id]);
-  const elapsed = useMemo(() => Math.max(0, Date.now() - startedAt), [startedAt]);
+  const elapsed = Math.max(0, now - startedAt);
   if (!card) return <main><h1>Review today</h1>{onBack ? <button type="button" onClick={onBack}>Back to Library</button> : null}<p>Nothing due today</p></main>;
   return (
     <main aria-labelledby="review-title" className="review-page">
@@ -42,9 +43,9 @@ export function ReviewPage({ cards, previews, onRate, onShowSource, onBack }: Re
         {revealed ? <><p className="review-page__label">Back</p><div>{card.back}</div></> : null}
         <p aria-live="polite">Elapsed {Math.floor(elapsed / 1000)}s</p>
         {!revealed ? <button type="button" onClick={() => setRevealed(true)}>Show answer</button> : null}
-        <button type="button" onClick={() => {
+        <button type="button" onClick={async () => {
           if (!card.source?.documentId) { setError("Source is unavailable."); return; }
-          onShowSource(card);
+          try { await onShowSource(card); } catch (sourceError) { setError(errorMessage(sourceError)); }
         }}>Show source</button>
         {error ? <div role="alert">{error}</div> : null}
         {revealed ? <div role="group" aria-label="Rate card">

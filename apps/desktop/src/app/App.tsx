@@ -89,18 +89,38 @@ interface AppProps {
   learningApi?: {
     listDecks: () => Promise<Deck[]>;
     createCard: (input: CardSaveInput) => Promise<LearningCard>;
+    listDueCards?: (limit?: number) => Promise<LearningCard[]>;
+    previewCardReview?: (id: string) => Promise<ReviewPreview>;
+    rateCard?: (id: string, rating: ReviewRating, elapsedMs: number) => Promise<LearningCard>;
+    getCard?: (id: string) => Promise<LearningCard>;
+    getCardSource?: (id: string) => Promise<CardSource | null>;
   };
 }
 
 type AppRoute =
   | { name: "library" }
   | { name: "reader"; document: LibraryDocument }
-  | { name: "composer"; document: LibraryDocument; source: CardSource };
+  | { name: "composer"; document: LibraryDocument; source: CardSource }
+  | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> };
 
 export function App({ libraryApi = nativeLibraryApi, learningApi = {
   listDecks: nativeListDecks,
   createCard: nativeCreateCard,
+  listDueCards: nativeListDueCards,
+  previewCardReview: nativePreviewCardReview,
+  rateCard: nativeRateCard,
+  getCard: nativeGetCard,
+  getCardSource: nativeGetCardSource,
 } }: AppProps) {
+  const learning = {
+    listDecks: learningApi.listDecks,
+    createCard: learningApi.createCard,
+    listDueCards: learningApi.listDueCards ?? nativeListDueCards,
+    previewCardReview: learningApi.previewCardReview ?? nativePreviewCardReview,
+    rateCard: learningApi.rateCard ?? nativeRateCard,
+    getCard: learningApi.getCard ?? nativeGetCard,
+    getCardSource: learningApi.getCardSource ?? nativeGetCardSource,
+  };
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
   const [route, setRoute] = useState<AppRoute>({ name: "library" });
   const [loading, setLoading] = useState(true);
@@ -232,8 +252,13 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
   const handleShowSource = useCallback(async (card: LearningCard) => {
     const source = card.source ?? await learning.getCardSource(card.id);
     if (!source?.documentId) { setError("Source is unavailable."); return; }
-    const document = documents?.find((candidate) => candidate.id === source.documentId)
-      ?? await (libraryApi.getDocument ?? nativeGetDocument)(source.documentId);
+    let document: LibraryDocument;
+    try {
+      document = documents?.find((candidate) => candidate.id === source.documentId)
+        ?? await (libraryApi.getDocument ?? nativeGetDocument)(source.documentId);
+    } catch (sourceError) {
+      throw new Error(errorMessage(sourceError));
+    }
     setRoute({ name: "reader", document: { ...document, lastReadPage: source.page } });
   }, [documents, learning, libraryApi]);
 
@@ -332,7 +357,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
   const palette = <CommandPalette search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
 
   if (route.name === "review") {
-    return <><ReviewPage cards={route.cards} previews={route.previews} onRate={handleRate} onShowSource={(card) => void handleShowSource(card)} />{palette}</>;
+    return <><ReviewPage cards={route.cards} previews={route.previews} onRate={handleRate} onShowSource={(card) => void handleShowSource(card)} onBack={() => setRoute({ name: "library" })} />{palette}</>;
   }
 
   if (route.name === "reader") {
