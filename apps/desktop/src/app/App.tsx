@@ -114,22 +114,18 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
     }
   }, [importing, libraryApi, load]);
 
-  const handleOpen = useCallback(
-    (id: string) => {
-      const document = documents?.find((candidate) => candidate.id === id);
-      if (document) {
-        setRoute({ name: "reader", document });
-      } else {
-        setError("This document is no longer available.");
-      }
-    },
-    [documents],
-  );
+  const handleOpen = useCallback((document: LibraryDocument) => {
+    setRoute({ name: "reader", document });
+  }, []);
 
   const search = useCallback(
     async (query: string) => {
+      const currentRequestId = ++requestId.current;
       const results = await (libraryApi.search ?? searchDocuments)(query);
-      setDocuments((current) => mergeDocuments(current, results));
+      if (currentRequestId === requestId.current) {
+        setDocuments((current) => mergeDocuments(current, results));
+        setLoading(false);
+      }
       return results;
     },
     [libraryApi],
@@ -153,7 +149,14 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
     <>
       <LibraryPage
         documents={documents ?? []}
-        onOpen={handleOpen}
+        onOpen={(id) => {
+          const document = documents?.find((candidate) => candidate.id === id);
+          if (document) {
+            handleOpen(document);
+          } else {
+            setError("This document is no longer available.");
+          }
+        }}
         onImport={() => void handleImport()}
       />
       {palette}

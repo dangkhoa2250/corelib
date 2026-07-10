@@ -1,7 +1,11 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex},
+    sync::{
+        mpsc::{self, Receiver, SyncSender, TrySendError},
+        Arc, Mutex,
+    },
+    thread,
 };
 
 use tauri::State;
@@ -15,7 +19,57 @@ use crate::{
 };
 
 pub type IndexTask = Box<dyn FnOnce() + Send + 'static>;
-type IndexScheduler = Arc<dyn Fn(IndexTask) + Send + Sync>;
+type IndexScheduler = Arc<dyn Fn(IndexTask) -> bool + Send + Sync>;
+
+pub const INDEX_QUEUE_CAPACITY: usize = 8;
+const INDEX_WORKER_COUNT: usize = 2;
+
+pub(crate) struct IndexWorkerPool {
+    sender: SyncSender<IndexTask>,
+    _receiver: Arc<Mutex<Receiver<IndexTask>>>,
+}
+
+impl IndexWorkerPool {
+    fn new() -> Arc<Self> {
+        let (sender, receiver) = mpsc::sync_channel(INDEX_QUEUE_CAPACITY);
+        Self::with_workers(sender, receiver, INDEX_WORKER_COUNT)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn without_workers() -> Arc<Self> {
+        let (sender, receiver) = mpsc::sync_channel(INDEX_QUEUE_CAPACITY);
+        Self::with_workers(sender, receiver, 0)
+    }
+
+    fn with_workers(
+        sender: SyncSender<IndexTask>,
+        receiver: Receiver<IndexTask>,
+        worker_count: usize,
+    ) -> Arc<Self> {
+        let receiver = Arc::new(Mutex::new(receiver));
+        for _ in 0..worker_count {
+            let receiver = Arc::clone(&receiver);
+            thread::spawn(move || loop {
+                let task = { receiver.lock().expect("index worker receiver lock").recv() };
+                match task {
+                    Ok(task) => task(),
+                    Err(_) => break,
+                }
+            });
+        }
+        Arc::new(Self {
+            sender,
+            _receiver: receiver,
+        })
+    }
+
+    pub(crate) fn try_schedule(&self, task: IndexTask) -> bool {
+        match self.sender.try_send(task) {
+            Ok(()) => true,
+            Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => false,
+        }
+    }
+}
 
 pub struct LibraryStore {
     database: Arc<Mutex<LibraryDatabase>>,
@@ -25,11 +79,10 @@ pub struct LibraryStore {
 
 impl LibraryStore {
     pub fn open(app_data_directory: PathBuf) -> Result<Self, String> {
+        let index_workers = IndexWorkerPool::new();
         Self::open_with_scheduler(
             app_data_directory,
-            Arc::new(|task| {
-                tauri::async_runtime::spawn_blocking(task);
-            }),
+            Arc::new(move |task| index_workers.try_schedule(task)),
         )
     }
 
@@ -39,11 +92,13 @@ impl LibraryStore {
     ) -> Result<Self, String> {
         let database =
             LibraryDatabase::open(&app_data_directory).map_err(|error| error.to_string())?;
-        Ok(Self {
+        let store = Self {
             database: Arc::new(Mutex::new(database)),
             library_root: app_data_directory,
             schedule_index,
-        })
+        };
+        store.requeue_pending_indexes()?;
+        Ok(store)
     }
 
     #[cfg(test)]
@@ -55,11 +110,53 @@ impl LibraryStore {
             .map_err(|error| error.to_string())
     }
 
-    fn schedule_managed_pdf_index(&self, id: String, managed_path: String) {
+    fn schedule_managed_pdf_index(&self, id: String) {
+        let claimed = self
+            .database
+            .lock()
+            .ok()
+            .and_then(|mut database| database.claim_pending_index(&id).ok().flatten());
+        let Some(record) = claimed else {
+            return;
+        };
+        let Some(managed_path) = record.managed_path else {
+            return;
+        };
         let database = Arc::clone(&self.database);
-        (self.schedule_index)(Box::new(move || {
+        let scheduled = (self.schedule_index)(Box::new(move || {
             index_managed_pdf(&database, &id, Path::new(&managed_path));
         }));
+        if !scheduled {
+            let _ = self
+                .database
+                .lock()
+                .ok()
+                .and_then(|mut database| database.release_pending_index_claim(&record.id).ok());
+        }
+    }
+
+    fn schedule_pending_indexes(&self) -> Result<(), String> {
+        let records = self
+            .database
+            .lock()
+            .map_err(|_| "library database is unavailable".to_owned())?
+            .pending_indexing_records()
+            .map_err(|error| error.to_string())?;
+        for record in records {
+            if record.managed_path.is_some() {
+                self.schedule_managed_pdf_index(record.id);
+            }
+        }
+        Ok(())
+    }
+
+    fn requeue_pending_indexes(&self) -> Result<(), String> {
+        self.database
+            .lock()
+            .map_err(|_| "library database is unavailable".to_owned())?
+            .reset_pending_index_claims()
+            .map_err(|error| error.to_string())?;
+        self.schedule_pending_indexes()
     }
 }
 
@@ -120,20 +217,8 @@ pub fn import_local_documents(
             remove_new_managed_files(&created_paths);
             error.to_string()
         })?;
-    let index_records = summaries
-        .iter()
-        .map(|summary| database.indexing_record(&summary.id))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| error.to_string())?;
     drop(database);
-
-    for record in index_records.into_iter().flatten() {
-        if record.status == "processing" && record.index_state == "pending" {
-            if let Some(managed_path) = record.managed_path {
-                state.schedule_managed_pdf_index(record.id, managed_path);
-            }
-        }
-    }
+    state.schedule_pending_indexes()?;
 
     Ok(summaries)
 }

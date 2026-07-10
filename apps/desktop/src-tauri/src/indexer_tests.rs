@@ -6,7 +6,10 @@ use std::{
 use tempfile::tempdir;
 
 use crate::{
-    indexer::{extract_pdf_text, index_document_with, index_managed_pdf},
+    indexer::{
+        extract_pdf_text, index_document_with, index_managed_pdf, MAX_EXTRACTED_TEXT_BYTES,
+        MAX_PDF_INPUT_BYTES, MAX_PDF_PAGE_COUNT,
+    },
     library_db::{LibraryDatabase, NewLocalDocument},
 };
 
@@ -19,6 +22,56 @@ fn extracts_plain_text_from_a_managed_pdf() {
     let text = extract_pdf_text(&path).expect("extract text");
 
     assert!(text.contains("Quantum gardens bloom"));
+}
+
+#[test]
+fn rejects_a_pdf_larger_than_the_input_budget_before_parsing() {
+    let directory = tempdir().expect("create temporary directory");
+    let path = directory.path().join("too-large.pdf");
+    let mut bytes = b"%PDF-1.4\n".to_vec();
+    bytes.resize(MAX_PDF_INPUT_BYTES + 1, b'x');
+    std::fs::write(&path, bytes).expect("write oversized PDF");
+
+    assert!(extract_pdf_text(&path).is_err());
+}
+
+#[test]
+fn an_oversized_pdf_marks_its_document_ready_with_a_failed_index() {
+    let (database, directory) = pending_database();
+    let path = directory.path().join("oversized.pdf");
+    let mut bytes = b"%PDF-1.4\n".to_vec();
+    bytes.resize(MAX_PDF_INPUT_BYTES + 1, b'x');
+    std::fs::write(&path, bytes).expect("write oversized PDF");
+
+    index_managed_pdf(&database, "indexed", &path);
+
+    let document = database
+        .lock()
+        .expect("lock database")
+        .list()
+        .expect("list documents")
+        .pop()
+        .expect("document");
+    assert_eq!(document.status, "ready");
+    assert!(!document.indexed);
+}
+
+#[test]
+fn rejects_a_pdf_with_more_pages_than_the_extraction_budget() {
+    let directory = tempdir().expect("create temporary directory");
+    let path = directory.path().join("too-many-pages.pdf");
+    write_text_pdf_pages(&path, MAX_PDF_PAGE_COUNT + 1, "page");
+
+    assert!(extract_pdf_text(&path).is_err());
+}
+
+#[test]
+fn rejects_text_larger_than_the_extraction_budget() {
+    let directory = tempdir().expect("create temporary directory");
+    let path = directory.path().join("too-much-text.pdf");
+    write_text_pdf(&path, &"x".repeat(MAX_EXTRACTED_TEXT_BYTES + 1));
+
+    assert!(extract_pdf_text(&path).is_err());
 }
 
 fn pending_database() -> (Arc<Mutex<LibraryDatabase>>, tempfile::TempDir) {
@@ -96,14 +149,32 @@ fn indexer_indexes_text_extracted_from_a_real_managed_pdf() {
 }
 
 fn write_text_pdf(path: &Path, text: &str) {
+    write_text_pdf_pages(path, 1, text);
+}
+
+fn write_text_pdf_pages(path: &Path, page_count: usize, text: &str) {
     let stream = format!("BT /F1 18 Tf 72 720 Td ({text}) Tj ET\n");
-    let objects = [
+    let font_id = page_count + 3;
+    let content_id = font_id + 1;
+    let pages = (0..page_count)
+        .map(|index| format!("{} 0 R", index + 3))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut objects = vec![
         "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
-        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_owned(),
-        "<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>".to_owned(),
-        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned(),
-        format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len()),
+        format!("<< /Type /Pages /Kids [{pages}] /Count {page_count} >>"),
     ];
+    objects.extend((0..page_count).map(|index| {
+        format!(
+            "<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 {font_id} 0 R >> >> /MediaBox [0 0 612 792] /Contents {} 0 R >>",
+            content_id + index
+        )
+    }));
+    objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_owned());
+    objects.extend(
+        (0..page_count)
+            .map(|_| format!("<< /Length {} >>\nstream\n{stream}endstream", stream.len())),
+    );
     let mut pdf = b"%PDF-1.4\n".to_vec();
     let mut offsets = Vec::new();
     for (index, object) in objects.iter().enumerate() {

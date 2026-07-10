@@ -4,7 +4,7 @@ import type { LibraryDocument } from "../../domain/document";
 
 interface CommandPaletteProps {
   search: (query: string) => Promise<LibraryDocument[]>;
-  onOpen: (id: string) => void;
+  onOpen: (document: LibraryDocument) => void;
 }
 
 const SEARCH_DEBOUNCE_MS = 150;
@@ -20,6 +20,9 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const searchboxRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const shouldRestoreFocus = useRef(false);
   const sequence = useRef(0);
 
   const close = useCallback(() => {
@@ -28,6 +31,7 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
     setResults([]);
     setSelectedIndex(0);
     setError(null);
+    shouldRestoreFocus.current = true;
     setIsOpen(false);
   }, []);
 
@@ -35,6 +39,9 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        previousFocusRef.current = document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
         setIsOpen(true);
       }
     };
@@ -45,6 +52,10 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
   useEffect(() => {
     if (isOpen) {
       searchboxRef.current?.focus();
+    } else if (shouldRestoreFocus.current) {
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+      shouldRestoreFocus.current = false;
     }
   }, [isOpen]);
 
@@ -85,7 +96,7 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
   const openSelected = useCallback(() => {
     const document = results[selectedIndex];
     if (document) {
-      onOpen(document.id);
+      onOpen(document);
       close();
     }
   }, [close, onOpen, results, selectedIndex]);
@@ -100,7 +111,32 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
         aria-label="Search your library"
         aria-modal="true"
         className="command-palette"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            close();
+            return;
+          }
+          if (event.key === "Tab") {
+            const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+              "button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
+            );
+            if (!focusable || focusable.length === 0) {
+              return;
+            }
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (event.shiftKey && document.activeElement === first) {
+              event.preventDefault();
+              last.focus();
+            } else if (!event.shiftKey && document.activeElement === last) {
+              event.preventDefault();
+              first.focus();
+            }
+          }
+        }}
         onMouseDown={(event) => event.stopPropagation()}
+        ref={dialogRef}
         role="dialog"
       >
         <input
@@ -111,10 +147,7 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
             setQuery(event.target.value);
           }}
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              close();
-            } else if (event.key === "ArrowDown" && results.length > 0) {
+            if (event.key === "ArrowDown" && results.length > 0) {
               event.preventDefault();
               setSelectedIndex((index) => (index + 1) % results.length);
             } else if (event.key === "ArrowUp" && results.length > 0) {
@@ -146,7 +179,7 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
                   aria-selected={index === selectedIndex}
                   className={index === selectedIndex ? "is-selected" : undefined}
                   onClick={() => {
-                    onOpen(document.id);
+                    onOpen(document);
                     close();
                   }}
                   type="button"

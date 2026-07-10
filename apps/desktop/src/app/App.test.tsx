@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { App } from "./App";
@@ -143,4 +143,34 @@ test("keeps imported documents when an older initial load resolves last", async 
   await waitFor(() => {
     expect(screen.getByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
   });
+});
+
+test("opens the selected search result when an older library load resolves afterwards", async () => {
+  const user = userEvent.setup();
+  const initialList = deferred<typeof document[]>();
+  const searchResult = { ...document, id: "search-result", title: "Search Result" };
+  const search = vi.fn().mockResolvedValue([searchResult]);
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockReturnValue(initialList.promise),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+        search,
+      }}
+    />,
+  );
+
+  await user.keyboard("{Control>}k{/Control}");
+  await user.type(screen.getByRole("searchbox"), "search");
+  const palette = screen.getByRole("dialog");
+  expect(await within(palette).findByRole("button", { name: "Open Search Result" })).toBeInTheDocument();
+  await act(async () => {
+    initialList.resolve([document]);
+    await initialList.promise;
+  });
+
+  await user.keyboard("{Enter}");
+  expect(screen.getByRole("heading", { name: "Search Result" })).toBeInTheDocument();
 });

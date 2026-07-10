@@ -163,6 +163,44 @@ fn concurrent_database_opens_apply_the_migration_once() {
 }
 
 #[test]
+fn only_one_concurrent_worker_can_claim_a_pending_index() {
+    let directory = tempdir().expect("create temporary directory");
+    let mut database = LibraryDatabase::open(directory.path()).expect("open database");
+    database
+        .insert_local(NewLocalDocument {
+            id: "claimed".into(),
+            title: "Claimed PDF".into(),
+            content_hash: "claimed-content".into(),
+            managed_path: "/managed/claimed.pdf".into(),
+        })
+        .expect("insert document");
+    drop(database);
+
+    let database_directory = directory.path().to_path_buf();
+    let start = Arc::new(std::sync::Barrier::new(2));
+    let handles = (0..2)
+        .map(|_| {
+            let database_directory = database_directory.clone();
+            let start = Arc::clone(&start);
+            thread::spawn(move || {
+                let mut database =
+                    LibraryDatabase::open(database_directory).expect("open database");
+                start.wait();
+                database
+                    .claim_pending_index("claimed")
+                    .expect("claim index")
+            })
+        })
+        .collect::<Vec<_>>();
+
+    let claims = handles
+        .into_iter()
+        .filter_map(|handle| handle.join().expect("join claimer"))
+        .count();
+    assert_eq!(claims, 1);
+}
+
+#[test]
 fn batch_insert_rolls_back_when_a_later_document_cannot_be_recorded() {
     let directory = tempdir().expect("create temporary directory");
     let mut database = LibraryDatabase::open(directory.path()).expect("open database");

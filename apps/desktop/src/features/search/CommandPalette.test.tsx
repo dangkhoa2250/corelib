@@ -40,7 +40,7 @@ test("opens with Cmd+K, searches, and opens the selected result from the keyboar
   expect(await screen.findByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
 
   await user.keyboard("{Enter}");
-  expect(onOpen).toHaveBeenCalledExactlyOnceWith("linear-algebra");
+  expect(onOpen).toHaveBeenCalledExactlyOnceWith(document);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
@@ -86,4 +86,43 @@ test("escapes out of a search failure so it can be reopened", async () => {
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   await user.keyboard("{Control>}k{/Control}");
   expect(screen.getByRole("searchbox")).toHaveFocus();
+});
+
+test("traps keyboard focus and closes from Escape anywhere in the dialog", async () => {
+  const user = userEvent.setup();
+  const search = vi.fn().mockResolvedValue([document]);
+
+  render(<CommandPalette search={search} onOpen={() => {}} />);
+
+  await user.keyboard("{Control>}k{/Control}");
+  const searchbox = screen.getByRole("searchbox", { name: "Search your library" });
+  await user.type(searchbox, "linear");
+  const result = await screen.findByRole("button", { name: "Open Linear Algebra" });
+
+  await user.tab();
+  expect(result).toHaveFocus();
+  await user.tab();
+  expect(searchbox).toHaveFocus();
+  await user.tab({ shift: true });
+  expect(result).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test("restores focus to the previously active element when it closes", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <>
+      <button type="button">Previous focus</button>
+      <CommandPalette search={vi.fn().mockResolvedValue([])} onOpen={() => {}} />
+    </>,
+  );
+
+  const previous = screen.getByRole("button", { name: "Previous focus" });
+  previous.focus();
+  await user.keyboard("{Control>}k{/Control}");
+  expect(screen.getByRole("searchbox")).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(previous).toHaveFocus();
 });

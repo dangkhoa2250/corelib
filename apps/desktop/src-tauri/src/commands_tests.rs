@@ -11,8 +11,10 @@ use tauri::Manager;
 use tempfile::tempdir;
 
 use crate::commands::{
-    import_local_documents, validate_import_paths, validate_read_page, IndexTask, LibraryStore,
+    import_local_documents, validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool,
+    LibraryStore, INDEX_QUEUE_CAPACITY,
 };
+use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
 
 fn app_with_library(path: &Path) -> tauri::App<tauri::test::MockRuntime> {
@@ -29,9 +31,7 @@ fn app_with_controlled_indexer(
     mpsc::Receiver<IndexTask>,
 ) {
     let (sender, receiver) = mpsc::channel();
-    let scheduler = Arc::new(move |task: IndexTask| {
-        sender.send(task).expect("queue indexing task");
-    });
+    let scheduler = Arc::new(move |task: IndexTask| sender.send(task).is_ok());
     let app = tauri::test::mock_builder()
         .manage(
             LibraryStore::open_with_scheduler(path.to_path_buf(), scheduler).expect("open library"),
@@ -68,6 +68,100 @@ fn import_returns_pending_before_its_background_index_task_runs() {
     assert!(
         !indexed[0].indexed,
         "malformed text extraction is recoverable"
+    );
+}
+
+#[test]
+fn reopening_the_application_requeues_a_persisted_pending_index() {
+    let directory = tempdir().expect("create temporary directory");
+    let library_root = directory.path().join("library");
+    let managed_path = library_root.join("documents").join("pending.pdf");
+    fs::create_dir_all(managed_path.parent().expect("managed directory"))
+        .expect("create directory");
+    fs::write(&managed_path, b"%PDF-1.4\npending\n").expect("write PDF");
+    let mut database = LibraryDatabase::open(&library_root).expect("open initial database");
+    database
+        .insert_local(NewLocalDocument {
+            id: "persisted-pending".into(),
+            title: "Persisted pending".into(),
+            content_hash: "persisted-pending-hash".into(),
+            managed_path: managed_path.to_string_lossy().into_owned(),
+        })
+        .expect("insert pending document");
+    drop(database);
+
+    let (_app, tasks) = app_with_controlled_indexer(&library_root);
+
+    assert!(
+        tasks.try_recv().is_ok(),
+        "startup should requeue pending work"
+    );
+}
+
+#[test]
+fn reimporting_a_pending_document_does_not_schedule_a_second_extraction() {
+    let directory = tempdir().expect("create temporary directory");
+    let source = directory.path().join("pending-again.pdf");
+    let library_root = directory.path().join("library");
+    fs::write(&source, b"%PDF-1.4\npending\n").expect("write valid PDF");
+    let (app, tasks) = app_with_controlled_indexer(&library_root);
+
+    import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+        .expect("initial import");
+    import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+        .expect("reimport while pending");
+
+    assert!(
+        tasks.try_recv().is_ok(),
+        "first import schedules extraction"
+    );
+    assert!(
+        tasks.try_recv().is_err(),
+        "the pending lease deduplicates extraction"
+    );
+}
+
+#[test]
+fn a_full_index_queue_rejects_work_without_exceeding_its_bound() {
+    let pool = IndexWorkerPool::without_workers();
+
+    for _ in 0..INDEX_QUEUE_CAPACITY {
+        assert!(pool.try_schedule(Box::new(|| {})));
+    }
+    assert!(
+        !pool.try_schedule(Box::new(|| {})),
+        "the bounded queue must reject overflow rather than growing"
+    );
+}
+
+#[test]
+fn a_rejected_index_schedule_leaves_the_document_durably_pending() {
+    let directory = tempdir().expect("create temporary directory");
+    let source = directory.path().join("overflow.pdf");
+    let library_root = directory.path().join("library");
+    fs::write(&source, b"%PDF-1.4\noverflow\n").expect("write valid PDF");
+    let app = tauri::test::mock_builder()
+        .manage(
+            LibraryStore::open_with_scheduler(
+                library_root.clone(),
+                Arc::new(|_task: IndexTask| false),
+            )
+            .expect("open library"),
+        )
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("build test application");
+
+    let imported = import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+        .expect("import document");
+    let mut database = LibraryDatabase::open(&library_root).expect("open database");
+
+    assert_eq!(imported[0].status, "processing");
+    assert!(
+        database
+            .claim_pending_index(&imported[0].id)
+            .expect("claim pending index")
+            .is_some(),
+        "a full queue must release its claim so startup or a later schedule can retry"
     );
 }
 

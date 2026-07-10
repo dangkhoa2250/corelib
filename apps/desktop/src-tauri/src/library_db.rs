@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     fmt, fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
@@ -10,8 +10,16 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use crate::model::DocumentSummary;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATION_ID: &str = "0001_library";
-const MIGRATION: &str = include_str!("../migrations/0001_library.sql");
+const MIGRATIONS: [(&str, &str); 2] = [
+    (
+        "0001_library",
+        include_str!("../migrations/0001_library.sql"),
+    ),
+    (
+        "0002_index_claims",
+        include_str!("../migrations/0002_index_claims.sql"),
+    ),
+];
 const SUMMARY_COLUMNS: &str =
     "id, title, author, source, cover_path, index_state, status, last_read_page";
 
@@ -74,24 +82,27 @@ impl LibraryDatabase {
         fs::create_dir_all(app_data_directory)?;
 
         let mut connection = Connection::open(database_path(app_data_directory))?;
+        connection.busy_timeout(Duration::from_secs(5))?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         transaction.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY NOT NULL);",
         )?;
-        let migration_is_applied = transaction
-            .query_row(
-                "SELECT 1 FROM schema_migrations WHERE id = ?1",
-                params![MIGRATION_ID],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some();
-        if !migration_is_applied {
-            transaction.execute_batch(MIGRATION)?;
-            transaction.execute(
-                "INSERT INTO schema_migrations (id) VALUES (?1)",
-                params![MIGRATION_ID],
-            )?;
+        for (migration_id, migration) in MIGRATIONS {
+            let migration_is_applied = transaction
+                .query_row(
+                    "SELECT 1 FROM schema_migrations WHERE id = ?1",
+                    params![migration_id],
+                    |_| Ok(()),
+                )
+                .optional()?
+                .is_some();
+            if !migration_is_applied {
+                transaction.execute_batch(migration)?;
+                transaction.execute(
+                    "INSERT INTO schema_migrations (id) VALUES (?1)",
+                    params![migration_id],
+                )?;
+            }
         }
         transaction.commit()?;
 
@@ -208,7 +219,7 @@ impl LibraryDatabase {
         let updated = transaction.execute(
             "UPDATE documents
              SET status = 'ready', index_state = 'ready',
-                 cover_path = COALESCE(?1, cover_path), updated_at = ?2
+                 cover_path = COALESCE(?1, cover_path), index_claimed_at = NULL, updated_at = ?2
              WHERE id = ?3",
             params![cover_path, portable_timestamp(), id],
         )?;
@@ -230,13 +241,68 @@ impl LibraryDatabase {
     pub fn set_index_failed(&mut self, id: &str) -> Result<()> {
         let updated = self.connection.execute(
             "UPDATE documents
-             SET status = 'ready', index_state = 'failed', updated_at = ?1
+             SET status = 'ready', index_state = 'failed', index_claimed_at = NULL, updated_at = ?1
              WHERE id = ?2",
             params![portable_timestamp(), id],
         )?;
         if updated == 0 {
             return Err(LibraryDbError::DocumentNotFound);
         }
+        Ok(())
+    }
+
+    pub fn reset_pending_index_claims(&mut self) -> Result<()> {
+        self.connection.execute(
+            "UPDATE documents SET index_claimed_at = NULL WHERE index_state = 'pending'",
+            [],
+        )?;
+        Ok(())
+    }
+
+    pub fn pending_indexing_records(&self) -> Result<Vec<IndexingRecord>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, managed_path, status, index_state
+             FROM documents
+             WHERE status = 'processing' AND index_state = 'pending' AND managed_path IS NOT NULL
+             ORDER BY created_at ASC, id ASC",
+        )?;
+        let records = statement
+            .query_map([], |row| {
+                Ok(IndexingRecord {
+                    id: row.get(0)?,
+                    managed_path: row.get(1)?,
+                    status: row.get(2)?,
+                    index_state: row.get(3)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(LibraryDbError::from)?;
+        Ok(records)
+    }
+
+    pub fn claim_pending_index(&mut self, id: &str) -> Result<Option<IndexingRecord>> {
+        let claimed = self.connection.execute(
+            "UPDATE documents
+             SET index_claimed_at = ?1
+             WHERE id = ?2
+               AND status = 'processing'
+               AND index_state = 'pending'
+               AND index_claimed_at IS NULL",
+            params![portable_timestamp(), id],
+        )?;
+        if claimed == 0 {
+            return Ok(None);
+        }
+        self.indexing_record(id)
+    }
+
+    pub fn release_pending_index_claim(&mut self, id: &str) -> Result<()> {
+        self.connection.execute(
+            "UPDATE documents
+             SET index_claimed_at = NULL
+             WHERE id = ?1 AND index_state = 'pending'",
+            params![id],
+        )?;
         Ok(())
     }
 
