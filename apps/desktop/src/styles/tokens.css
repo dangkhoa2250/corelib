@@ -238,3 +238,232 @@ select {
 .outline-node-title:hover {
   background: #e5e5ea;
 }
+
+.reader-page {
+  color: #1d1d1f;
+  background: #e8e8eb;
+}
+
+.reader-sidebar {
+  width: 192px !important;
+  flex: 0 0 192px;
+  border-right: 1px solid rgb(0 0 0 / 8%) !important;
+  background: #dedee0 !important;
+}
+
+.reader-sidebar__tabs {
+  display: flex;
+  gap: 3px;
+  margin: 10px 10px 8px;
+  padding: 3px;
+  border: 1px solid rgb(0 0 0 / 8%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 38%);
+}
+
+.reader-sidebar__tab {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 4px;
+  border: 0;
+  border-radius: 6px;
+  color: #515154;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.reader-sidebar__tab.is-active {
+  color: #1d1d1f;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%);
+}
+
+.reader-sidebar__content {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.reader-thumbnail {
+  min-height: 0 !important;
+  padding: 8px 6px 6px !important;
+  border: 1px solid transparent !important;
+  border-radius: 9px !important;
+  background: transparent !important;
+}
+
+.reader-thumbnail:hover {
+  background: rgb(255 255 255 / 45%) !important;
+}
+
+.reader-thumbnail--active {
+  border-color: rgb(0 122 255 / 32%) !important;
+  background: rgb(0 122 255 / 13%) !important;
+}
+
+.reader-thumbnail > div {
+  width: 76px !important;
+  height: 102px !important;
+  border-radius: 3px !important;
+  box-shadow: 0 2px 7px rgb(0 0 0 / 18%) !important;
+}
+
+.reader-thumbnail > span {
+  margin-top: 5px !important;
+  color: #6e6e73 !important;
+  font-size: 11px !important;
+}
+
+.reader-toolbar {
+  position: relative;
+  z-index: 1;
+  height: 52px !important;
+  flex: 0 0 52px;
+  gap: 14px;
+  padding: 0 14px !important;
+  border-bottom: 1px solid rgb(0 0 0 / 9%) !important;
+  background: rgb(246 246 247 / 94%) !important;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 5%);
+  backdrop-filter: blur(16px);
+}
+
+.reader-toolbar__title {
+  min-width: 120px;
+  max-width: min(30vw, 360px);
+  overflow: hidden;
+  color: #2c2c2e;
+  font-size: 14px !important;
+  font-weight: 650 !important;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-toolbar__group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgb(0 0 0 / 8%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 52%);
+}
+
+.reader-toolbar__group--page {
+  margin-left: auto;
+}
+
+.reader-icon-button {
+  display: inline-grid;
+  width: 30px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: #515154;
+  background: transparent;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.reader-icon-button:hover:not(:disabled) {
+  color: #1d1d1f;
+  background: rgb(0 0 0 / 7%);
+}
+
+.reader-icon-button:disabled {
+  color: #aeaeb2;
+  cursor: default;
+}
+
+.reader-icon-button:focus-visible,
+.reader-sidebar__tab:focus-visible,
+.reader-search__input:focus-visible {
+  outline: 2px solid rgb(0 122 255 / 65%);
+  outline-offset: 1px;
+}
+
+.reader-page-indicator,
+.reader-zoom-label {
+  min-width: 78px;
+  color: #6e6e73;
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.reader-zoom-label {
+  min-width: 42px;
+}
+
+.reader-search {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 170px;
+  max-width: 260px;
+}
+
+.reader-search__input {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgb(0 0 0 / 11%);
+  border-radius: 8px;
+  outline: 0;
+  color: inherit;
+  background: rgb(255 255 255 / 70%);
+  font-size: 12px;
+}
+
+.reader-search__results {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: #6e6e73;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.reader-search__results .reader-icon-button {
+  width: auto;
+  padding: 0 6px;
+  font-size: 12px;
+}
+
+.reader-canvas-container {
+  background: #a1a1a5 !important;
+  scrollbar-color: rgb(0 0 0 / 22%) transparent;
+}
+
+.reader-page-stack {
+  min-width: 100%;
+}
+
+.reader-page-column {
+  align-items: center !important;
+}
+
+.reader-pdf-page {
+  border-radius: 1px;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 22%) !important;
+}
+
+@media (max-width: 900px) {
+  .reader-sidebar {
+    width: 156px !important;
+    flex-basis: 156px;
+  }
+
+  .reader-toolbar__title {
+    max-width: 22vw;
+  }
+
+  .reader-search {
+    min-width: 130px;
+  }
+}
