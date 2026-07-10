@@ -73,6 +73,7 @@ impl IndexWorkerPool {
 
 struct IndexCoordinator {
     database: Arc<Mutex<LibraryDatabase>>,
+    library_root: PathBuf,
     schedule_index: IndexScheduler,
 }
 
@@ -86,13 +87,21 @@ impl IndexCoordinator {
         let Some(record) = claimed else {
             return;
         };
-        let Some(managed_path) = record.managed_path else {
-            return;
+        let path = if record.source == "google_drive" {
+            let Some(ref file_id) = record.source_ref else {
+                return;
+            };
+            crate::drive_cache::Cache::new(self.library_root.clone()).path_for(file_id)
+        } else {
+            let Some(ref p) = record.managed_path else {
+                return;
+            };
+            PathBuf::from(p)
         };
         let database = Arc::clone(&self.database);
         let coordinator = Arc::clone(self);
         let scheduled = (self.schedule_index)(Box::new(move || {
-            index_managed_pdf(&database, &id, Path::new(&managed_path));
+            index_managed_pdf(&database, &id, &path);
             coordinator.schedule_pending_indexes();
         }));
         if !scheduled {
@@ -147,6 +156,7 @@ impl LibraryStore {
         let database = Arc::new(Mutex::new(database));
         let index_coordinator = Arc::new(IndexCoordinator {
             database: Arc::clone(&database),
+            library_root: app_data_directory.clone(),
             schedule_index,
         });
         let store = Self {
@@ -337,4 +347,147 @@ fn remove_new_managed_files(paths: &[String]) {
     for path in paths {
         let _ = fs::remove_file(path);
     }
+}
+
+#[tauri::command]
+pub fn drive_connect() -> Result<(), String> {
+    let store = crate::drive_auth::KeychainTokenStore::new();
+    crate::drive_api::drive_connect(&store)
+}
+
+#[tauri::command]
+pub fn drive_list(folder_id: Option<String>) -> Result<Vec<crate::drive_api::DriveEntry>, String> {
+    let store = crate::drive_auth::KeychainTokenStore::new();
+    crate::drive_api::drive_list(&store, folder_id.as_deref())
+}
+
+#[tauri::command]
+pub fn drive_import(
+    ids: Vec<String>,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<DocumentSummary>, String> {
+    let store = crate::drive_auth::KeychainTokenStore::new();
+    let imported = crate::drive_api::drive_import(&store, &state.database, ids)?;
+    Ok(imported)
+}
+
+#[tauri::command]
+pub async fn get_document_file_url(
+    id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<String, String> {
+    let database = Arc::clone(&state.database);
+    let library_root = state.library_root.clone();
+    let index_coordinator = Arc::clone(&state.index_coordinator);
+    let record = database
+        .lock()
+        .map_err(|_| "database unavailable".to_owned())?
+        .indexing_record(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "document not found".to_owned())?;
+
+    if record.source == "local_managed" {
+        let managed_path = record
+            .managed_path
+            .ok_or_else(|| "managed path not found".to_owned())?;
+        return Ok(managed_path);
+    }
+
+    let file_id = record
+        .source_ref
+        .ok_or_else(|| "source_ref not found".to_owned())?;
+    let cache = crate::drive_cache::Cache::new(library_root.clone());
+    let cache_path = cache.path_for(&file_id);
+
+    if cache_path.is_file() {
+        return Ok(cache_path.to_string_lossy().into_owned());
+    }
+
+    database
+        .lock()
+        .map_err(|_| "database unavailable".to_owned())?
+        .set_document_status(&id, "processing")
+        .map_err(|e| e.to_string())?;
+
+    let store = crate::drive_auth::KeychainTokenStore::new();
+    let result = download_drive_file_async(file_id.clone(), library_root, move |id| {
+        crate::drive_api::download_drive_file(&store, &id)
+    })
+    .await;
+    let path = match result {
+        Ok(path) => path,
+        Err(e) => {
+            let status = if e == "revoked" {
+                "error"
+            } else {
+                "download_required"
+            };
+            let _ = database
+                .lock()
+                .map_err(|_| "database unavailable".to_owned())?
+                .set_document_status(&id, status);
+            return Err(if e == "revoked" {
+                "reconnect_required".to_owned()
+            } else {
+                "network_error".to_owned()
+            });
+        }
+    };
+
+    database
+        .lock()
+        .map_err(|_| "database unavailable".to_owned())?
+        .set_document_status(&id, "ready")
+        .map_err(|e| e.to_string())?;
+
+    index_coordinator.schedule_pending_indexes();
+
+    Ok(path)
+}
+
+pub(crate) async fn download_drive_file_async<F>(
+    file_id: String,
+    library_root: PathBuf,
+    downloader: F,
+) -> Result<String, String>
+where
+    F: FnOnce(String) -> Result<Vec<u8>, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(move || {
+        let bytes = downloader(file_id.clone())?;
+        crate::drive_cache::Cache::new(library_root)
+            .put(&file_id, &bytes)
+            .map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|error| format!("download task failed: {error}"))?
+}
+
+#[tauri::command]
+pub fn clear_drive_cache(state: State<'_, LibraryStore>) -> Result<(), String> {
+    let cache = crate::drive_cache::Cache::new(state.library_root.clone());
+    cache.clear()?;
+
+    let mut db = state
+        .database
+        .lock()
+        .map_err(|_| "database unavailable".to_owned())?;
+    db.clear_drive_cache().map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_document(id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
+    let managed_path = state
+        .database
+        .lock()
+        .map_err(|_| "database unavailable".to_owned())?
+        .delete_document(&id)
+        .map_err(|e| e.to_string())?;
+
+    if let Some(path) = managed_path {
+        let _ = std::fs::remove_file(path);
+    }
+    Ok(())
 }

@@ -3,6 +3,75 @@ import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { App } from "./App";
 
+// Mock pdfjs-dist globally for App tests
+vi.mock("pdfjs-dist", () => {
+  return {
+    GlobalWorkerOptions: { workerSrc: "" },
+    getDocument: vi.fn().mockReturnValue({
+      promise: Promise.resolve({
+        numPages: 5,
+        getPage: vi.fn().mockResolvedValue({
+          getViewport: vi.fn().mockReturnValue({ width: 200, height: 300 }),
+          render: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
+          getTextContent: vi.fn().mockResolvedValue({ items: [] }),
+          streamTextContent: vi.fn().mockReturnValue({
+            getReader: vi.fn().mockReturnValue({
+              read: vi.fn()
+                .mockResolvedValueOnce({
+                  value: {
+                    items: [],
+                    styles: {},
+                  },
+                  done: false,
+                })
+                .mockResolvedValueOnce({
+                  done: true,
+                }),
+            }),
+          }),
+        }),
+      }),
+    }),
+    TextLayer: vi.fn().mockImplementation(function () {
+      return {
+        render: vi.fn().mockResolvedValue(undefined),
+        cancel: vi.fn(),
+      };
+    }),
+    AnnotationLayer: vi.fn().mockImplementation(function () {
+      return {
+        render: vi.fn().mockResolvedValue(undefined),
+      };
+    }),
+  };
+});
+
+import { beforeAll } from "vitest";
+
+beforeAll(() => {
+  HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
+    fillRect: () => {},
+    clearRect: () => {},
+    getImageData: () => {},
+    putImageData: () => {},
+    createImageData: () => {},
+    setTransform: () => {},
+    drawImage: () => {},
+    save: () => {},
+    restore: () => {},
+    beginPath: () => {},
+    moveTo: () => {},
+    lineTo: () => {},
+    stroke: () => {},
+    fill: () => {},
+    scale: () => {},
+    translate: () => {},
+    rotate: () => {},
+    arc: () => {},
+    rect: () => {},
+  });
+});
+
 const document = {
   id: "linear-algebra",
   title: "Linear Algebra",
@@ -37,7 +106,17 @@ test("loads documents asynchronously and preserves them after a failed import", 
   const pick = vi.fn().mockResolvedValue(["/chosen/linear-algebra.pdf"]);
   const importDocuments = vi.fn().mockRejectedValue(new Error("Import failed"));
 
-  render(<App libraryApi={{ list, pick, importDocuments }} />);
+  render(
+    <App
+      libraryApi={{
+        list,
+        pick,
+        importDocuments,
+        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
+      }}
+    />,
+  );
 
   expect(screen.getByRole("status", { name: "Loading library" })).toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
@@ -54,7 +133,17 @@ test("does not import when the picker is cancelled", async () => {
   const pick = vi.fn().mockResolvedValue(null);
   const importDocuments = vi.fn();
 
-  render(<App libraryApi={{ list, pick, importDocuments }} />);
+  render(
+    <App
+      libraryApi={{
+        list,
+        pick,
+        importDocuments,
+        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
+      }}
+    />,
+  );
 
   await screen.findByText("Your books will appear here.");
   await user.click(screen.getByRole("button", { name: "Import from Mac" }));
@@ -72,6 +161,8 @@ test("opens a reader placeholder and returns to the library", async () => {
         list,
         pick: vi.fn(),
         importDocuments: vi.fn(),
+        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
       }}
     />,
   );
@@ -79,7 +170,7 @@ test("opens a reader placeholder and returns to the library", async () => {
   await user.click(await screen.findByRole("button", { name: "Open Linear Algebra" }));
 
   expect(screen.getByRole("heading", { name: "Linear Algebra" })).toBeInTheDocument();
-  expect(screen.getByText("Reader coming soon.")).toBeInTheDocument();
+  expect(await screen.findByText("Page 1 of 5")).toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Back to Library" }));
 
@@ -98,6 +189,8 @@ test("opens a search result in the reader from either application state", async 
         pick: vi.fn(),
         importDocuments: vi.fn(),
         search,
+        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
       }}
     />,
   );
@@ -107,10 +200,10 @@ test("opens a search result in the reader from either application state", async 
   await user.type(screen.getByRole("searchbox"), "linear");
   await waitFor(() => expect(search).toHaveBeenCalledWith("linear"));
   await user.keyboard("{Enter}");
-  expect(screen.getByText("Reader coming soon.")).toBeInTheDocument();
+  expect(await screen.findByText("Page 1 of 5")).toBeInTheDocument();
 
   await user.keyboard("{Meta>}k{/Meta}");
-  expect(screen.getByRole("searchbox")).toBeInTheDocument();
+  expect(screen.getByRole("searchbox", { name: "Search your library" })).toBeInTheDocument();
 });
 
 test("keeps imported documents when an older initial load resolves last", async () => {
@@ -126,6 +219,8 @@ test("keeps imported documents when an older initial load resolves last", async 
         list,
         pick: vi.fn().mockResolvedValue(["/chosen/linear-algebra.pdf"]),
         importDocuments,
+        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
       }}
     />,
   );
@@ -158,6 +253,8 @@ test("opens the selected search result when an older library load resolves after
         pick: vi.fn(),
         importDocuments: vi.fn(),
         search,
+        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
       }}
     />,
   );

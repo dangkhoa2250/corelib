@@ -1,10 +1,16 @@
 use tauri::Manager;
 
 pub mod commands;
+pub mod drive_api;
+pub mod drive_auth;
+pub mod drive_cache;
 pub mod indexer;
 pub mod library_db;
 pub mod library_store;
 pub mod model;
+
+#[cfg(test)]
+mod drive_tests;
 
 #[cfg(test)]
 mod commands_tests;
@@ -37,6 +43,12 @@ pub fn run() {
             commands::import_local_documents,
             commands::search_documents,
             commands::save_read_page,
+            commands::drive_connect,
+            commands::drive_list,
+            commands::drive_import,
+            commands::get_document_file_url,
+            commands::clear_drive_cache,
+            commands::delete_document,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

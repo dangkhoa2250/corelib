@@ -15,11 +15,37 @@ use tauri::Manager;
 use tempfile::tempdir;
 
 use crate::commands::{
-    import_local_documents, validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool,
-    LibraryStore, INDEX_QUEUE_CAPACITY,
+    download_drive_file_async, import_local_documents, validate_import_paths, validate_read_page,
+    IndexTask, IndexWorkerPool, LibraryStore, INDEX_QUEUE_CAPACITY,
 };
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
+
+#[test]
+fn drive_download_runs_off_command_thread_without_holding_database_lock() {
+    let database = std::sync::Arc::new(std::sync::Mutex::new(()));
+    let database_for_download = std::sync::Arc::clone(&database);
+    let (started_tx, started_rx) = std::sync::mpsc::channel();
+    let result = tauri::async_runtime::block_on(async {
+        let task = tauri::async_runtime::spawn(download_drive_file_async(
+            "drive-file".to_owned(),
+            tempdir().expect("temporary directory").keep(),
+            move |_file_id| {
+                started_tx.send(()).expect("signal worker start");
+                assert!(
+                    database_for_download.try_lock().is_ok(),
+                    "download callback must run without a database lock"
+                );
+                std::thread::sleep(Duration::from_millis(25));
+                Ok(b"%PDF".to_vec())
+            },
+        ));
+        started_rx.recv().expect("worker should start");
+        assert!(database.try_lock().is_ok(), "database remains available");
+        task.await.expect("download task should join")
+    });
+    assert!(result.is_ok());
+}
 
 fn app_with_library(path: &Path) -> tauri::App<tauri::test::MockRuntime> {
     tauri::test::mock_builder()
