@@ -19,6 +19,8 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 libc = "0.2"
+# Pure-Rust PDF text extractor selected from the current lopdf 0.43.0 docs.
+lopdf = "0.43"
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"

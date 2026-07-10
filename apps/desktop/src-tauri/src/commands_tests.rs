@@ -1,4 +1,8 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::Path,
+    sync::{mpsc, Arc},
+};
 
 #[cfg(target_os = "macos")]
 use std::process::Command;
@@ -7,7 +11,7 @@ use tauri::Manager;
 use tempfile::tempdir;
 
 use crate::commands::{
-    import_local_documents, validate_import_paths, validate_read_page, LibraryStore,
+    import_local_documents, validate_import_paths, validate_read_page, IndexTask, LibraryStore,
 };
 
 fn app_with_library(path: &Path) -> tauri::App<tauri::test::MockRuntime> {
@@ -17,11 +21,53 @@ fn app_with_library(path: &Path) -> tauri::App<tauri::test::MockRuntime> {
         .expect("build test application")
 }
 
+fn app_with_controlled_indexer(
+    path: &Path,
+) -> (
+    tauri::App<tauri::test::MockRuntime>,
+    mpsc::Receiver<IndexTask>,
+) {
+    let (sender, receiver) = mpsc::channel();
+    let scheduler = Arc::new(move |task: IndexTask| {
+        sender.send(task).expect("queue indexing task");
+    });
+    let app = tauri::test::mock_builder()
+        .manage(
+            LibraryStore::open_with_scheduler(path.to_path_buf(), scheduler).expect("open library"),
+        )
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("build test application");
+    (app, receiver)
+}
+
 #[test]
 fn import_command_validation_rejects_empty_and_non_pdf_paths() {
     assert!(validate_import_paths(&[]).is_err());
     assert!(validate_import_paths(&["".to_owned()]).is_err());
     assert!(validate_import_paths(&["/tmp/not-a-pdf.txt".to_owned()]).is_err());
+}
+
+#[test]
+fn import_returns_pending_before_its_background_index_task_runs() {
+    let directory = tempdir().expect("create temporary directory");
+    let source = directory.path().join("pending.pdf");
+    let library_root = directory.path().join("library");
+    fs::write(&source, b"%PDF-1.4\npending\n").expect("write valid PDF");
+    let (app, tasks) = app_with_controlled_indexer(&library_root);
+
+    let imported = import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+        .expect("import document without waiting for extraction");
+
+    assert_eq!(imported[0].status, "processing");
+    assert!(!imported[0].indexed);
+    let task = tasks.try_recv().expect("index task should be scheduled");
+    task();
+    let indexed = crate::commands::list_documents(app.state()).expect("list after task");
+    assert_eq!(indexed[0].status, "ready");
+    assert!(
+        !indexed[0].indexed,
+        "malformed text extraction is recoverable"
+    );
 }
 
 #[test]

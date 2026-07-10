@@ -135,6 +135,95 @@ select {
   color: #b25000;
 }
 
+.command-palette__backdrop {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  place-items: start center;
+  padding: min(18vh, 140px) 20px 20px;
+  background: rgb(29 29 31 / 22%);
+}
+
+.command-palette {
+  width: min(620px, 100%);
+  overflow: hidden;
+  border: 1px solid rgb(0 0 0 / 8%);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 94%);
+  box-shadow: 0 24px 72px rgb(0 0 0 / 20%);
+  backdrop-filter: blur(24px);
+}
+
+.command-palette__input {
+  width: 100%;
+  padding: 18px 20px;
+  border: 0;
+  border-bottom: 1px solid #e5e5ea;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  font-size: 18px;
+}
+
+.command-palette__input:focus-visible,
+.command-palette button:focus-visible {
+  outline: 3px solid rgb(0 122 255 / 45%);
+  outline-offset: -3px;
+}
+
+.command-palette__results {
+  max-height: min(48vh, 380px);
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.command-palette__results button {
+  display: grid;
+  width: 100%;
+  gap: 3px;
+  padding: 12px;
+  border: 0;
+  border-radius: 10px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.command-palette__results button.is-selected,
+.command-palette__results button:hover {
+  background: #e8f2ff;
+}
+
+.command-palette__results small {
+  color: #6e6e73;
+}
+
+.command-palette__error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #b25000;
+}
+
+.command-palette__error p {
+  margin: 0;
+}
+
+.command-palette__error button {
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 999px;
+  color: #fff;
+  background: #007aff;
+  cursor: pointer;
+}
+
 @media (max-width: 480px) {
   .library-page {
     padding: 20px;

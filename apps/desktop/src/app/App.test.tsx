@@ -86,6 +86,33 @@ test("opens a reader placeholder and returns to the library", async () => {
   expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
 });
 
+test("opens a search result in the reader from either application state", async () => {
+  const user = userEvent.setup();
+  const list = vi.fn().mockResolvedValue([document]);
+  const search = vi.fn().mockResolvedValue([document]);
+
+  render(
+    <App
+      libraryApi={{
+        list,
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+        search,
+      }}
+    />,
+  );
+
+  await screen.findByRole("button", { name: "Open Linear Algebra" });
+  await user.keyboard("{Control>}k{/Control}");
+  await user.type(screen.getByRole("searchbox"), "linear");
+  await waitFor(() => expect(search).toHaveBeenCalledWith("linear"));
+  await user.keyboard("{Enter}");
+  expect(screen.getByText("Reader coming soon.")).toBeInTheDocument();
+
+  await user.keyboard("{Meta>}k{/Meta}");
+  expect(screen.getByRole("searchbox")).toBeInTheDocument();
+});
+
 test("keeps imported documents when an older initial load resolves last", async () => {
   const user = userEvent.setup();
   const initialList = deferred<typeof document[]>();

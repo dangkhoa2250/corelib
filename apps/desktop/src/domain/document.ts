@@ -18,6 +18,10 @@ export interface LibraryDocument {
 }
 
 export function documentStatusLabel(document: LibraryDocument): string {
+  if (document.status === "ready" && !document.indexed) {
+    return "Needs attention";
+  }
+
   switch (document.status) {
     case "ready":
       return "";

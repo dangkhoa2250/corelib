@@ -120,7 +120,7 @@ impl LibraryDatabase {
             transaction.execute(
                 "INSERT OR IGNORE INTO documents (
                     id, source, content_hash, title, managed_path, status, index_state, created_at, updated_at
-                 ) VALUES (?1, 'local_managed', ?2, ?3, ?4, 'ready', 'pending', ?5, ?5)",
+                 ) VALUES (?1, 'local_managed', ?2, ?3, ?4, 'processing', 'pending', ?5, ?5)",
                 params![
                     document.id,
                     document.content_hash,
@@ -189,6 +189,48 @@ impl LibraryDatabase {
 
         self.summary_by_id(id)?
             .ok_or(LibraryDbError::DocumentNotFound)
+    }
+
+    pub fn set_index_ready(
+        &mut self,
+        id: &str,
+        text: &str,
+        cover_path: Option<&str>,
+    ) -> Result<()> {
+        let transaction = self.connection.transaction()?;
+        let updated = transaction.execute(
+            "UPDATE documents
+             SET status = 'ready', index_state = 'ready',
+                 cover_path = COALESCE(?1, cover_path), updated_at = ?2
+             WHERE id = ?3",
+            params![cover_path, portable_timestamp(), id],
+        )?;
+        if updated == 0 {
+            return Err(LibraryDbError::DocumentNotFound);
+        }
+        transaction.execute(
+            "DELETE FROM document_text WHERE document_id = ?1",
+            params![id],
+        )?;
+        transaction.execute(
+            "INSERT INTO document_text (document_id, body) VALUES (?1, ?2)",
+            params![id, text],
+        )?;
+        transaction.commit()?;
+        Ok(())
+    }
+
+    pub fn set_index_failed(&mut self, id: &str) -> Result<()> {
+        let updated = self.connection.execute(
+            "UPDATE documents
+             SET status = 'ready', index_state = 'failed', updated_at = ?1
+             WHERE id = ?2",
+            params![portable_timestamp(), id],
+        )?;
+        if updated == 0 {
+            return Err(LibraryDbError::DocumentNotFound);
+        }
+        Ok(())
     }
 
     #[cfg(test)]

@@ -51,6 +51,81 @@ fn search_matches_title_metadata_case_insensitively() {
 }
 
 #[test]
+fn local_documents_start_processing_while_text_is_pending() {
+    let directory = tempdir().expect("create temporary directory");
+    let mut database = LibraryDatabase::open(directory.path()).expect("open database");
+
+    let document = database
+        .insert_local(NewLocalDocument {
+            id: "pending".into(),
+            title: "Pending index".into(),
+            content_hash: "pending-content".into(),
+            managed_path: "/managed/pending.pdf".into(),
+        })
+        .expect("insert document");
+
+    assert_eq!(document.status, "processing");
+    assert!(!document.indexed);
+}
+
+#[test]
+fn completing_an_index_writes_searchable_text_and_marks_document_ready() {
+    let directory = tempdir().expect("create temporary directory");
+    let mut database = LibraryDatabase::open(directory.path()).expect("open database");
+    database
+        .insert_local(NewLocalDocument {
+            id: "searchable".into(),
+            title: "Untitled PDF".into(),
+            content_hash: "searchable-content".into(),
+            managed_path: "/managed/searchable.pdf".into(),
+        })
+        .expect("insert document");
+
+    database
+        .set_index_ready(
+            "searchable",
+            "Fourier transforms reveal hidden frequencies",
+            None,
+        )
+        .expect("store extracted text");
+
+    let documents = database
+        .search("frequencies")
+        .expect("search extracted text");
+    assert_eq!(documents.len(), 1);
+    assert_eq!(documents[0].id, "searchable");
+    assert_eq!(documents[0].status, "ready");
+    assert!(documents[0].indexed);
+}
+
+#[test]
+fn failed_indexing_keeps_the_document_ready_for_reader_access() {
+    let directory = tempdir().expect("create temporary directory");
+    let mut database = LibraryDatabase::open(directory.path()).expect("open database");
+    database
+        .insert_local(NewLocalDocument {
+            id: "failed".into(),
+            title: "Encrypted PDF".into(),
+            content_hash: "failed-content".into(),
+            managed_path: "/managed/failed.pdf".into(),
+        })
+        .expect("insert document");
+
+    database
+        .set_index_failed("failed")
+        .expect("mark index failure");
+
+    let document = database
+        .list()
+        .expect("list documents")
+        .pop()
+        .expect("document");
+    assert_eq!(document.id, "failed");
+    assert_eq!(document.status, "ready");
+    assert!(!document.indexed);
+}
+
+#[test]
 fn updating_to_an_invalid_page_fails() {
     let directory = tempdir().expect("create temporary directory");
     let mut database = LibraryDatabase::open(directory.path()).expect("open database");

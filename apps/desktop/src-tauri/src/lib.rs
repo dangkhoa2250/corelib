@@ -1,12 +1,16 @@
 use tauri::Manager;
 
 pub mod commands;
+pub mod indexer;
 pub mod library_db;
 pub mod library_store;
 pub mod model;
 
 #[cfg(test)]
 mod commands_tests;
+
+#[cfg(test)]
+mod indexer_tests;
 
 #[cfg(test)]
 mod library_db_tests;

@@ -2,14 +2,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LibraryDocument } from "../domain/document";
-import { importLocalDocuments, listDocuments } from "../lib/desktop";
+import { importLocalDocuments, listDocuments, searchDocuments } from "../lib/desktop";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { ReaderPlaceholder } from "../features/reader/ReaderPlaceholder";
+import { CommandPalette } from "../features/search/CommandPalette";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
   pick: () => Promise<string[] | null>;
   importDocuments: (paths: string[]) => Promise<LibraryDocument[]>;
+  search?: (query: string) => Promise<LibraryDocument[]>;
 }
 
 async function pickLocalPdfs(): Promise<string[] | null> {
@@ -30,6 +32,7 @@ const nativeLibraryApi: LibraryApi = {
   list: listDocuments,
   pick: pickLocalPdfs,
   importDocuments: importLocalDocuments,
+  search: searchDocuments,
 };
 
 function errorMessage(error: unknown): string {
@@ -123,12 +126,26 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
     [documents],
   );
 
+  const search = useCallback(
+    async (query: string) => {
+      const results = await (libraryApi.search ?? searchDocuments)(query);
+      setDocuments((current) => mergeDocuments(current, results));
+      return results;
+    },
+    [libraryApi],
+  );
+
+  const palette = <CommandPalette search={search} onOpen={handleOpen} />;
+
   if (route.name === "reader") {
     return (
-      <ReaderPlaceholder
-        document={route.document}
-        onBack={() => setRoute({ name: "library" })}
-      />
+      <>
+        <ReaderPlaceholder
+          document={route.document}
+          onBack={() => setRoute({ name: "library" })}
+        />
+        {palette}
+      </>
     );
   }
 
@@ -139,6 +156,7 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
         onOpen={handleOpen}
         onImport={() => void handleImport()}
       />
+      {palette}
       {loading ? <p role="status" aria-label="Loading library">Loading library…</p> : null}
       {error ? (
         <div role="alert">

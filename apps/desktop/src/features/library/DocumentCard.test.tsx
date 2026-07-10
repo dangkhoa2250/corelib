@@ -34,3 +34,15 @@ test("shows the document status only when it is non-empty", () => {
 
   expect(screen.getByText("Preparing")).toBeInTheDocument();
 });
+
+test("keeps a failed index visible as a recoverable needs-attention card", () => {
+  render(
+    <DocumentCard
+      document={{ ...document, indexed: false, status: "ready" }}
+      onOpen={() => {}}
+    />,
+  );
+
+  expect(screen.getByText("Needs attention")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
+});

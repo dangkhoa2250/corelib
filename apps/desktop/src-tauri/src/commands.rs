@@ -1,30 +1,48 @@
 use std::{
     fs,
     path::{Path, PathBuf},
-    sync::Mutex,
+    sync::{Arc, Mutex},
 };
 
 use tauri::State;
 use uuid::Uuid;
 
 use crate::{
+    indexer::index_managed_pdf,
     library_db::{LibraryDatabase, NewLocalDocument},
     library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
     model::DocumentSummary,
 };
 
+pub type IndexTask = Box<dyn FnOnce() + Send + 'static>;
+type IndexScheduler = Arc<dyn Fn(IndexTask) + Send + Sync>;
+
 pub struct LibraryStore {
-    database: Mutex<LibraryDatabase>,
+    database: Arc<Mutex<LibraryDatabase>>,
     library_root: PathBuf,
+    schedule_index: IndexScheduler,
 }
 
 impl LibraryStore {
     pub fn open(app_data_directory: PathBuf) -> Result<Self, String> {
+        Self::open_with_scheduler(
+            app_data_directory,
+            Arc::new(|task| {
+                tauri::async_runtime::spawn_blocking(task);
+            }),
+        )
+    }
+
+    pub(crate) fn open_with_scheduler(
+        app_data_directory: PathBuf,
+        schedule_index: IndexScheduler,
+    ) -> Result<Self, String> {
         let database =
             LibraryDatabase::open(&app_data_directory).map_err(|error| error.to_string())?;
         Ok(Self {
-            database: Mutex::new(database),
+            database: Arc::new(Mutex::new(database)),
             library_root: app_data_directory,
+            schedule_index,
         })
     }
 
@@ -35,6 +53,13 @@ impl LibraryStore {
             .map_err(|_| "library database is unavailable".to_owned())?
             .install_insert_failure_for_test()
             .map_err(|error| error.to_string())
+    }
+
+    fn schedule_managed_pdf_index(&self, id: String, managed_path: String) {
+        let database = Arc::clone(&self.database);
+        (self.schedule_index)(Box::new(move || {
+            index_managed_pdf(&database, &id, Path::new(&managed_path));
+        }));
     }
 }
 
@@ -60,6 +85,7 @@ pub fn import_local_documents(
         .lock()
         .map_err(|_| "library database is unavailable".to_owned())?;
     let mut created_paths = Vec::new();
+    let mut index_tasks = Vec::new();
     let imported_documents = documents
         .iter()
         .map(|document| {
@@ -71,6 +97,7 @@ pub fn import_local_documents(
             .map_err(|_| "unable to import PDF".to_owned())?;
             if imported.created {
                 created_paths.push(imported.managed_path.clone());
+                index_tasks.push((document.id.clone(), imported.managed_path.clone()));
             }
             Ok(NewLocalDocument {
                 id: document.id.clone(),
@@ -89,12 +116,19 @@ pub fn import_local_documents(
         }
     };
 
-    database
+    let summaries = database
         .insert_local_batch(imported_documents)
         .map_err(|error| {
             remove_new_managed_files(&created_paths);
             error.to_string()
-        })
+        })?;
+    drop(database);
+
+    for (id, managed_path) in index_tasks {
+        state.schedule_managed_pdf_index(id, managed_path);
+    }
+
+    Ok(summaries)
 }
 
 #[tauri::command]
