@@ -180,6 +180,10 @@ const PdfPage = React.memo(
     const textLayerRef = useRef<HTMLDivElement | null>(null);
     const annotationLayerRef = useRef<HTMLDivElement | null>(null);
     const [isVisible, setIsVisible] = useState(false);
+    const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
+
+    const currentWidth = pageSize ? pageSize.width : defaultWidth;
+    const currentHeight = pageSize ? pageSize.height : defaultHeight;
 
     const captureSelection = useCallback(() => {
       const selection = window.getSelection();
@@ -193,8 +197,8 @@ const PdfPage = React.memo(
         : selection.focusNode?.parentElement)?.closest("[id^='pdf-page-']");
       const focusPage = Number(focusPageElement?.id.replace("pdf-page-", "")) || pageNumber;
       const pageRect = pageElement.getBoundingClientRect();
-      const scaleX = pageRect.width > 0 ? pageRect.width / defaultWidth : 1;
-      const scaleY = pageRect.height > 0 ? pageRect.height / defaultHeight : 1;
+      const scaleX = pageRect.width > 0 ? pageRect.width / currentWidth : 1;
+      const scaleY = pageRect.height > 0 ? pageRect.height / currentHeight : 1;
       const rects: SelectionRect[] = Array.from(range.getClientRects())
         .filter((rect) => rect.width > 0 && rect.height > 0)
         .map((rect) => ({
@@ -209,7 +213,7 @@ const PdfPage = React.memo(
         quote: selection.toString(),
         rects,
       }, focusPage);
-    }, [defaultHeight, defaultWidth, onSelection, pageNumber]);
+    }, [currentHeight, currentWidth, onSelection, pageNumber]);
 
     useEffect(() => {
       const container = containerRef.current;
@@ -246,6 +250,9 @@ const PdfPage = React.memo(
         try {
           const page = await pdfDoc.getPage(pageNumber);
           if (!isCurrent) return;
+
+          const sizeViewport = page.getViewport({ scale: 1.0 });
+          setPageSize({ width: sizeViewport.width, height: sizeViewport.height });
 
           const viewport = page.getViewport({ scale: renderScale });
           const canvas = canvasRef.current;
@@ -384,8 +391,8 @@ const PdfPage = React.memo(
         id={`pdf-page-${pageNumber}`}
         className="reader-pdf-page"
         style={{
-          width: `${defaultWidth}px`,
-          height: `${defaultHeight}px`,
+          width: `${currentWidth}px`,
+          height: `${currentHeight}px`,
           position: "relative",
           background: "#ffffff",
           boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
@@ -398,8 +405,8 @@ const PdfPage = React.memo(
             position: "absolute",
             top: 0,
             left: 0,
-            width: `${defaultWidth * renderScale}px`,
-            height: `${defaultHeight * renderScale}px`,
+            width: `${currentWidth * renderScale}px`,
+            height: `${currentHeight * renderScale}px`,
             transform: `scale(${cssScale})`,
             transformOrigin: "top left",
             display: isVisible ? "block" : "none",
@@ -660,10 +667,16 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
           setLoadingDoc(false);
 
           try {
-            const firstPage = await doc.getPage(1);
-            const defaultViewport = firstPage.getViewport({ scale: 1.0 });
+            const pageForSize = doc.numPages > 1 ? await doc.getPage(2) : await doc.getPage(1);
+            const defaultViewport = pageForSize.getViewport({ scale: 1.0 });
             setDefaultSize({ width: defaultViewport.width, height: defaultViewport.height });
-          } catch (_) {}
+          } catch (_) {
+            try {
+              const firstPage = await doc.getPage(1);
+              const defaultViewport = firstPage.getViewport({ scale: 1.0 });
+              setDefaultSize({ width: defaultViewport.width, height: defaultViewport.height });
+            } catch (_) {}
+          }
 
           try {
             const rawOutline = await doc.getOutline();
