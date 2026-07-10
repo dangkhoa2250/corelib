@@ -52,7 +52,7 @@ function DynamicCover({
         const url = await getDocumentFileUrl(document.id);
         if (!active) return;
         const assetUrl = convertFileSrc(url);
-        loadingTask = pdfjs.getDocument({ url: assetUrl });
+        loadingTask = pdfjs.getDocument({ url: assetUrl, enableHWA: true });
         const pdf = await loadingTask.promise;
         if (!active) return;
         const page = await pdf.getPage(1);

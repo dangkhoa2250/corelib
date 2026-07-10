@@ -13,13 +13,19 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 const MIN_ZOOM_SCALE = 0.5;
 const MAX_ZOOM_SCALE = 3;
 const MAX_CANVAS_PIXEL_RATIO = 3.0;
+// Hard budget per page canvas (~16MP, pdf.js viewer default). Zoom × Retina can
+// otherwise multiply to 36x the page's pixels and rasterization heats the CPU.
+const MAX_CANVAS_PIXELS = 16_777_216;
 
 export function clampZoomScale(scale: number) {
   return Math.min(Math.max(scale, MIN_ZOOM_SCALE), MAX_ZOOM_SCALE);
 }
 
-export function getCanvasPixelRatio(devicePixelRatio: number) {
-  return Math.min(Math.max(devicePixelRatio, 1), MAX_CANVAS_PIXEL_RATIO);
+export function getCanvasPixelRatio(devicePixelRatio: number, cssWidth = 0, cssHeight = 0) {
+  const ratio = Math.min(Math.max(devicePixelRatio, 1), MAX_CANVAS_PIXEL_RATIO);
+  const area = cssWidth * cssHeight;
+  if (area <= 0) return ratio;
+  return Math.max(Math.min(ratio, Math.sqrt(MAX_CANVAS_PIXELS / area)), 0.25);
 }
 
 export function getCenteredPageOffset(viewportWidth: number, contentWidth: number) {
@@ -95,7 +101,7 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active }: ThumbnailPagePro
         if (!canvas) return;
         const context = canvas.getContext("2d");
         if (!context) return;
-        const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1);
+        const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, viewport.width, viewport.height);
         canvas.width = viewport.width * dpr;
         canvas.height = viewport.height * dpr;
         context.scale(dpr, dpr);
@@ -265,22 +271,34 @@ const PdfPage = React.memo(
           textLayerContainer.style.setProperty("--scale-factor", String(renderScale));
           annotationLayerContainer.style.setProperty("--scale-factor", String(renderScale));
 
-          const context = canvas.getContext("2d");
-          if (!context) return;
-
-          const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1);
-          canvas.width = viewport.width * dpr;
-          canvas.height = viewport.height * dpr;
+          // Stretch the stale bitmap to the new page size immediately, then
+          // rasterize offscreen and swap in a single blit — during a zoom the
+          // page shows a scaled (blurry) preview instead of going blank.
           canvas.style.width = `${viewport.width}px`;
           canvas.style.height = `${viewport.height}px`;
-          context.scale(dpr, dpr);
 
-          const renderContext = {
-            canvasContext: context,
+          const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, viewport.width, viewport.height);
+          const offscreen = window.document.createElement("canvas");
+          offscreen.width = viewport.width * dpr;
+          offscreen.height = viewport.height * dpr;
+          const offscreenContext = offscreen.getContext("2d");
+          if (!offscreenContext) return;
+          offscreenContext.scale(dpr, dpr);
+
+          renderTask = page.render({
+            canvasContext: offscreenContext,
             viewport: viewport,
-          };
-          renderTask = page.render(renderContext);
+          });
           await renderTask.promise;
+          if (!isCurrent) return;
+
+          const context = canvas.getContext("2d");
+          if (!context) return;
+          canvas.width = offscreen.width;
+          canvas.height = offscreen.height;
+          context.drawImage(offscreen, 0, 0);
+          offscreen.width = 0;
+          offscreen.height = 0;
 
           if (isCurrent) {
             // Text Layer
@@ -367,21 +385,25 @@ const PdfPage = React.memo(
         if (renderTask) {
           renderTask.cancel();
         }
-        const canvas = canvasRef.current;
-        if (canvas) {
-          canvas.width = 0;
-          canvas.height = 0;
-        }
-        const textLayerContainer = textLayerRef.current;
-        if (textLayerContainer) {
-          textLayerContainer.innerHTML = "";
-        }
-        const annotationLayerContainer = annotationLayerRef.current;
-        if (annotationLayerContainer) {
-          annotationLayerContainer.innerHTML = "";
-        }
       };
     }, [pdfDoc, pageNumber, renderScale, isVisible]);
+
+    // Release the raster and DOM layers only once the page scrolls off-screen,
+    // so zoom re-renders keep the previous bitmap visible until replaced.
+    useEffect(() => {
+      if (isVisible) return;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+      if (textLayerRef.current) {
+        textLayerRef.current.innerHTML = "";
+      }
+      if (annotationLayerRef.current) {
+        annotationLayerRef.current.innerHTML = "";
+      }
+    }, [isVisible]);
 
     const cssScale = 1 / renderScale;
 
@@ -660,7 +682,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
         const url = await getDocumentFileUrl(document.id);
         if (!active) return;
         const assetUrl = convertFileSrc(url);
-        const loadingTask = pdfjs.getDocument({ url: assetUrl });
+        const loadingTask = pdfjs.getDocument({ url: assetUrl, enableHWA: true });
         const doc = await loadingTask.promise;
         if (active) {
           setPdfDoc(doc);
