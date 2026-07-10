@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import type { LibraryDocument } from "../../domain/document";
+import type { SearchResult } from "../../lib/learning";
 
 interface CommandPaletteProps {
-  search: (query: string) => Promise<LibraryDocument[]>;
-  onOpen: (document: LibraryDocument) => void;
+  search: (query: string) => Promise<SearchResult[]>;
+  onOpen: (result: SearchResult) => void;
 }
 
 const SEARCH_DEBOUNCE_MS = 150;
@@ -16,7 +16,7 @@ function errorMessage(error: unknown): string {
 export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<LibraryDocument[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const searchboxRef = useRef<HTMLInputElement>(null);
@@ -70,9 +70,9 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
 
     setError(null);
     void search(trimmedQuery).then(
-      (documents) => {
+      (searchResults) => {
         if (request === sequence.current) {
-          setResults(documents);
+          setResults(searchResults);
           setSelectedIndex(0);
         }
       },
@@ -94,9 +94,9 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
   }, [isOpen, query, runSearch]);
 
   const openSelected = useCallback(() => {
-    const document = results[selectedIndex];
-    if (document) {
-      onOpen(document);
+    const result = results[selectedIndex];
+    if (result) {
+      onOpen(result);
       close();
     }
   }, [close, onOpen, results, selectedIndex]);
@@ -172,20 +172,20 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
         ) : null}
         {results.length > 0 ? (
           <ul aria-label="Search results" className="command-palette__results">
-            {results.map((document, index) => (
-              <li key={document.id}>
+            {results.map((result, index) => (
+              <li key={`${result.kind}-${result.id}`}>
                 <button
-                  aria-label={`Open ${document.title}`}
+                  aria-label={`Open ${result.title}`}
                   aria-selected={index === selectedIndex}
                   className={index === selectedIndex ? "is-selected" : undefined}
                   onClick={() => {
-                    onOpen(document);
+                    onOpen(result);
                     close();
                   }}
                   type="button"
                 >
-                  <span>{document.title}</span>
-                  {document.author ? <small>{document.author}</small> : null}
+                  <span>{result.title}</span>
+                  <small>{result.kind === "card" ? "Flashcard" : result.subtitle}</small>
                 </button>
               </li>
             ))}

@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use crate::model::DocumentSummary;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATIONS: [(&str, &str); 3] = [
+const MIGRATIONS: [(&str, &str); 5] = [
     (
         "0001_library",
         include_str!("../migrations/0001_library.sql"),
@@ -22,6 +22,14 @@ const MIGRATIONS: [(&str, &str); 3] = [
     (
         "0003_drive_source",
         include_str!("../migrations/0003_drive_source.sql"),
+    ),
+    (
+        "0004_learning",
+        include_str!("../migrations/0004_learning.sql"),
+    ),
+    (
+        "0005_learning_source_integrity",
+        include_str!("../migrations/0005_learning_source_integrity.sql"),
     ),
 ];
 const SUMMARY_COLUMNS: &str =
@@ -35,6 +43,7 @@ pub enum LibraryDbError {
     Sql(rusqlite::Error),
     InvalidPage,
     DocumentNotFound,
+    InvalidLearning(String),
 }
 
 impl fmt::Display for LibraryDbError {
@@ -44,6 +53,7 @@ impl fmt::Display for LibraryDbError {
             Self::Sql(_) => formatter.write_str("unable to access the library database"),
             Self::InvalidPage => formatter.write_str("page must be positive"),
             Self::DocumentNotFound => formatter.write_str("document not found"),
+            Self::InvalidLearning(message) => formatter.write_str(message),
         }
     }
 }
@@ -63,7 +73,7 @@ impl From<rusqlite::Error> for LibraryDbError {
 }
 
 pub struct LibraryDatabase {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 pub struct NewLocalDocument {
@@ -89,6 +99,7 @@ impl LibraryDatabase {
 
         let mut connection = Connection::open(database_path(app_data_directory))?;
         connection.busy_timeout(Duration::from_secs(5))?;
+        connection.execute_batch("PRAGMA foreign_keys = ON;")?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         transaction.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY NOT NULL);",
@@ -123,6 +134,10 @@ impl LibraryDatabase {
             .query_map([], summary_from_row)?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(summaries)
+    }
+
+    pub fn get_document(&self, id: &str) -> Result<Option<DocumentSummary>> {
+        self.summary_by_id(id)
     }
 
     pub fn insert_local(&mut self, document: NewLocalDocument) -> Result<DocumentSummary> {
@@ -455,7 +470,7 @@ fn database_path(app_data_directory: &Path) -> PathBuf {
     app_data_directory.join(DATABASE_FILE)
 }
 
-fn portable_timestamp() -> String {
+pub(crate) fn portable_timestamp() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

@@ -19,6 +19,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+fsrs = "=6.6.0"
 libc = "0.2"
 # Pure-Rust PDF text extractor selected from the current lopdf 0.43.0 docs.
 lopdf = "0.43"

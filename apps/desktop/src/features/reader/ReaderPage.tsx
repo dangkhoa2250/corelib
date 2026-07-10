@@ -4,6 +4,9 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
 import type { LibraryDocument } from "../../domain/document";
+import type { CardSource, SelectionRect } from "../../domain/learning";
+import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
+import { CardSelectionToolbar } from "./CardSelectionToolbar";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -160,6 +163,7 @@ interface PdfPageProps {
   defaultHeight: number;
   pagesContainerRef: React.RefObject<HTMLDivElement | null>;
   onVisible: () => void;
+  onSelection: (source: CardSource, focusPage: number) => void;
 }
 
 const PdfPage = React.memo(
@@ -171,12 +175,43 @@ const PdfPage = React.memo(
     defaultHeight,
     pagesContainerRef,
     onVisible,
+    onSelection,
   }: PdfPageProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const textLayerRef = useRef<HTMLDivElement | null>(null);
     const annotationLayerRef = useRef<HTMLDivElement | null>(null);
     const [isVisible, setIsVisible] = useState(false);
+
+    const captureSelection = useCallback(() => {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+      const range = selection.getRangeAt(0);
+      const pageElement = containerRef.current;
+      if (!pageElement) return;
+      if (!selectionIsWithinPage(selection, pageElement)) return;
+      const focusPageElement = (selection.focusNode instanceof Element
+        ? selection.focusNode
+        : selection.focusNode?.parentElement)?.closest("[id^='pdf-page-']");
+      const focusPage = Number(focusPageElement?.id.replace("pdf-page-", "")) || pageNumber;
+      const pageRect = pageElement.getBoundingClientRect();
+      const scaleX = pageRect.width > 0 ? pageRect.width / defaultWidth : 1;
+      const scaleY = pageRect.height > 0 ? pageRect.height / defaultHeight : 1;
+      const rects: SelectionRect[] = Array.from(range.getClientRects())
+        .filter((rect) => rect.width > 0 && rect.height > 0)
+        .map((rect) => ({
+          x: (rect.left - pageRect.left) / scaleX,
+          y: (rect.top - pageRect.top) / scaleY,
+          width: rect.width / scaleX,
+          height: rect.height / scaleY,
+        }));
+      onSelection({
+        documentId: null,
+        page: pageNumber,
+        quote: selection.toString(),
+        rects,
+      }, focusPage);
+    }, [defaultHeight, defaultWidth, onSelection, pageNumber]);
 
     useEffect(() => {
       const container = containerRef.current;
@@ -376,6 +411,8 @@ const PdfPage = React.memo(
           <div
             ref={textLayerRef}
             className="textLayer"
+            onMouseUp={captureSelection}
+            onTouchEnd={captureSelection}
             style={{
               position: "absolute",
               top: 0,
@@ -429,6 +466,7 @@ const PdfPage = React.memo(
       prevProps.defaultWidth === nextProps.defaultWidth &&
       prevProps.defaultHeight === nextProps.defaultHeight &&
       prevProps.pagesContainerRef === nextProps.pagesContainerRef
+      && prevProps.onSelection === nextProps.onSelection
     );
   }
 );
@@ -482,9 +520,10 @@ interface ReaderPageProps {
   onBack: () => void;
   getDocumentFileUrl: (id: string) => Promise<string>;
   onPageChange: (id: string, page: number) => Promise<void>;
+  onCreateCard?: (draft: CardSource) => void;
 }
 
-export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange }: ReaderPageProps) {
+export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange, onCreateCard }: ReaderPageProps) {
   const [pdfDoc, setPdfDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(document.lastReadPage ?? 1);
   const [renderScale, setRenderScale] = useState(1);
@@ -499,6 +538,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
 
   const [sidebarTab, setSidebarTab] = useState<"pages" | "outline">("pages");
   const [outline, setOutline] = useState<any[] | null>(null);
+  const [selection, setSelection] = useState<CardSource | null>(null);
 
   const pagesContainerRef = useRef<HTMLDivElement | null>(null);
   const zoomLayoutRef = useRef<HTMLDivElement | null>(null);
@@ -659,6 +699,11 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
     setCurrentPage(pageNo);
     scrollToPage(pageNo);
   };
+
+  const handleSelection = useCallback((source: CardSource, focusPage: number) => {
+    const draft = selectionDraft({ ...source, documentId: document.id }, focusPage);
+    if (draft) setSelection(draft);
+  }, [document.id]);
 
   const handleOutlineNavigate = async (destination: any) => {
     if (!pdfDoc) return;
@@ -988,11 +1033,28 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
                     debouncedSavePage(pageNumber);
                   }
                 }}
+                onSelection={handleSelection}
               />
             ))}
             </div>
           </div>
         </div>
+        {selection && onCreateCard ? (
+          <div style={{ position: "fixed", left: "50%", bottom: "24px", zIndex: 10, transform: "translateX(-50%)" }}>
+            <CardSelectionToolbar
+              quote={selection.quote}
+              onDismiss={() => {
+                setSelection(null);
+                window.getSelection()?.removeAllRanges();
+              }}
+              onCreate={() => {
+                onCreateCard(selection);
+                setSelection(null);
+                window.getSelection()?.removeAllRanges();
+              }}
+            />
+          </div>
+        ) : null}
       </section>
     </main>
   );

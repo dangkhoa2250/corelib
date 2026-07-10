@@ -27,6 +27,13 @@ export function searchDocuments(
   return call<LibraryDocument[]>("search_documents", { query });
 }
 
+export function getDocument(
+  id: string,
+  call: Invoke = invoke as Invoke,
+): Promise<LibraryDocument> {
+  return call<LibraryDocument>("get_document", { id });
+}
+
 export function saveReadPage(
   id: string,
   page: number,
