@@ -26,12 +26,20 @@ pub fn content_hash(path: impl AsRef<Path>) -> io::Result<String> {
 pub fn import_pdf(
     library_root: impl AsRef<Path>,
     source_path: impl AsRef<Path>,
-    content_hash: &str,
+    supplied_content_hash: &str,
 ) -> io::Result<String> {
+    let trusted_content_hash = content_hash(source_path.as_ref())?;
+    if supplied_content_hash != trusted_content_hash {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "provided content hash does not match source",
+        ));
+    }
+
     let documents_directory = library_root.as_ref().join("documents");
     fs::create_dir_all(&documents_directory)?;
 
-    let managed_path = documents_directory.join(format!("{content_hash}.pdf"));
+    let managed_path = documents_directory.join(format!("{trusted_content_hash}.pdf"));
     if !managed_path.exists() {
         fs::copy(source_path, &managed_path)?;
     }
