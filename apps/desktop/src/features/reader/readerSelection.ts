@@ -2,6 +2,24 @@ import type { CardSource, NewCardSource } from "../../domain/learning";
 
 export type { CardSource, NewCardSource, SelectionRect } from "../../domain/learning";
 
+function pageElementForNode(node: Node | null): HTMLElement | null {
+  const element = node instanceof Element ? node : node?.parentElement;
+  return element?.closest<HTMLElement>("[id^='pdf-page-']") ?? null;
+}
+
+/**
+ * PDF.js renders every page as a separate text layer. A DOM selection can
+ * begin on one page and end on another (including when the user drags in the
+ * reverse direction), so both endpoints must belong to the page that owns
+ * the selection handler.
+ */
+export function selectionIsWithinPage(selection: Selection, pageElement: HTMLElement): boolean {
+  return (
+    pageElementForNode(selection.anchorNode) === pageElement &&
+    pageElementForNode(selection.focusNode) === pageElement
+  );
+}
+
 function hasRequiredDocumentId(source: CardSource): source is NewCardSource {
   return typeof source.documentId === "string" && source.documentId.trim().length > 0;
 }

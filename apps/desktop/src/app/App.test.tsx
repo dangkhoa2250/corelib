@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { App } from "./App";
@@ -32,9 +32,13 @@ vi.mock("pdfjs-dist", () => {
         }),
       }),
     }),
-    TextLayer: vi.fn().mockImplementation(function () {
+    TextLayer: vi.fn().mockImplementation(function (options: { container: HTMLElement }) {
       return {
-        render: vi.fn().mockResolvedValue(undefined),
+        render: vi.fn().mockImplementation(async () => {
+          const span = globalThis.document.createElement("span");
+          span.textContent = "selected source text";
+          options.container.append(span);
+        }),
         cancel: vi.fn(),
       };
     }),
@@ -90,6 +94,45 @@ function deferred<T>() {
   });
 
   return { promise, resolve };
+}
+
+async function openReaderAndSelectText(
+  user: ReturnType<typeof userEvent.setup>,
+  list = vi.fn().mockResolvedValue([document]),
+  learningApi?: { listDecks: () => Promise<any[]>; createCard: (input: any) => Promise<any> },
+) {
+  render(
+    <App
+      libraryApi={{
+        list,
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
+      }}
+      learningApi={learningApi}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Open Linear Algebra" }));
+  await screen.findByText("Page 1 of 5");
+  await selectTextOnPage();
+}
+
+async function selectTextOnPage() {
+  const layer = await waitFor(() => {
+    const candidate = globalThis.document.querySelector<HTMLElement>("#pdf-page-1 .textLayer");
+    if (!candidate?.firstChild) throw new Error("PDF text layer did not render");
+    return candidate;
+  });
+  const range = globalThis.document.createRange();
+  range.selectNodeContents(layer.firstChild!);
+  Object.defineProperty(range, "getClientRects", {
+    value: () => [new DOMRect(0, 0, 100, 16)],
+  });
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.mouseUp(layer);
 }
 
 test("renders the Library heading", () => {
@@ -300,4 +343,70 @@ test("opens the selected search result when an older library load resolves after
 
   await user.keyboard("{Enter}");
   expect(screen.getByRole("heading", { name: "Search Result" })).toBeInTheDocument();
+});
+
+test("opens the card composer with the live source document and editable front/back", async () => {
+  const user = userEvent.setup();
+  const listDecks = vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]);
+  const createCard = vi.fn().mockResolvedValue({});
+  await openReaderAndSelectText(user, undefined, { listDecks, createCard });
+
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+
+  expect(await screen.findByRole("dialog", { name: "Create flashcard" })).toBeInTheDocument();
+  expect(screen.getByRole("textbox", { name: "Front" })).toHaveValue("selected source text");
+  expect(screen.getByRole("textbox", { name: "Back" })).toHaveValue("");
+  expect(listDecks).toHaveBeenCalledTimes(1);
+});
+
+test("keeps the composer visible and reports deck loading errors", async () => {
+  const user = userEvent.setup();
+  const listDecks = vi.fn().mockRejectedValue(new Error("Deck service unavailable"));
+  await openReaderAndSelectText(user, undefined, { listDecks, createCard: vi.fn() });
+
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Deck service unavailable");
+  expect(screen.getByRole("dialog", { name: "Create flashcard" })).toBeInTheDocument();
+});
+
+test("keeps the composer visible and reports card save errors", async () => {
+  const user = userEvent.setup();
+  const createCard = vi.fn().mockRejectedValue(new Error("Card save failed"));
+  await openReaderAndSelectText(user, undefined, {
+    listDecks: vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]),
+    createCard,
+  });
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+  await user.type(screen.getByRole("textbox", { name: "Back" }), "definition");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "english");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Card save failed");
+  expect(screen.getByRole("dialog", { name: "Create flashcard" })).toBeInTheDocument();
+  expect(createCard).toHaveBeenCalledWith(expect.objectContaining({
+    front: "selected source text",
+    back: "definition",
+    source: expect.objectContaining({ documentId: "linear-algebra", page: 1 }),
+  }));
+});
+
+test("returns to the source page after saving or cancelling a card", async () => {
+  const user = userEvent.setup();
+  const createCard = vi.fn().mockResolvedValue({});
+  await openReaderAndSelectText(user, undefined, {
+    listDecks: vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]),
+    createCard,
+  });
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+  await user.type(screen.getByRole("textbox", { name: "Back" }), "definition");
+  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "english");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByRole("heading", { name: "Linear Algebra" })).toBeInTheDocument();
+  expect(screen.getByText("Page 1 of 5")).toBeInTheDocument();
+
+  await selectTextOnPage();
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(await screen.findByText("Page 1 of 5")).toBeInTheDocument();
 });

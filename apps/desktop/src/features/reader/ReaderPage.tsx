@@ -5,7 +5,7 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
 import type { LibraryDocument } from "../../domain/document";
 import type { CardSource, SelectionRect } from "../../domain/learning";
-import { selectionDraft } from "./readerSelection";
+import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -180,6 +180,7 @@ const PdfPage = React.memo(
       const range = selection.getRangeAt(0);
       const pageElement = containerRef.current;
       if (!pageElement) return;
+      if (!selectionIsWithinPage(selection, pageElement)) return;
       const focusPageElement = (selection.focusNode instanceof Element
         ? selection.focusNode
         : selection.focusNode?.parentElement)?.closest("[id^='pdf-page-']");
