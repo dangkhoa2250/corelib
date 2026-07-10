@@ -410,3 +410,57 @@ test("returns to the source page after saving or cancelling a card", async () =>
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(await screen.findByText("Page 1 of 5")).toBeInTheDocument();
 });
+
+test("hydrates a missing card source without showing a false unavailable alert", async () => {
+  const user = userEvent.setup();
+  const card = {
+    id: "card-1",
+    deckId: "english",
+    front: "selected source text",
+    back: "definition",
+    state: "new" as const,
+    dueAt: "2026-07-10T00:00:00.000Z",
+    reps: 0,
+    lapses: 0,
+    stability: null,
+    difficulty: null,
+    lastReviewAt: null,
+    source: null,
+    tags: [],
+  };
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([document]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([]),
+        createCard: vi.fn(),
+        listDueCards: vi.fn().mockResolvedValue([card]),
+        previewCardReview: vi.fn().mockResolvedValue({
+          again: { dueAt: "2026-07-10T00:01:00.000Z", intervalLabel: "1m" },
+          hard: { dueAt: "2026-07-10T01:00:00.000Z", intervalLabel: "1h" },
+          good: { dueAt: "2026-07-11T00:00:00.000Z", intervalLabel: "1d" },
+          easy: { dueAt: "2026-07-14T00:00:00.000Z", intervalLabel: "4d" },
+        }),
+        rateCard: vi.fn(),
+        getCardSource: vi.fn().mockResolvedValue({
+          documentId: document.id,
+          page: 3,
+          quote: "selected source text",
+          rects: [],
+        }),
+      }}
+    />,
+  );
+
+  await user.click(await screen.findByRole("button", { name: "Review today" }));
+  await user.click(await screen.findByRole("button", { name: "Show source" }));
+
+  expect(await screen.findByRole("heading", { name: "Linear Algebra" })).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});

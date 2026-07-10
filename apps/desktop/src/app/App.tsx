@@ -371,7 +371,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
   const palette = <CommandPalette search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
 
   if (route.name === "review") {
-    return <><ReviewPage cards={route.cards} previews={route.previews} onRate={handleRate} onShowSource={(card) => void handleShowSource(card)} onBack={() => setRoute({ name: "library" })} />{palette}</>;
+    return <><ReviewPage cards={route.cards} previews={route.previews} onRate={handleRate} onShowSource={handleShowSource} onBack={() => setRoute({ name: "library" })} />{palette}</>;
   }
 
   if (route.name === "reader") {
