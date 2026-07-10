@@ -1,8 +1,18 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
-import type { NewCardSource } from "../reader/readerSelection";
+import type { CardSource, NewCardSource } from "../reader/readerSelection";
 
 const NEW_DECK_VALUE = "__new_deck__";
+const SOURCE_UNAVAILABLE_MESSAGE = "Source document is no longer available. Select text from an open document to create a card.";
+const FOCUSABLE_SELECTOR = [
+  "button:not([disabled])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[href]",
+  "[tabindex]:not([tabindex='-1'])",
+].join(", ");
 
 export interface CardComposerDeck {
   id: string;
@@ -21,11 +31,15 @@ export interface CardSaveInput {
 }
 
 export interface CardComposerProps {
-  draft: NewCardSource;
+  draft: CardSource;
   decks: CardComposerDeck[];
+  /**
+   * The host persists a card and, when necessary, creates its named deck in
+   * one atomic operation. Keeping that boundary together avoids orphan decks
+   * when a card save fails and is retried.
+   */
   onSave: (input: CardSaveInput) => Promise<void>;
   onCancel: () => void;
-  onCreateDeck?: (name: string) => Promise<void> | void;
 }
 
 function errorMessage(error: unknown): string {
@@ -36,27 +50,92 @@ function tagsFromInput(tags: string): string[] {
   return [...new Set(tags.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
+function hasRequiredDocumentId(source: CardSource): source is NewCardSource {
+  return typeof source.documentId === "string" && source.documentId.trim().length > 0;
+}
+
 export function CardComposer({
   draft,
   decks,
   onSave,
   onCancel,
-  onCreateDeck,
 }: CardComposerProps) {
   const activeDecks = decks.filter((deck) => !deck.archived);
   const [front, setFront] = useState(draft.quote);
   const [back, setBack] = useState("");
   const [tags, setTags] = useState("");
-  const [deckValue, setDeckValue] = useState(() => activeDecks[0]?.id ?? (onCreateDeck ? NEW_DECK_VALUE : ""));
+  const [deckValue, setDeckValue] = useState(() => activeDecks[0]?.id ?? NEW_DECK_VALUE);
   const [newDeckName, setNewDeckName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const frontRef = useRef<HTMLTextAreaElement | null>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
+  const sourceIsAvailable = hasRequiredDocumentId(draft);
   const usingNewDeck = deckValue === NEW_DECK_VALUE;
   const selectedDeck = activeDecks.find((deck) => deck.id === deckValue);
+  const visibleError = sourceIsAvailable ? error : SOURCE_UNAVAILABLE_MESSAGE;
+
+  useEffect(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    frontRef.current?.focus();
+
+    return () => {
+      previousFocusRef.current?.focus();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (closed) {
+      previousFocusRef.current?.focus();
+    }
+  }, [closed]);
+
+  const close = () => {
+    setClosed(true);
+    onCancel();
+  };
+
+  const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (!saving) {
+        close();
+      }
+      return;
+    }
+
+    if (event.key !== "Tab") {
+      return;
+    }
+
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
+    if (!focusable || focusable.length === 0) {
+      return;
+    }
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   const handleSave = async () => {
-    if (saving) {
+    if (saving || closed) {
+      return;
+    }
+
+    if (!sourceIsAvailable) {
+      setError(SOURCE_UNAVAILABLE_MESSAGE);
       return;
     }
 
@@ -71,17 +150,10 @@ export function CardComposer({
       setError("Choose a deck.");
       return;
     }
-    if (!draft.documentId.trim()) {
-      setError("Source document is required.");
-      return;
-    }
 
     setError(null);
     setSaving(true);
     try {
-      if (usingNewDeck && onCreateDeck) {
-        await onCreateDeck(deckName);
-      }
       await onSave({
         deckName,
         front: trimmedFront,
@@ -91,10 +163,16 @@ export function CardComposer({
       });
     } catch (saveError) {
       setError(errorMessage(saveError));
-    } finally {
       setSaving(false);
+      return;
     }
+
+    close();
   };
+
+  if (closed) {
+    return null;
+  }
 
   return (
     <div
@@ -111,6 +189,8 @@ export function CardComposer({
       <section
         aria-labelledby="card-composer-title"
         aria-modal="true"
+        onKeyDown={handleDialogKeyDown}
+        ref={dialogRef}
         role="dialog"
         style={{
           width: "min(680px, 100%)",
@@ -144,16 +224,16 @@ export function CardComposer({
               Deck
               <select
                 aria-label="Deck"
+                disabled={saving}
                 onChange={(event) => setDeckValue(event.target.value)}
                 value={deckValue}
               >
-                {activeDecks.length === 0 && !onCreateDeck ? <option value="">No available decks</option> : null}
                 {activeDecks.map((deck) => (
                   <option key={deck.id} value={deck.id}>
                     {deck.name}
                   </option>
                 ))}
-                {onCreateDeck ? <option value={NEW_DECK_VALUE}>New deck…</option> : null}
+                <option value={NEW_DECK_VALUE}>New deck…</option>
               </select>
             </label>
 
@@ -162,6 +242,7 @@ export function CardComposer({
                 New deck name
                 <input
                   aria-label="New deck name"
+                  disabled={saving}
                   onChange={(event) => setNewDeckName(event.target.value)}
                   placeholder="e.g. English vocabulary"
                   type="text"
@@ -174,7 +255,9 @@ export function CardComposer({
               Front
               <textarea
                 aria-label="Front"
+                disabled={saving}
                 onChange={(event) => setFront(event.target.value)}
+                ref={frontRef}
                 rows={5}
                 value={front}
               />
@@ -184,6 +267,7 @@ export function CardComposer({
               Back
               <textarea
                 aria-label="Back"
+                disabled={saving}
                 onChange={(event) => setBack(event.target.value)}
                 rows={5}
                 value={back}
@@ -194,6 +278,7 @@ export function CardComposer({
               Tags
               <input
                 aria-label="Tags"
+                disabled={saving}
                 onChange={(event) => setTags(event.target.value)}
                 placeholder="e.g. algebra, definitions"
                 type="text"
@@ -207,24 +292,24 @@ export function CardComposer({
             >
               <strong style={{ display: "block", marginBottom: "4px", fontSize: "13px" }}>Source</strong>
               <span style={{ color: "#48484a", fontSize: "13px" }}>
-                Document {draft.documentId} · Page {draft.page}
+                Document {draft.documentId ?? "Unavailable"} · Page {draft.page}
               </span>
             </section>
 
-            {error ? (
+            {visibleError ? (
               <div
                 role="alert"
                 style={{ padding: "10px 12px", borderRadius: "10px", color: "#9a3412", background: "#fff7ed" }}
               >
-                {error}
+                {visibleError}
               </div>
             ) : null}
 
             <footer style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "4px" }}>
-              <button disabled={saving} onClick={onCancel} type="button">
+              <button disabled={saving} onClick={close} type="button">
                 Cancel
               </button>
-              <button disabled={saving} type="submit">
+              <button disabled={saving || !sourceIsAvailable} type="submit">
                 {saving ? "Saving…" : "Save"}
               </button>
             </footer>

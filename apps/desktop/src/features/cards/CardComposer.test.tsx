@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
-import type { NewCardSource } from "../reader/readerSelection";
+import type { CardSource, NewCardSource } from "../reader/readerSelection";
 import { CardComposer } from "./CardComposer";
 
 const draft: NewCardSource = {
@@ -78,15 +78,12 @@ test("requires both card sides before it saves", async () => {
   expect(onSave).not.toHaveBeenCalled();
 });
 
-test("rejects saving a card with a blank source document id", async () => {
-  const { onSave, user } = renderComposer({
-    draft: { ...draft, documentId: " \n" },
-  });
+test("disables saving and explains when the selected source is no longer available", () => {
+  const missingSource: CardSource = { ...draft, documentId: null };
+  const { onSave } = renderComposer({ draft: missingSource });
 
-  await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
-  await user.click(screen.getByRole("button", { name: "Save" }));
-
-  expect(screen.getByRole("alert")).toHaveTextContent("Source document is required.");
+  expect(screen.getByRole("alert")).toHaveTextContent("Source document is no longer available.");
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   expect(onSave).not.toHaveBeenCalled();
 });
 
@@ -121,10 +118,70 @@ test("keeps the composer open and exposes a failure when saving is rejected", as
   expect(screen.getByRole("textbox", { name: "Back" })).toHaveValue("A set with vector operations.");
 });
 
+test("submits a new deck through the atomic card save transaction after a failed retry", async () => {
+  const committedDecks: string[] = [];
+  let attempts = 0;
+  const onSave = vi.fn(async ({ deckName }: { deckName: string }) => {
+    attempts += 1;
+    if (attempts === 1) {
+      throw new Error("Card storage is unavailable");
+    }
+    committedDecks.push(deckName);
+  });
+  const { onCancel, user } = renderComposer({ onSave });
+
+  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "__new_deck__");
+  await user.type(screen.getByRole("textbox", { name: "New deck name" }), "English vocabulary");
+  await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
+
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Card storage is unavailable");
+  expect(committedDecks).toEqual([]);
+
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  await waitFor(() => {
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith();
+  });
+  expect(onSave).toHaveBeenCalledTimes(2);
+  expect(committedDecks).toEqual(["English vocabulary"]);
+});
+
+test("closes through onCancel and cannot submit a successful card twice", async () => {
+  const { onCancel, onSave, user } = renderComposer();
+
+  await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  await waitFor(() => {
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith();
+  });
+  expect(screen.queryByRole("dialog", { name: "Create flashcard" })).not.toBeInTheDocument();
+  expect(onSave).toHaveBeenCalledExactlyOnceWith(expect.any(Object));
+});
+
+test("keeps keyboard focus in the modal and cancels from Escape", async () => {
+  const { onCancel, user } = renderComposer();
+  const front = screen.getByRole("textbox", { name: "Front" });
+  const deck = screen.getByRole("combobox", { name: "Deck" });
+  const save = screen.getByRole("button", { name: "Save" });
+
+  expect(front).toHaveFocus();
+
+  save.focus();
+  await user.tab();
+  expect(deck).toHaveFocus();
+  await user.tab({ shift: true });
+  expect(save).toHaveFocus();
+
+  await user.keyboard("{Escape}");
+  expect(onCancel).toHaveBeenCalledExactlyOnceWith();
+});
+
 test("prevents a second save while the first one is pending", async () => {
   const pendingSave = deferred<void>();
   const onSave = vi.fn().mockReturnValue(pendingSave.promise);
-  const { user } = renderComposer({ onSave });
+  const { onCancel, user } = renderComposer({ onSave });
 
   await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
   await user.click(screen.getByRole("button", { name: "Save" }));
@@ -134,6 +191,7 @@ test("prevents a second save while the first one is pending", async () => {
 
   pendingSave.resolve();
   await waitFor(() => {
-    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith();
   });
+  expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
 });
