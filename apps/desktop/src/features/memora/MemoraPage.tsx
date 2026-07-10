@@ -6,16 +6,177 @@ interface MemoraPageProps {
   listDecks: () => Promise<Deck[]>;
   listDueCards: () => Promise<LearningCard[]>;
   onReviewToday: () => void;
+  createDeck: (name: string) => Promise<Deck>;
+  renameDeck: (id: string, name: string) => Promise<Deck>;
+  deleteDeck: (id: string) => Promise<void>;
+  countDeckCards: (id: string) => Promise<number>;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function MemoraPage({ listDecks, listDueCards, onReviewToday }: MemoraPageProps) {
+interface DeckRowProps {
+  deck: Deck;
+  menuOpen: boolean;
+  onMenuToggle: (open: boolean) => void;
+  onRename: (name: string) => Promise<void>;
+  onDelete: () => Promise<void>;
+  countDeckCards: (id: string) => Promise<number>;
+}
+
+function DeckRow({ deck, menuOpen, onMenuToggle, onRename, onDelete, countDeckCards }: DeckRowProps) {
+  const [mode, setMode] = useState<"idle" | "rename" | "delete">("idle");
+  const [nameValue, setNameValue] = useState(deck.name);
+  const [saving, setSaving] = useState(false);
+  const [cardCount, setCardCount] = useState<number | null>(null);
+
+  const startDelete = () => {
+    setCardCount(null);
+    setMode("delete");
+    void countDeckCards(deck.id)
+      .then(setCardCount)
+      .catch(() => setCardCount(null));
+  };
+
+  if (mode === "rename") {
+    return (
+      <li className="memora-deck-list__item">
+        <form
+          className="memora-deck-list__edit-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const trimmed = nameValue.trim();
+            if (!trimmed) return;
+            setSaving(true);
+            void onRename(trimmed).finally(() => {
+              setSaving(false);
+              setMode("idle");
+            });
+          }}
+        >
+          <input
+            aria-label="Deck name"
+            autoFocus
+            disabled={saving}
+            onChange={(event) => setNameValue(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") {
+                setNameValue(deck.name);
+                setMode("idle");
+              }
+            }}
+            value={nameValue}
+          />
+          <button disabled={saving || !nameValue.trim()} type="submit">
+            Save
+          </button>
+          <button onClick={() => { setNameValue(deck.name); setMode("idle"); }} type="button">
+            Cancel
+          </button>
+        </form>
+      </li>
+    );
+  }
+
+  if (mode === "delete") {
+    const warning = cardCount === null
+      ? `Delete "${deck.name}"?`
+      : cardCount > 0
+        ? `Delete "${deck.name}" and its ${cardCount} card${cardCount === 1 ? "" : "s"}? This cannot be undone.`
+        : `Delete "${deck.name}"? This deck has no cards.`;
+    return (
+      <li className="memora-deck-list__item memora-deck-list__item--confirm">
+        <span>{warning}</span>
+        <div className="memora-deck-list__confirm-actions">
+          <button
+            className="memora-deck-list__delete-confirm"
+            disabled={saving}
+            onClick={() => {
+              setSaving(true);
+              void onDelete().finally(() => {
+                setSaving(false);
+                setMode("idle");
+              });
+            }}
+            type="button"
+          >
+            Delete
+          </button>
+          <button disabled={saving} onClick={() => setMode("idle")} type="button">
+            Cancel
+          </button>
+        </div>
+      </li>
+    );
+  }
+
+  return (
+    <li className="memora-deck-list__item">
+      <span
+        aria-hidden="true"
+        className="memora-deck-list__dot"
+        style={{ background: deck.color ?? "#8e8e93" }}
+      />
+      <span className="memora-deck-list__name">{deck.name}</span>
+      {deck.description ? (
+        <span className="memora-deck-list__description">{deck.description}</span>
+      ) : null}
+      <div className="memora-deck-list__menu">
+        <button
+          aria-label={`Actions for ${deck.name}`}
+          className="memora-deck-list__menu-trigger"
+          onClick={(event) => {
+            event.stopPropagation();
+            onMenuToggle(!menuOpen);
+          }}
+          type="button"
+        >
+          <svg fill="currentColor" height="16" viewBox="0 0 20 20" width="16">
+            <circle cx="5" cy="10" r="2" />
+            <circle cx="10" cy="10" r="2" />
+            <circle cx="15" cy="10" r="2" />
+          </svg>
+        </button>
+        {menuOpen && (
+          <div className="memora-deck-list__menu-popover">
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onMenuToggle(false);
+                setNameValue(deck.name);
+                setMode("rename");
+              }}
+              type="button"
+            >
+              Rename
+            </button>
+            <button
+              className="memora-deck-list__menu-delete"
+              onClick={(event) => {
+                event.stopPropagation();
+                onMenuToggle(false);
+                startDelete();
+              }}
+              type="button"
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards }: MemoraPageProps) {
   const [decks, setDecks] = useState<Deck[] | null>(null);
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [creatingDeck, setCreatingDeck] = useState(false);
+  const [newDeckName, setNewDeckName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -34,17 +195,99 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday }: MemoraPag
     };
   }, [listDecks, listDueCards]);
 
+  useEffect(() => {
+    if (!openMenuId) return;
+    const handleOutsideClick = () => setOpenMenuId(null);
+    window.document.addEventListener("click", handleOutsideClick);
+    return () => window.document.removeEventListener("click", handleOutsideClick);
+  }, [openMenuId]);
+
+  const submitNewDeck = () => {
+    const name = newDeckName.trim();
+    if (!name) return;
+    setSaving(true);
+    setError(null);
+    createDeck(name)
+      .then((deck) => {
+        setDecks((current) => [...(current ?? []), deck]);
+        setNewDeckName("");
+        setCreatingDeck(false);
+      })
+      .catch((createError) => setError(errorMessage(createError)))
+      .finally(() => setSaving(false));
+  };
+
+  const handleRenameDeck = (id: string, name: string) => {
+    setError(null);
+    return renameDeck(id, name)
+      .then((updated) => {
+        setDecks((current) => (current ?? []).map((deck) => (deck.id === id ? updated : deck)));
+      })
+      .catch((renameError) => setError(errorMessage(renameError)));
+  };
+
+  const handleDeleteDeck = (id: string) => {
+    setError(null);
+    return deleteDeck(id)
+      .then(() => {
+        setDecks((current) => (current ?? []).filter((deck) => deck.id !== id));
+      })
+      .catch((deleteError) => setError(errorMessage(deleteError)));
+  };
+
   return (
     <main className="memora-page">
       <header className="memora-page__header">
         <h1>Memora</h1>
-        <button
-          disabled={!dueCount}
-          onClick={onReviewToday}
-          type="button"
-        >
-          {dueCount ? `Review ${dueCount} due` : "Nothing due today"}
-        </button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          {creatingDeck ? (
+            <form
+              className="memora-new-deck"
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitNewDeck();
+              }}
+            >
+              <input
+                aria-label="New deck name"
+                autoFocus
+                disabled={saving}
+                onChange={(event) => setNewDeckName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setCreatingDeck(false);
+                    setNewDeckName("");
+                  }
+                }}
+                placeholder="Deck name"
+                value={newDeckName}
+              />
+              <button disabled={saving || !newDeckName.trim()} type="submit">
+                Create
+              </button>
+              <button
+                onClick={() => {
+                  setCreatingDeck(false);
+                  setNewDeckName("");
+                }}
+                type="button"
+              >
+                Cancel
+              </button>
+            </form>
+          ) : (
+            <button onClick={() => setCreatingDeck(true)} type="button">
+              New Deck
+            </button>
+          )}
+          <button
+            disabled={!dueCount}
+            onClick={onReviewToday}
+            type="button"
+          >
+            {dueCount ? `Review ${dueCount} due` : "Nothing due today"}
+          </button>
+        </div>
       </header>
       {error ? (
         <div role="alert">
@@ -54,17 +297,15 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday }: MemoraPag
       {decks && decks.length > 0 ? (
         <ul className="memora-deck-list">
           {decks.map((deck) => (
-            <li className="memora-deck-list__item" key={deck.id}>
-              <span
-                aria-hidden="true"
-                className="memora-deck-list__dot"
-                style={{ background: deck.color ?? "#8e8e93" }}
-              />
-              <span className="memora-deck-list__name">{deck.name}</span>
-              {deck.description ? (
-                <span className="memora-deck-list__description">{deck.description}</span>
-              ) : null}
-            </li>
+            <DeckRow
+              countDeckCards={countDeckCards}
+              deck={deck}
+              key={deck.id}
+              menuOpen={openMenuId === deck.id}
+              onDelete={() => handleDeleteDeck(deck.id)}
+              onMenuToggle={(open) => setOpenMenuId(open ? deck.id : null)}
+              onRename={(name) => handleRenameDeck(deck.id, name)}
+            />
           ))}
         </ul>
       ) : decks && decks.length === 0 ? (

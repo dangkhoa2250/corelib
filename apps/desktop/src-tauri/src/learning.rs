@@ -84,6 +84,67 @@ impl LibraryDatabase {
             .map_err(Into::into)
     }
 
+    pub fn rename_deck(&mut self, id: &str, name: &str) -> Result<crate::model::DeckSummary> {
+        let name = norm(name, "deck name is required")?;
+        let now = learning_timestamp();
+        let updated = self
+            .connection
+            .execute(
+                "UPDATE decks SET name=?1, updated_at=?2 WHERE id=?3",
+                params![name, now, id],
+            )
+            .map_err(|e| {
+                if matches!(e, rusqlite::Error::SqliteFailure(_, _)) {
+                    invalid("deck already exists")
+                } else {
+                    e.into()
+                }
+            })?;
+        if updated == 0 {
+            return Err(invalid("deck not found"));
+        }
+        self.connection
+            .query_row(
+                "SELECT id,name,description,color,archived FROM decks WHERE id=?1",
+                params![id],
+                |r| {
+                    Ok(crate::model::DeckSummary {
+                        id: r.get(0)?,
+                        name: r.get(1)?,
+                        description: r.get(2)?,
+                        color: r.get(3)?,
+                        archived: r.get::<_, i64>(4)? != 0,
+                    })
+                },
+            )
+            .map_err(Into::into)
+    }
+
+    pub fn count_cards_in_deck(&self, id: &str) -> Result<i64> {
+        self.connection
+            .query_row(
+                "SELECT COUNT(*) FROM cards WHERE deck_id=?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .map_err(Into::into)
+    }
+
+    /// Deletes a deck along with every card that belongs to it (and, via
+    /// their `ON DELETE CASCADE` foreign keys, each card's review logs and
+    /// tags). The host UI is expected to warn the user with the card count
+    /// (see `count_cards_in_deck`) before calling this.
+    pub fn delete_deck(&mut self, id: &str) -> Result<()> {
+        let tx = self.connection.transaction()?;
+        tx.execute("DELETE FROM cards WHERE deck_id=?1", params![id])?;
+        let deleted = tx.execute("DELETE FROM decks WHERE id=?1", params![id])?;
+        if deleted == 0 {
+            return Err(invalid("deck not found"));
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn card_memory_state(&self, id: &str) -> Result<Option<String>> {
         self.connection
             .query_row(

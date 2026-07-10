@@ -493,6 +493,176 @@ test("navigates between Library and Memora via the sidebar", async () => {
   expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
 });
 
+test("creates a new deck from Memora", async () => {
+  const user = userEvent.setup();
+  const createDeck = vi.fn().mockResolvedValue({ id: "deck-2", name: "Spanish", description: null, color: null, archived: false });
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([]),
+        createCard: vi.fn(),
+        createDeck,
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await screen.findByText("Your decks will appear here.");
+
+  await user.click(screen.getByRole("button", { name: "New Deck" }));
+  await user.type(screen.getByRole("textbox", { name: "New deck name" }), "Spanish");
+  await user.click(screen.getByRole("button", { name: "Create" }));
+
+  expect(createDeck).toHaveBeenCalledWith("Spanish");
+  expect(await screen.findByText("Spanish")).toBeInTheDocument();
+  expect(screen.queryByRole("textbox", { name: "New deck name" })).not.toBeInTheDocument();
+});
+
+test("renames a deck from Memora", async () => {
+  const user = userEvent.setup();
+  const renameDeck = vi.fn().mockResolvedValue({ id: "deck-1", name: "American English", description: null, color: "#ff9500", archived: false });
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
+        createCard: vi.fn(),
+        renameDeck,
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await screen.findByText("English");
+
+  await user.click(screen.getByRole("button", { name: "Actions for English" }));
+  await user.click(screen.getByRole("button", { name: "Rename" }));
+
+  const nameInput = screen.getByRole("textbox", { name: "Deck name" });
+  await user.clear(nameInput);
+  await user.type(nameInput, "American English");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(renameDeck).toHaveBeenCalledWith("deck-1", "American English");
+  expect(await screen.findByText("American English")).toBeInTheDocument();
+  expect(screen.queryByText("English", { selector: ".memora-deck-list__name" })).not.toBeInTheDocument();
+});
+
+test("deletes an empty deck from Memora", async () => {
+  const user = userEvent.setup();
+  const deleteDeck = vi.fn().mockResolvedValue(undefined);
+  const countDeckCards = vi.fn().mockResolvedValue(0);
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
+        createCard: vi.fn(),
+        deleteDeck,
+        countDeckCards,
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await screen.findByText("English");
+
+  await user.click(screen.getByRole("button", { name: "Actions for English" }));
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+  expect(countDeckCards).toHaveBeenCalledWith("deck-1");
+  await screen.findByText('Delete "English"? This deck has no cards.');
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+
+  expect(deleteDeck).toHaveBeenCalledWith("deck-1");
+  await screen.findByText("Your decks will appear here.");
+});
+
+test("warns how many cards will be deleted before confirming a cascade delete", async () => {
+  const user = userEvent.setup();
+  const deleteDeck = vi.fn().mockResolvedValue(undefined);
+  const countDeckCards = vi.fn().mockResolvedValue(5);
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
+        createCard: vi.fn(),
+        deleteDeck,
+        countDeckCards,
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await screen.findByText("English");
+
+  await user.click(screen.getByRole("button", { name: "Actions for English" }));
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+  await screen.findByText('Delete "English" and its 5 cards? This cannot be undone.');
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+
+  expect(deleteDeck).toHaveBeenCalledWith("deck-1");
+});
+
+test("surfaces an error when a deck deletion fails", async () => {
+  const user = userEvent.setup();
+  const deleteDeck = vi.fn().mockRejectedValue(new Error("deck not found"));
+  const countDeckCards = vi.fn().mockResolvedValue(0);
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
+        createCard: vi.fn(),
+        deleteDeck,
+        countDeckCards,
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await screen.findByText("English");
+
+  await user.click(screen.getByRole("button", { name: "Actions for English" }));
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+  await screen.findByText('Delete "English"? This deck has no cards.');
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("deck not found");
+  expect(screen.getByText("English")).toBeInTheDocument();
+});
+
 test("opens the search palette from the sidebar search field", async () => {
   const user = userEvent.setup();
 

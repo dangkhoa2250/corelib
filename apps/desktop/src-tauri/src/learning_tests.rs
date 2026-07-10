@@ -246,3 +246,58 @@ fn rejects_nonfinite_review_parameters_and_nonobject_memory() {
             .is_err());
     }
 }
+
+#[test]
+fn renames_a_deck() {
+    let (_dir, mut db) = db();
+    let created = db.create_deck("Chemistry").expect("create");
+    let renamed = db.rename_deck(&created.id, "Organic Chemistry").expect("rename");
+    assert_eq!(renamed.name, "Organic Chemistry");
+    let decks = db.list_decks().expect("list");
+    assert!(decks.iter().any(|d| d.name == "Organic Chemistry"));
+}
+
+#[test]
+fn rejects_renaming_to_a_duplicate_deck_name() {
+    let (_dir, mut db) = db();
+    db.create_deck("Chemistry").expect("create");
+    let physics = db.create_deck("Physics").expect("create");
+    assert!(db.rename_deck(&physics.id, "Chemistry").is_err());
+}
+
+#[test]
+fn rejects_renaming_a_missing_deck() {
+    let (_dir, mut db) = db();
+    assert!(db.rename_deck("missing-id", "New Name").is_err());
+}
+
+#[test]
+fn deletes_an_empty_deck() {
+    let (_dir, mut db) = db();
+    let created = db.create_deck("Chemistry").expect("create");
+    db.delete_deck(&created.id).expect("delete");
+    let decks = db.list_decks().expect("list");
+    assert!(decks.iter().all(|d| d.id != created.id));
+}
+
+#[test]
+fn deleting_a_deck_cascades_to_its_cards() {
+    let (_dir, mut db) = db();
+    let result = db.create_card(card("What is ATP?")).expect("create");
+    let decks = db.list_decks().expect("list");
+    let biology = decks.iter().find(|d| d.name == "Biology").expect("deck");
+    assert_eq!(db.count_cards_in_deck(&biology.id).expect("count"), 1);
+
+    db.delete_deck(&biology.id).expect("delete");
+
+    let decks = db.list_decks().expect("list");
+    assert!(decks.iter().all(|d| d.name != "Biology"));
+    assert!(db.card_by_id(&result.id).expect("read").is_none());
+}
+
+#[test]
+fn counts_cards_in_an_empty_deck_as_zero() {
+    let (_dir, mut db) = db();
+    let created = db.create_deck("Chemistry").expect("create");
+    assert_eq!(db.count_cards_in_deck(&created.id).expect("count"), 0);
+}

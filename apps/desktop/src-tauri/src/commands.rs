@@ -634,6 +634,27 @@ pub fn create_deck(name: String, state: State<'_, LibraryStore>) -> Result<DeckS
 }
 
 #[tauri::command]
+pub fn rename_deck(id: String, name: String, state: State<'_, LibraryStore>) -> Result<DeckSummary, String> {
+    learning_lock(&state)?
+        .rename_deck(&id, &name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_deck(id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
+    learning_lock(&state)?
+        .delete_deck(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn count_deck_cards(id: String, state: State<'_, LibraryStore>) -> Result<i64, String> {
+    learning_lock(&state)?
+        .count_cards_in_deck(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn list_due_cards(
     limit: Option<usize>,
     state: State<'_, LibraryStore>,

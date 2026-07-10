@@ -23,7 +23,7 @@ import { ReviewPage } from "../features/review/ReviewPage";
 import { CardComposer, type CardSaveInput } from "../features/cards/CardComposer";
 import { MemoraPage } from "../features/memora/MemoraPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
-import { createCard as nativeCreateCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource } from "../lib/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource } from "../lib/learning";
 import type { CardSource, Deck, LearningCard, ReviewPreview, ReviewRating } from "../domain/learning";
 import type { SearchResult } from "../lib/learning";
 
@@ -91,6 +91,10 @@ interface AppProps {
   learningApi?: {
     listDecks: () => Promise<Deck[]>;
     createCard: (input: CardSaveInput) => Promise<LearningCard>;
+    createDeck?: (name: string) => Promise<Deck>;
+    renameDeck?: (id: string, name: string) => Promise<Deck>;
+    deleteDeck?: (id: string) => Promise<void>;
+    countDeckCards?: (id: string) => Promise<number>;
     listDueCards?: (limit?: number) => Promise<LearningCard[]>;
     previewCardReview?: (id: string) => Promise<ReviewPreview>;
     rateCard?: (id: string, rating: ReviewRating, elapsedMs: number) => Promise<LearningCard>;
@@ -109,6 +113,10 @@ type AppRoute =
 export function App({ libraryApi = nativeLibraryApi, learningApi = {
   listDecks: nativeListDecks,
   createCard: nativeCreateCard,
+  createDeck: nativeCreateDeck,
+  renameDeck: nativeRenameDeck,
+  deleteDeck: nativeDeleteDeck,
+  countDeckCards: nativeCountDeckCards,
   listDueCards: nativeListDueCards,
   previewCardReview: nativePreviewCardReview,
   rateCard: nativeRateCard,
@@ -118,6 +126,10 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
   const learning = {
     listDecks: learningApi.listDecks,
     createCard: learningApi.createCard,
+    createDeck: learningApi.createDeck ?? nativeCreateDeck,
+    renameDeck: learningApi.renameDeck ?? nativeRenameDeck,
+    deleteDeck: learningApi.deleteDeck ?? nativeDeleteDeck,
+    countDeckCards: learningApi.countDeckCards ?? nativeCountDeckCards,
     listDueCards: learningApi.listDueCards ?? nativeListDueCards,
     previewCardReview: learningApi.previewCardReview ?? nativePreviewCardReview,
     rateCard: learningApi.rateCard ?? nativeRateCard,
@@ -409,6 +421,10 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
             listDecks={learning.listDecks}
             listDueCards={() => learning.listDueCards()}
             onReviewToday={() => void handleReviewToday()}
+            createDeck={learning.createDeck}
+            renameDeck={learning.renameDeck}
+            deleteDeck={learning.deleteDeck}
+            countDeckCards={learning.countDeckCards}
           />
         ) : (
           <>

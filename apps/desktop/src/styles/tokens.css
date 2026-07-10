@@ -72,6 +72,11 @@ select {
   border-color: rgb(0 0 0 / 16%);
 }
 
+.app-sidebar__search-icon {
+  display: flex;
+  flex: 0 0 auto;
+}
+
 .app-sidebar__search-label {
   flex: 1;
   text-align: left;
@@ -112,6 +117,16 @@ select {
 
 .app-sidebar__nav-item:hover {
   background: rgb(0 0 0 / 5%);
+}
+
+.app-sidebar__nav-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: #8e8e93;
+}
+
+.app-sidebar__nav-item.is-active .app-sidebar__nav-icon {
+  color: #fff;
 }
 
 .app-sidebar__nav-item.is-active {
@@ -159,6 +174,19 @@ select {
   cursor: default;
 }
 
+.memora-new-deck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memora-new-deck input {
+  padding: 9px 12px;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 999px;
+  font-size: 14px;
+}
+
 .memora-page__empty {
   margin: 18vh auto 0;
   color: #6e6e73;
@@ -176,11 +204,121 @@ select {
 }
 
 .memora-deck-list__item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid rgb(0 0 0 / 6%);
+}
+
+.memora-deck-list__item--confirm {
+  justify-content: space-between;
+  color: #1d1d1f;
+}
+
+.memora-deck-list__confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.memora-deck-list__confirm-actions button {
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.memora-deck-list__delete-confirm {
+  color: #fff !important;
+  background: #ff3b30 !important;
+  border-color: #ff3b30 !important;
+}
+
+.memora-deck-list__edit-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.memora-deck-list__edit-form input {
+  flex: 1;
+  padding: 7px 12px;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.memora-deck-list__edit-form button {
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.memora-deck-list__menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.memora-deck-list__menu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  color: #55555a;
+  background: transparent;
+  cursor: pointer;
+}
+
+.memora-deck-list__menu-trigger:hover {
+  background: rgb(0 0 0 / 6%);
+}
+
+.memora-deck-list__menu-popover {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 97%);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+}
+
+.memora-deck-list__menu-popover button {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  color: #1d1d1f;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memora-deck-list__menu-popover button:hover {
+  background: #e8f2ff;
+}
+
+.memora-deck-list__menu-delete {
+  color: #ff3b30 !important;
+}
+
+.memora-deck-list__menu-delete:hover {
+  background: #ffebeb !important;
 }
 
 .memora-deck-list__dot {
