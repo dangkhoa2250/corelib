@@ -1,9 +1,10 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LibraryDocument } from "../domain/document";
 import { importLocalDocuments, listDocuments } from "../lib/desktop";
 import { LibraryPage } from "../features/library/LibraryPage";
+import { ReaderPlaceholder } from "../features/reader/ReaderPlaceholder";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -50,23 +51,37 @@ interface AppProps {
   libraryApi?: LibraryApi;
 }
 
+type AppRoute =
+  | { name: "library" }
+  | { name: "reader"; document: LibraryDocument };
+
 export function App({ libraryApi = nativeLibraryApi }: AppProps) {
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
+  const [route, setRoute] = useState<AppRoute>({ name: "library" });
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const load = useCallback(async () => {
+    const currentRequestId = ++requestId.current;
     setLoading(true);
     setError(null);
     try {
-      setDocuments(await libraryApi.list());
+      const loadedDocuments = await libraryApi.list();
+      if (currentRequestId === requestId.current) {
+        setDocuments(loadedDocuments);
+      }
     } catch (loadError) {
-      setError(errorMessage(loadError));
+      if (currentRequestId === requestId.current) {
+        setError(errorMessage(loadError));
+      }
     } finally {
-      setLoading(false);
+      if (currentRequestId === requestId.current) {
+        setLoading(false);
+      }
     }
-  }, [libraryApi]);
+  }, [libraryApi, requestId]);
 
   useEffect(() => {
     void load();
@@ -86,25 +101,42 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
       }
 
       const imported = await libraryApi.importDocuments(paths);
+      requestId.current += 1;
       setDocuments((current) => mergeDocuments(current, imported));
-
-      try {
-        setDocuments(await libraryApi.list());
-      } catch (refreshError) {
-        setError(errorMessage(refreshError));
-      }
+      await load();
     } catch (importError) {
       setError(errorMessage(importError));
     } finally {
       setImporting(false);
     }
-  }, [importing, libraryApi]);
+  }, [importing, libraryApi, load]);
+
+  const handleOpen = useCallback(
+    (id: string) => {
+      const document = documents?.find((candidate) => candidate.id === id);
+      if (document) {
+        setRoute({ name: "reader", document });
+      } else {
+        setError("This document is no longer available.");
+      }
+    },
+    [documents],
+  );
+
+  if (route.name === "reader") {
+    return (
+      <ReaderPlaceholder
+        document={route.document}
+        onBack={() => setRoute({ name: "library" })}
+      />
+    );
+  }
 
   return (
     <>
       <LibraryPage
         documents={documents ?? []}
-        onOpen={() => {}}
+        onOpen={handleOpen}
         onImport={() => void handleImport()}
       />
       {loading ? <p role="status" aria-label="Loading library">Loading library…</p> : null}
