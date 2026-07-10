@@ -14,6 +14,10 @@ export function clampZoomScale(scale: number) {
   return Math.min(Math.max(scale, MIN_ZOOM_SCALE), MAX_ZOOM_SCALE);
 }
 
+export function getCenteredPageOffset(viewportWidth: number, contentWidth: number) {
+  return Math.max(0, (viewportWidth - contentWidth) / 2);
+}
+
 export function getZoomAnchorScrollPosition({
   scrollLeft,
   scrollTop,
@@ -527,11 +531,35 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
     }
     if (scalingDivRef.current) {
       scalingDivRef.current.style.transform = `scale(${scale})`;
+      const viewportWidth = pagesContainerRef.current?.clientWidth ?? 0;
+      scalingDivRef.current.style.left = `${getCenteredPageOffset(viewportWidth, baseWidth * scale)}px`;
     }
     if (zoomLabelRef.current) {
       zoomLabelRef.current.textContent = `${Math.round(scale * 100)}%`;
     }
   }, [defaultSize, pdfDoc]);
+
+  useEffect(() => {
+    const container = pagesContainerRef.current;
+    if (!container) return;
+
+    const updatePageStackPosition = () => {
+      if (!scalingDivRef.current) return;
+      const baseWidth = defaultSize.width + 48;
+      const contentWidth = baseWidth * scaleRef.current;
+      scalingDivRef.current.style.left = `${getCenteredPageOffset(container.clientWidth, contentWidth)}px`;
+    };
+
+    updatePageStackPosition();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updatePageStackPosition) : null;
+    observer?.observe(container);
+    window.addEventListener("resize", updatePageStackPosition);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updatePageStackPosition);
+    };
+  }, [defaultSize]);
 
   // Debounce renderScale: only re-render canvases after zoom gesture ends
   const scheduleRenderScaleSync = useCallback((newScale: number) => {
