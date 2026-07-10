@@ -525,6 +525,118 @@ test("creates a new deck from Memora", async () => {
   expect(screen.queryByRole("textbox", { name: "New deck name" })).not.toBeInTheDocument();
 });
 
+test("opens a deck's cards from Memora and adds one manually", async () => {
+  const user = userEvent.setup();
+  const newCard = {
+    id: "card-1",
+    deckId: "deck-1",
+    front: "What is a mitochondrion?",
+    back: "The powerhouse of the cell",
+    state: "new" as const,
+    dueAt: "2026-07-10T00:00:00.000Z",
+    reps: 0,
+    lapses: 0,
+    stability: null,
+    difficulty: null,
+    lastReviewAt: null,
+    source: null,
+    tags: ["biology"],
+  };
+  const createCard = vi.fn().mockResolvedValue(newCard);
+  const listDeckCards = vi.fn().mockResolvedValue([]);
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "Biology", description: null, color: "#ff9500", archived: false }]),
+        createCard,
+        listDeckCards,
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await user.click(await screen.findByRole("button", { name: "Biology" }));
+
+  expect(listDeckCards).toHaveBeenCalledWith("deck-1");
+  await screen.findByText("This deck has no cards yet.");
+
+  await user.click(screen.getByRole("button", { name: "Add Card" }));
+  await user.type(screen.getByRole("textbox", { name: "Front" }), "What is a mitochondrion?");
+  await user.type(screen.getByRole("textbox", { name: "Back" }), "The powerhouse of the cell");
+  await user.type(screen.getByRole("textbox", { name: "Tags" }), "biology");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(createCard).toHaveBeenCalledWith({
+    deckName: "Biology",
+    front: "What is a mitochondrion?",
+    back: "The powerhouse of the cell",
+    tags: ["biology"],
+  });
+  await screen.findByText("What is a mitochondrion?");
+  expect(screen.queryByText("The powerhouse of the cell")).not.toBeInTheDocument();
+  expect(screen.getByText("Tap to reveal")).toBeInTheDocument();
+
+  await user.click(screen.getByText("What is a mitochondrion?"));
+  expect(await screen.findByText("The powerhouse of the cell")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "‹ Memora" }));
+  expect(await screen.findByRole("heading", { level: 1, name: "Memora" })).toBeInTheDocument();
+});
+
+test("deletes a card from a deck's card list", async () => {
+  const user = userEvent.setup();
+  const existingCard = {
+    id: "card-1",
+    deckId: "deck-1",
+    front: "What is ATP?",
+    back: "Adenosine triphosphate",
+    state: "new" as const,
+    dueAt: "2026-07-10T00:00:00.000Z",
+    reps: 0,
+    lapses: 0,
+    stability: null,
+    difficulty: null,
+    lastReviewAt: null,
+    source: null,
+    tags: [],
+  };
+  const deleteCard = vi.fn().mockResolvedValue(undefined);
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "Biology", description: null, color: "#ff9500", archived: false }]),
+        createCard: vi.fn(),
+        listDeckCards: vi.fn().mockResolvedValue([existingCard]),
+        deleteCard,
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await user.click(await screen.findByRole("button", { name: "Biology" }));
+  await screen.findByText("What is ATP?");
+
+  await user.click(screen.getByRole("button", { name: "Delete card" }));
+  await user.click(screen.getByRole("button", { name: "Delete" }));
+
+  expect(deleteCard).toHaveBeenCalledWith("card-1");
+  await screen.findByText("This deck has no cards yet.");
+});
+
 test("renames a deck from Memora", async () => {
   const user = userEvent.setup();
   const renameDeck = vi.fn().mockResolvedValue({ id: "deck-1", name: "American English", description: null, color: "#ff9500", archived: false });

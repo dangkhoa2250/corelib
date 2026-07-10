@@ -26,7 +26,7 @@ export interface CardSaveInput {
   deckName: string;
   front: string;
   back: string;
-  source: NewCardSource;
+  source?: NewCardSource;
   tags: string[];
 }
 

@@ -337,6 +337,133 @@ select {
   font-size: 13px;
 }
 
+.memora-deck-list__open {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memora-deck-cards__back {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #007aff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.memora-card-form {
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
+  margin: 0 auto 24px;
+  padding: 16px;
+  border: 1px solid rgb(0 0 0 / 8%);
+  border-radius: 12px;
+  background: #f9f9fb;
+}
+
+.memora-card-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.memora-card-form textarea,
+.memora-card-form input {
+  padding: 8px 10px;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.memora-card-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.memora-card-form__actions button {
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.memora-card-form__actions button[type="submit"] {
+  color: #fff;
+  background: #007aff;
+  border-color: #007aff;
+}
+
+.memora-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.memora-card-list__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgb(0 0 0 / 6%);
+}
+
+.memora-card-list__item--confirm {
+  justify-content: space-between;
+  color: #1d1d1f;
+}
+
+.memora-card-list__flip {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memora-card-list__front {
+  font-weight: 550;
+}
+
+.memora-card-list__back {
+  padding-top: 5px;
+  border-top: 1px dashed rgb(0 0 0 / 12%);
+  color: #007aff;
+  font-size: 13px;
+}
+
+.memora-card-list__hint {
+  color: #aeaeb2;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.memora-card-list__tags {
+  color: #8e8e93;
+  font-size: 12px;
+}
+
 .library-page__header {
   display: flex;
   align-items: center;

@@ -301,3 +301,43 @@ fn counts_cards_in_an_empty_deck_as_zero() {
     let created = db.create_deck("Chemistry").expect("create");
     assert_eq!(db.count_cards_in_deck(&created.id).expect("count"), 0);
 }
+
+#[test]
+fn lists_cards_in_a_deck_in_creation_order() {
+    let (_dir, mut db) = db();
+    let first = db.create_card(card("What is ATP?")).expect("create");
+    let second = db.create_card(card("What is a mitochondrion?")).expect("create");
+
+    let mut other_deck_card = card("What is a neuron?");
+    other_deck_card.deck_name = "Neuroscience".into();
+    db.create_card(other_deck_card).expect("create");
+
+    let decks = db.list_decks().expect("list");
+    let biology = decks.iter().find(|d| d.name == "Biology").expect("deck");
+    let cards = db.cards_in_deck(&biology.id).expect("list cards");
+
+    // Only Biology's own two cards, in creation order — proves the deck_id
+    // filter actually scopes the query instead of returning every card.
+    assert_eq!(cards.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), vec![first.id.as_str(), second.id.as_str()]);
+}
+
+#[test]
+fn lists_no_cards_for_an_empty_deck() {
+    let (_dir, mut db) = db();
+    let created = db.create_deck("Chemistry").expect("create");
+    assert!(db.cards_in_deck(&created.id).expect("list cards").is_empty());
+}
+
+#[test]
+fn deletes_a_card() {
+    let (_dir, mut db) = db();
+    let created = db.create_card(card("What is ATP?")).expect("create");
+    db.delete_card(&created.id).expect("delete");
+    assert!(db.card_by_id(&created.id).expect("read").is_none());
+}
+
+#[test]
+fn rejects_deleting_a_missing_card() {
+    let (_dir, mut db) = db();
+    assert!(db.delete_card("missing-id").is_err());
+}

@@ -63,6 +63,8 @@ pub fn run() {
             commands::rename_deck,
             commands::delete_deck,
             commands::count_deck_cards,
+            commands::list_deck_cards,
+            commands::delete_card,
             commands::list_due_cards,
             commands::get_card,
             commands::preview_card_review,

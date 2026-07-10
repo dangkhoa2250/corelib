@@ -22,8 +22,9 @@ import { DrivePicker } from "../features/drive/DrivePicker";
 import { ReviewPage } from "../features/review/ReviewPage";
 import { CardComposer, type CardSaveInput } from "../features/cards/CardComposer";
 import { MemoraPage } from "../features/memora/MemoraPage";
+import { DeckCardsPage } from "../features/memora/DeckCardsPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource } from "../lib/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource } from "../lib/learning";
 import type { CardSource, Deck, LearningCard, ReviewPreview, ReviewRating } from "../domain/learning";
 import type { SearchResult } from "../lib/learning";
 
@@ -95,6 +96,8 @@ interface AppProps {
     renameDeck?: (id: string, name: string) => Promise<Deck>;
     deleteDeck?: (id: string) => Promise<void>;
     countDeckCards?: (id: string) => Promise<number>;
+    listDeckCards?: (deckId: string) => Promise<LearningCard[]>;
+    deleteCard?: (id: string) => Promise<void>;
     listDueCards?: (limit?: number) => Promise<LearningCard[]>;
     previewCardReview?: (id: string) => Promise<ReviewPreview>;
     rateCard?: (id: string, rating: ReviewRating, elapsedMs: number) => Promise<LearningCard>;
@@ -106,6 +109,7 @@ interface AppProps {
 type AppRoute =
   | { name: "library" }
   | { name: "memora" }
+  | { name: "deckCards"; deck: Deck }
   | { name: "reader"; document: LibraryDocument }
   | { name: "composer"; document: LibraryDocument; source: CardSource }
   | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> };
@@ -117,6 +121,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
   renameDeck: nativeRenameDeck,
   deleteDeck: nativeDeleteDeck,
   countDeckCards: nativeCountDeckCards,
+  listDeckCards: nativeListDeckCards,
+  deleteCard: nativeDeleteCard,
   listDueCards: nativeListDueCards,
   previewCardReview: nativePreviewCardReview,
   rateCard: nativeRateCard,
@@ -130,6 +136,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     renameDeck: learningApi.renameDeck ?? nativeRenameDeck,
     deleteDeck: learningApi.deleteDeck ?? nativeDeleteDeck,
     countDeckCards: learningApi.countDeckCards ?? nativeCountDeckCards,
+    listDeckCards: learningApi.listDeckCards ?? nativeListDeckCards,
+    deleteCard: learningApi.deleteCard ?? nativeDeleteCard,
     listDueCards: learningApi.listDueCards ?? nativeListDueCards,
     previewCardReview: learningApi.previewCardReview ?? nativePreviewCardReview,
     rateCard: learningApi.rateCard ?? nativeRateCard,
@@ -217,13 +225,21 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
 
   const handleSaveCard = useCallback(async (input: CardSaveInput) => {
     await learning.createCard(input);
-    const sourceDocument = documents?.find((candidate) => candidate.id === input.source.documentId);
+    const sourceDocument = documents?.find((candidate) => candidate.id === input.source?.documentId);
     if (!sourceDocument) {
       throw new Error("This source document is no longer available.");
     }
-    const readerDocument = { ...sourceDocument, lastReadPage: input.source.page };
+    const readerDocument = { ...sourceDocument, lastReadPage: input.source!.page };
     setRoute({ name: "reader", document: readerDocument });
   }, [documents, learning]);
+
+  const handleCreateCardInDeck = useCallback((deckName: string, front: string, back: string, tags: string[]) => {
+    return learning.createCard({ deckName, front, back, tags });
+  }, [learning]);
+
+  const handleDeleteCard = useCallback((id: string) => {
+    return learning.deleteCard(id);
+  }, [learning]);
 
   const search = useCallback(
     async (query: string) => {
@@ -406,7 +422,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     );
   }
 
-  const activeSection: AppSection = route.name === "memora" ? "memora" : "library";
+  const activeSection: AppSection = route.name === "memora" || route.name === "deckCards" ? "memora" : "library";
 
   return (
     <div className="app-shell">
@@ -416,7 +432,15 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
         onSearchClick={() => paletteRef.current?.open()}
       />
       <div className="app-shell__content">
-        {route.name === "memora" ? (
+        {route.name === "deckCards" ? (
+          <DeckCardsPage
+            deck={route.deck}
+            listCards={() => learning.listDeckCards(route.deck.id)}
+            onBack={() => setRoute({ name: "memora" })}
+            onCreateCard={(front, back, tags) => handleCreateCardInDeck(route.deck.name, front, back, tags)}
+            onDeleteCard={(id) => handleDeleteCard(id)}
+          />
+        ) : route.name === "memora" ? (
           <MemoraPage
             listDecks={learning.listDecks}
             listDueCards={() => learning.listDueCards()}
@@ -425,6 +449,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
             renameDeck={learning.renameDeck}
             deleteDeck={learning.deleteDeck}
             countDeckCards={learning.countDeckCards}
+            onOpenDeck={(deck) => setRoute({ name: "deckCards", deck })}
           />
         ) : (
           <>

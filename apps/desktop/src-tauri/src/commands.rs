@@ -676,6 +676,20 @@ pub fn get_card(id: String, state: State<'_, LibraryStore>) -> Result<LearningCa
         .ok_or_else(|| "card not found".to_owned())
 }
 
+#[tauri::command]
+pub fn list_deck_cards(deck_id: String, state: State<'_, LibraryStore>) -> Result<Vec<LearningCardSummary>, String> {
+    learning_lock(&state)?
+        .cards_in_deck(&deck_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_card(id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
+    learning_lock(&state)?
+        .delete_card(&id)
+        .map_err(|e| e.to_string())
+}
+
 fn parse_now(value: &str) -> Result<DateTime<Utc>, String> {
     DateTime::parse_from_rfc3339(value)
         .map(|v| v.with_timezone(&Utc))

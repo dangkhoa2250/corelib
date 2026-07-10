@@ -10,6 +10,7 @@ interface MemoraPageProps {
   renameDeck: (id: string, name: string) => Promise<Deck>;
   deleteDeck: (id: string) => Promise<void>;
   countDeckCards: (id: string) => Promise<number>;
+  onOpenDeck: (deck: Deck) => void;
 }
 
 function errorMessage(error: unknown): string {
@@ -20,12 +21,13 @@ interface DeckRowProps {
   deck: Deck;
   menuOpen: boolean;
   onMenuToggle: (open: boolean) => void;
+  onOpen: () => void;
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
   countDeckCards: (id: string) => Promise<number>;
 }
 
-function DeckRow({ deck, menuOpen, onMenuToggle, onRename, onDelete, countDeckCards }: DeckRowProps) {
+function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, countDeckCards }: DeckRowProps) {
   const [mode, setMode] = useState<"idle" | "rename" | "delete">("idle");
   const [nameValue, setNameValue] = useState(deck.name);
   const [saving, setSaving] = useState(false);
@@ -113,15 +115,17 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onRename, onDelete, countDeckCa
 
   return (
     <li className="memora-deck-list__item">
-      <span
-        aria-hidden="true"
-        className="memora-deck-list__dot"
-        style={{ background: deck.color ?? "#8e8e93" }}
-      />
-      <span className="memora-deck-list__name">{deck.name}</span>
-      {deck.description ? (
-        <span className="memora-deck-list__description">{deck.description}</span>
-      ) : null}
+      <button className="memora-deck-list__open" onClick={onOpen} type="button">
+        <span
+          aria-hidden="true"
+          className="memora-deck-list__dot"
+          style={{ background: deck.color ?? "#8e8e93" }}
+        />
+        <span className="memora-deck-list__name">{deck.name}</span>
+        {deck.description ? (
+          <span className="memora-deck-list__description">{deck.description}</span>
+        ) : null}
+      </button>
       <div className="memora-deck-list__menu">
         <button
           aria-label={`Actions for ${deck.name}`}
@@ -169,7 +173,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onRename, onDelete, countDeckCa
   );
 }
 
-export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards }: MemoraPageProps) {
+export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, onOpenDeck }: MemoraPageProps) {
   const [decks, setDecks] = useState<Deck[] | null>(null);
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -304,6 +308,7 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
               menuOpen={openMenuId === deck.id}
               onDelete={() => handleDeleteDeck(deck.id)}
               onMenuToggle={(open) => setOpenMenuId(open ? deck.id : null)}
+              onOpen={() => onOpenDeck(deck)}
               onRename={(name) => handleRenameDeck(deck.id, name)}
             />
           ))}

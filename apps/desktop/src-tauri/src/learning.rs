@@ -350,6 +350,33 @@ impl LibraryDatabase {
         Ok(self.card_by_id(id)?.and_then(|c| c.source))
     }
 
+    pub fn cards_in_deck(&self, deck_id: &str) -> Result<Vec<LearningCardSummary>> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT id FROM cards WHERE deck_id=?1 ORDER BY created_at ASC, id ASC")?;
+        let ids = stmt
+            .query_map(params![deck_id], |r| r.get::<_, String>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        ids.into_iter()
+            .map(|id| {
+                self.card_by_id(&id)?
+                    .ok_or(LibraryDbError::DocumentNotFound)
+            })
+            .collect()
+    }
+
+    /// Deletes a card along with its review logs and tags, via their
+    /// `ON DELETE CASCADE` foreign keys.
+    pub fn delete_card(&mut self, id: &str) -> Result<()> {
+        let deleted = self
+            .connection
+            .execute("DELETE FROM cards WHERE id=?1", params![id])?;
+        if deleted == 0 {
+            return Err(invalid("card not found"));
+        }
+        Ok(())
+    }
+
     pub fn apply_review_atomic(&mut self, review: AppliedReview) -> Result<LearningCardSummary> {
         let rating = review.rating.trim();
         let prior_state = review.prior_state.trim();

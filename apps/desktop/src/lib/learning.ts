@@ -12,6 +12,8 @@ export function createDeck(name: string, call: Invoke = invoke as Invoke): Promi
 export function renameDeck(id: string, name: string, call: Invoke = invoke as Invoke): Promise<Deck> { return call("rename_deck", { id, name }); }
 export function deleteDeck(id: string, call: Invoke = invoke as Invoke): Promise<void> { return call("delete_deck", { id }); }
 export function countDeckCards(id: string, call: Invoke = invoke as Invoke): Promise<number> { return call("count_deck_cards", { id }); }
+export function listDeckCards(deckId: string, call: Invoke = invoke as Invoke): Promise<LearningCard[]> { return call("list_deck_cards", { deckId }); }
+export function deleteCard(id: string, call: Invoke = invoke as Invoke): Promise<void> { return call("delete_card", { id }); }
 export function listDueCards(limit?: number, call: Invoke = invoke as Invoke): Promise<LearningCard[]> { return call("list_due_cards", limit === undefined ? undefined : { limit }); }
 export function previewCardReview(id: string, call: Invoke = invoke as Invoke): Promise<ReviewPreview> { return call("preview_card_review", { id }); }
 export function rateCard(id: string, rating: ReviewRating, elapsedMs: number, call: Invoke = invoke as Invoke): Promise<LearningCard> { return call("rate_card", { id, rating, elapsedMs }); }
