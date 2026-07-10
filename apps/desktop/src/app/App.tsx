@@ -19,6 +19,9 @@ import { LibraryPage } from "../features/library/LibraryPage";
 import { ReaderPage } from "../features/reader/ReaderPage";
 import { CommandPalette } from "../features/search/CommandPalette";
 import { DrivePicker } from "../features/drive/DrivePicker";
+import { CardComposer, type CardSaveInput } from "../features/cards/CardComposer";
+import { createCard as nativeCreateCard, listDecks as nativeListDecks } from "../lib/learning";
+import type { CardSource, Deck, LearningCard } from "../domain/learning";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -79,18 +82,28 @@ function mergeDocuments(
 
 interface AppProps {
   libraryApi?: LibraryApi;
+  learningApi?: {
+    listDecks: () => Promise<Deck[]>;
+    createCard: (input: CardSaveInput) => Promise<LearningCard>;
+  };
 }
 
 type AppRoute =
   | { name: "library" }
-  | { name: "reader"; document: LibraryDocument };
+  | { name: "reader"; document: LibraryDocument }
+  | { name: "composer"; document: LibraryDocument; source: CardSource };
 
-export function App({ libraryApi = nativeLibraryApi }: AppProps) {
+export function App({ libraryApi = nativeLibraryApi, learningApi = {
+  listDecks: nativeListDecks,
+  createCard: nativeCreateCard,
+} }: AppProps) {
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
   const [route, setRoute] = useState<AppRoute>({ name: "library" });
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [composerDecks, setComposerDecks] = useState<Deck[]>([]);
+  const [composerError, setComposerError] = useState<string | null>(null);
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
   const [driveEntries, setDriveEntries] = useState<DriveEntry[]>([]);
   const [driveFolderStack, setDriveFolderStack] = useState<string[]>([]);
@@ -148,6 +161,29 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
   const handleOpen = useCallback((document: LibraryDocument) => {
     setRoute({ name: "reader", document });
   }, []);
+
+  const handleCreateCard = useCallback((source: CardSource) => {
+    const readerDocument = documents?.find((candidate) => candidate.id === source.documentId);
+    if (!readerDocument) {
+      setError("This source document is no longer available.");
+      return;
+    }
+    setComposerError(null);
+    setRoute({ name: "composer", document: readerDocument, source });
+    void learningApi.listDecks()
+      .then((decks) => setComposerDecks(decks))
+      .catch((loadError) => setComposerError(errorMessage(loadError)));
+  }, [documents, learningApi]);
+
+  const handleSaveCard = useCallback(async (input: CardSaveInput) => {
+    await learningApi.createCard(input);
+    const sourceDocument = documents?.find((candidate) => candidate.id === input.source.documentId);
+    if (!sourceDocument) {
+      throw new Error("This source document is no longer available.");
+    }
+    const readerDocument = { ...sourceDocument, lastReadPage: input.source.page };
+    setRoute({ name: "reader", document: readerDocument });
+  }, [documents, learningApi]);
 
   const search = useCallback(
     async (query: string) => {
@@ -264,8 +300,23 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
           onBack={() => setRoute({ name: "library" })}
           getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
           onPageChange={handlePageChange}
+          onCreateCard={handleCreateCard}
         />
         {palette}
+      </>
+    );
+  }
+
+  if (route.name === "composer") {
+    return (
+      <>
+        {composerError ? <div role="alert">{composerError}</div> : null}
+        <CardComposer
+          draft={route.source}
+          decks={composerDecks}
+          onCancel={() => setRoute({ name: "reader", document: { ...route.document, lastReadPage: route.source.page } })}
+          onSave={handleSaveCard}
+        />
       </>
     );
   }
