@@ -16,6 +16,7 @@ export function LibraryPage({
   documents,
   onOpen,
   onImport,
+  onReviewToday,
   onOpenDrive,
   onClearCache,
   onDelete,
