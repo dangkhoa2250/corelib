@@ -299,21 +299,40 @@ select {
 }
 
 .reader-thumbnail--active {
-  border-color: rgb(0 122 255 / 32%) !important;
-  background: rgb(0 122 255 / 13%) !important;
+  background: transparent !important;
 }
 
-.reader-thumbnail > div {
+.reader-thumbnail__frame {
+  padding: 6px !important;
+  border-radius: 8px !important;
+  border: 1.5px solid transparent !important;
+}
+
+.reader-thumbnail__frame--active {
+  border-color: #b6b6bb !important;
+  background: rgb(0 0 0 / 4%) !important;
+}
+
+.reader-thumbnail__page {
   width: 76px !important;
   height: 102px !important;
   border-radius: 3px !important;
   box-shadow: 0 2px 7px rgb(0 0 0 / 18%) !important;
 }
 
-.reader-thumbnail > span {
+.reader-thumbnail__label {
   margin-top: 5px !important;
+  padding: 1px 8px !important;
+  border-radius: 6px !important;
   color: #6e6e73 !important;
   font-size: 11px !important;
+  font-weight: 400 !important;
+}
+
+.reader-thumbnail__label--active {
+  color: #fff !important;
+  background: #8e8e93 !important;
+  font-weight: 600 !important;
 }
 
 .reader-toolbar {

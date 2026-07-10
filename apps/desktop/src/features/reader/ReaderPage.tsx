@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as pdfjs from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
@@ -130,7 +130,7 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active }: ThumbnailPagePro
         alignItems: "center",
         padding: "8px",
         border: "none",
-        background: active ? "#e5e5ea" : "transparent",
+        background: "transparent",
         borderRadius: "8px",
         cursor: "pointer",
         width: "100%",
@@ -138,23 +138,26 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active }: ThumbnailPagePro
         justifyContent: "center",
       }}
     >
-      <div
-        style={{
-          width: "80px",
-          height: "110px",
-          background: "#ffffff",
-          boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-          borderRadius: "4px",
-          overflow: "hidden",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <canvas ref={canvasRef} style={{ width: "100%", height: "100%", objectFit: "cover", display: rendered ? "block" : "none" }} />
-        {!rendered && <span style={{ color: "#8e8e93", fontSize: "14px" }}>{pageNumber}</span>}
+      <div className={`reader-thumbnail__frame ${active ? "reader-thumbnail__frame--active" : ""}`}>
+        <div
+          className="reader-thumbnail__page"
+          style={{
+            width: "80px",
+            height: "110px",
+            background: "#ffffff",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+            borderRadius: "4px",
+            overflow: "hidden",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <canvas ref={canvasRef} style={{ width: "100%", height: "100%", objectFit: "cover", display: rendered ? "block" : "none" }} />
+          {!rendered && <span style={{ color: "#8e8e93", fontSize: "14px" }}>{pageNumber}</span>}
+        </div>
       </div>
-      <span style={{ fontSize: "11px", color: "#8e8e93", marginTop: "4px" }}>{pageNumber}</span>
+      <span className={`reader-thumbnail__label ${active ? "reader-thumbnail__label--active" : ""}`}>{pageNumber}</span>
     </button>
   );
 }
@@ -566,6 +569,12 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
   const [sidebarTab, setSidebarTab] = useState<"pages" | "outline">("pages");
   const [outline, setOutline] = useState<any[] | null>(null);
   const [selection, setSelection] = useState<CardSource | null>(null);
+  // Real per-page dimensions, fetched (metadata only, no rendering) once the
+  // document loads. Without this, pages default to a single averaged size
+  // until each one individually scrolls into view — so a jump to a distant
+  // page reflows the stack mid-scroll as pages resize underneath the
+  // in-flight scrollIntoView, landing on the wrong page.
+  const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[] | null>(null);
 
   const pagesContainerRef = useRef<HTMLDivElement | null>(null);
   const zoomLayoutRef = useRef<HTMLDivElement | null>(null);
@@ -575,6 +584,13 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
   const scaleRef = useRef(1.0);
   const isZoomingRef = useRef(false);
   const zoomDebounceRef = useRef<any>(null);
+  // Set while a programmatic scrollToPage animation is in flight. Pages
+  // neighboring the target also enter the 360px IntersectionObserver margin
+  // as the scroll passes them, and each fires onVisible — without this guard
+  // whichever one fires last overwrites currentPage, so the highlighted
+  // thumbnail can end up on a different page than the one that was clicked.
+  const isNavigatingRef = useRef(false);
+  const navigateSettleTimeoutRef = useRef<any>(null);
 
   const debouncedSavePage = useCallback((pageNo: number) => {
     if (savePageTimeoutRef.current) {
@@ -594,13 +610,32 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
       if (zoomDebounceRef.current) {
         clearTimeout(zoomDebounceRef.current);
       }
+      if (navigateSettleTimeoutRef.current) {
+        clearTimeout(navigateSettleTimeoutRef.current);
+      }
     };
   }, []);
 
+  // Sum of each page's real height (once known) instead of an assumed
+  // uniform average, so the scrollable stack's total size matches reality
+  // before any individual page has rendered.
+  const stackContentSize = useMemo(() => {
+    if (pageSizes && pageSizes.length > 0) {
+      return {
+        width: Math.max(...pageSizes.map((s) => s.width)),
+        height: pageSizes.reduce((sum, s) => sum + s.height + 20, 0),
+      };
+    }
+    return {
+      width: defaultSize.width,
+      height: (pdfDoc?.numPages ?? 0) * (defaultSize.height + 20),
+    };
+  }, [pageSizes, defaultSize, pdfDoc]);
+
   // Keep the transformed visual surface and the scroll layout in the same coordinate system.
   const applyScaleToDOM = useCallback((scale = scaleRef.current) => {
-    const baseWidth = defaultSize.width + 48;
-    const baseHeight = (pdfDoc?.numPages ?? 0) * (defaultSize.height + 20) + 48;
+    const baseWidth = stackContentSize.width + 48;
+    const baseHeight = stackContentSize.height + 48;
 
     if (zoomLayoutRef.current) {
       zoomLayoutRef.current.style.width = `${baseWidth * scale}px`;
@@ -614,7 +649,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
     if (zoomLabelRef.current) {
       zoomLabelRef.current.textContent = `${Math.round(scale * 100)}%`;
     }
-  }, [defaultSize, pdfDoc]);
+  }, [stackContentSize]);
 
   useEffect(() => {
     const container = pagesContainerRef.current;
@@ -622,7 +657,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
 
     const updatePageStackPosition = () => {
       if (!scalingDivRef.current) return;
-      const baseWidth = defaultSize.width + 48;
+      const baseWidth = stackContentSize.width + 48;
       const contentWidth = baseWidth * scaleRef.current;
       scalingDivRef.current.style.left = `${getCenteredPageOffset(container.clientWidth, contentWidth)}px`;
     };
@@ -636,7 +671,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
       observer?.disconnect();
       window.removeEventListener("resize", updatePageStackPosition);
     };
-  }, [defaultSize]);
+  }, [stackContentSize]);
 
   // Debounce renderScale: only re-render canvases after zoom gesture ends
   const scheduleRenderScaleSync = useCallback((newScale: number) => {
@@ -678,6 +713,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
     const loadFileAndDoc = async () => {
       setLoadingDoc(true);
       setError(null);
+      setPageSizes(null);
       try {
         const url = await getDocumentFileUrl(document.id);
         if (!active) return;
@@ -707,6 +743,21 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
               setSidebarTab("outline");
             }
           } catch (_) {}
+
+          try {
+            // Metadata only (no rendering) — needed up front so the page
+            // stack's layout is correct from the start, before individual
+            // pages have scrolled into view and rendered.
+            const sizes = await Promise.all(
+              Array.from({ length: doc.numPages }, (_, i) =>
+                doc.getPage(i + 1).then((page) => {
+                  const viewport = page.getViewport({ scale: 1.0 });
+                  return { width: viewport.width, height: viewport.height };
+                })
+              )
+            );
+            if (active) setPageSizes(sizes);
+          } catch (_) {}
         }
       } catch (e) {
         if (active) {
@@ -729,7 +780,19 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
   }, []);
 
   const handlePageSelect = (pageNo: number) => {
+    isNavigatingRef.current = true;
+    if (navigateSettleTimeoutRef.current) {
+      clearTimeout(navigateSettleTimeoutRef.current);
+    }
+    // Long enough to cover the smooth-scroll animation across the whole
+    // document; onVisible stays suppressed until then so pages the scroll
+    // passes through can't steal currentPage from the clicked target.
+    navigateSettleTimeoutRef.current = setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 700);
+
     setCurrentPage(pageNo);
+    debouncedSavePage(pageNo);
     scrollToPage(pageNo);
   };
 
@@ -1027,8 +1090,8 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
             ref={zoomLayoutRef}
             className="reader-page-stack"
             style={{
-              width: `${(defaultSize.width + 48) * scaleRef.current}px`,
-              height: `${((pdfDoc?.numPages ?? 0) * (defaultSize.height + 20) + 48) * scaleRef.current}px`,
+              width: `${(stackContentSize.width + 48) * scaleRef.current}px`,
+              height: `${(stackContentSize.height + 48) * scaleRef.current}px`,
               position: "relative",
             }}
           >
@@ -1036,8 +1099,8 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
             ref={scalingDivRef}
             className="reader-page-column"
             style={{
-              width: `${defaultSize.width + 48}px`,
-              height: `${(pdfDoc?.numPages ?? 0) * (defaultSize.height + 20) + 48}px`,
+              width: `${stackContentSize.width + 48}px`,
+              height: `${stackContentSize.height + 48}px`,
               padding: "24px",
               boxSizing: "border-box",
               position: "absolute",
@@ -1057,11 +1120,11 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
                 pdfDoc={pdfDoc!}
                 pageNumber={pageNumber}
                 renderScale={renderScale}
-                defaultWidth={defaultSize.width}
-                defaultHeight={defaultSize.height}
+                defaultWidth={pageSizes?.[pageNumber - 1]?.width ?? defaultSize.width}
+                defaultHeight={pageSizes?.[pageNumber - 1]?.height ?? defaultSize.height}
                 pagesContainerRef={pagesContainerRef}
                 onVisible={() => {
-                  if (!isZoomingRef.current) {
+                  if (!isZoomingRef.current && !isNavigatingRef.current) {
                     setCurrentPage(pageNumber);
                     debouncedSavePage(pageNumber);
                   }
