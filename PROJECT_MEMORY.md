@@ -55,7 +55,7 @@ cargo test --all-targets --manifest-path src-tauri/Cargo.toml
 cargo clippy --all-targets --all-features --manifest-path src-tauri/Cargo.toml -- -D warnings
 ```
 
-The current verified Anki baseline is 71 frontend tests, 73 Rust unit tests, and 1 PDF extraction isolation test passing; production TypeScript/Vite build, Rust fmt, and clippy with `-D warnings` are green.
+The current verified Anki baseline is 74 frontend tests, 73 Rust unit tests, and 1 PDF extraction isolation test passing; production TypeScript/Vite build, Playwright learning smoke test, Rust fmt, and clippy with `-D warnings` are green.
 
 ## Architecture notes
 
