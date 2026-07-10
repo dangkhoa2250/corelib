@@ -13,6 +13,7 @@ use tempfile::tempdir;
 use crate::commands::{
     import_local_documents, validate_import_paths, validate_read_page, IndexTask, LibraryStore,
 };
+use crate::library_store::content_hash;
 
 fn app_with_library(path: &Path) -> tauri::App<tauri::test::MockRuntime> {
     tauri::test::mock_builder()
@@ -67,6 +68,62 @@ fn import_returns_pending_before_its_background_index_task_runs() {
     assert!(
         !indexed[0].indexed,
         "malformed text extraction is recoverable"
+    );
+}
+
+#[test]
+fn import_recovers_an_existing_managed_pdf_without_a_database_row_and_indexes_it_once() {
+    let directory = tempdir().expect("create temporary directory");
+    let source = directory.path().join("recovered.pdf");
+    let library_root = directory.path().join("library");
+    fs::write(&source, b"%PDF-1.4\nrecovered\n").expect("write valid PDF");
+    let hash = content_hash(&source).expect("hash source");
+    let managed_path = library_root.join("documents").join(format!("{hash}.pdf"));
+    fs::create_dir_all(managed_path.parent().expect("managed parent"))
+        .expect("create managed directory");
+    fs::copy(&source, &managed_path).expect("seed managed PDF without database record");
+    let (app, tasks) = app_with_controlled_indexer(&library_root);
+
+    let imported = import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+        .expect("recover managed document");
+
+    assert_eq!(imported.len(), 1);
+    assert_eq!(imported[0].status, "processing");
+    assert!(!imported[0].indexed);
+    let task = tasks
+        .try_recv()
+        .expect("recovered database record should be indexed");
+    assert!(tasks.try_recv().is_err(), "only one task should be queued");
+    task();
+    let indexed = crate::commands::list_documents(app.state()).expect("list recovered document");
+    assert_eq!(indexed[0].id, imported[0].id);
+    assert_eq!(indexed[0].status, "ready");
+}
+
+#[test]
+fn importing_an_existing_ready_database_record_does_not_queue_another_index_task() {
+    let directory = tempdir().expect("create temporary directory");
+    let source = directory.path().join("existing.pdf");
+    let library_root = directory.path().join("library");
+    fs::write(&source, b"%PDF-1.4\nexisting\n").expect("write valid PDF");
+    let (app, tasks) = app_with_controlled_indexer(&library_root);
+
+    import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+        .expect("initial import");
+    tasks
+        .try_recv()
+        .expect("initial document should be indexed")();
+    assert_eq!(
+        crate::commands::list_documents(app.state()).expect("list indexed documents")[0].status,
+        "ready"
+    );
+
+    import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+        .expect("reimport existing database record");
+
+    assert!(
+        tasks.try_recv().is_err(),
+        "ready database records should not be reindexed"
     );
 }
 

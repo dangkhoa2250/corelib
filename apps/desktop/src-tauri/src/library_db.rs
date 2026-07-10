@@ -61,6 +61,13 @@ pub struct NewLocalDocument {
     pub managed_path: String,
 }
 
+pub struct IndexingRecord {
+    pub id: String,
+    pub managed_path: Option<String>,
+    pub status: String,
+    pub index_state: String,
+}
+
 impl LibraryDatabase {
     pub fn open(app_data_directory: impl AsRef<Path>) -> Result<Self> {
         let app_data_directory = app_data_directory.as_ref();
@@ -231,6 +238,24 @@ impl LibraryDatabase {
             return Err(LibraryDbError::DocumentNotFound);
         }
         Ok(())
+    }
+
+    pub fn indexing_record(&self, id: &str) -> Result<Option<IndexingRecord>> {
+        self.connection
+            .query_row(
+                "SELECT id, managed_path, status, index_state FROM documents WHERE id = ?1",
+                params![id],
+                |row| {
+                    Ok(IndexingRecord {
+                        id: row.get(0)?,
+                        managed_path: row.get(1)?,
+                        status: row.get(2)?,
+                        index_state: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     #[cfg(test)]

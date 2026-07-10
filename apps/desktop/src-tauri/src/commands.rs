@@ -85,7 +85,6 @@ pub fn import_local_documents(
         .lock()
         .map_err(|_| "library database is unavailable".to_owned())?;
     let mut created_paths = Vec::new();
-    let mut index_tasks = Vec::new();
     let imported_documents = documents
         .iter()
         .map(|document| {
@@ -97,7 +96,6 @@ pub fn import_local_documents(
             .map_err(|_| "unable to import PDF".to_owned())?;
             if imported.created {
                 created_paths.push(imported.managed_path.clone());
-                index_tasks.push((document.id.clone(), imported.managed_path.clone()));
             }
             Ok(NewLocalDocument {
                 id: document.id.clone(),
@@ -122,10 +120,19 @@ pub fn import_local_documents(
             remove_new_managed_files(&created_paths);
             error.to_string()
         })?;
+    let index_records = summaries
+        .iter()
+        .map(|summary| database.indexing_record(&summary.id))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| error.to_string())?;
     drop(database);
 
-    for (id, managed_path) in index_tasks {
-        state.schedule_managed_pdf_index(id, managed_path);
+    for record in index_records.into_iter().flatten() {
+        if record.status == "processing" && record.index_state == "pending" {
+            if let Some(managed_path) = record.managed_path {
+                state.schedule_managed_pdf_index(record.id, managed_path);
+            }
+        }
     }
 
     Ok(summaries)
