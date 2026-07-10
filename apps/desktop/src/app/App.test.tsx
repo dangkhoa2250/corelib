@@ -240,6 +240,36 @@ test("keeps imported documents when an older initial load resolves last", async 
   });
 });
 
+test("preserves the Drive parent stack for an empty nested folder", async () => {
+  const user = userEvent.setup();
+  const listDrive = vi.fn(async (folderId?: string) => {
+    if (folderId === "folder-a") return [];
+    return [{ id: "folder-a", name: "Folder A", kind: "folder" as const, parentId: "root" }];
+  });
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+        listDrive,
+        connectDrive: vi.fn().mockResolvedValue(undefined),
+        importDrive: vi.fn().mockResolvedValue([]),
+        clearDriveCache: vi.fn().mockResolvedValue(undefined),
+      }}
+    />,
+  );
+
+  await user.click(await screen.findByRole("button", { name: "Google Drive" }));
+  await user.click(await screen.findByRole("button", { name: "📁 Folder A" }));
+  expect(await screen.findByText("No PDFs or folders found here.")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "← Up" }));
+
+  await screen.findByRole("button", { name: "📁 Folder A" });
+  expect(listDrive.mock.calls.map(([folderId]) => folderId)).toEqual([undefined, "folder-a", undefined]);
+});
+
 test("opens the selected search result when an older library load resolves afterwards", async () => {
   const user = userEvent.setup();
   const initialList = deferred<typeof document[]>();

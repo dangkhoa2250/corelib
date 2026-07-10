@@ -2,6 +2,7 @@ use std::{
     fs,
     path::{Path, PathBuf},
     sync::{
+        atomic::{AtomicU64, Ordering},
         mpsc::{self, Receiver, SyncSender, TrySendError},
         Arc, Mutex,
     },
@@ -136,6 +137,8 @@ pub struct LibraryStore {
     database: Arc<Mutex<LibraryDatabase>>,
     library_root: PathBuf,
     index_coordinator: Arc<IndexCoordinator>,
+    cache_generation: Arc<AtomicU64>,
+    cache_lock: Arc<Mutex<()>>,
 }
 
 impl LibraryStore {
@@ -163,6 +166,8 @@ impl LibraryStore {
             database,
             library_root: app_data_directory,
             index_coordinator,
+            cache_generation: Arc::new(AtomicU64::new(0)),
+            cache_lock: Arc::new(Mutex::new(())),
         };
         store.requeue_pending_indexes()?;
         Ok(store)
@@ -400,6 +405,12 @@ pub async fn get_document_file_url(
     let cache_path = cache.path_for(&file_id);
 
     if cache_path.is_file() {
+        database
+            .lock()
+            .map_err(|_| "database unavailable".to_owned())?
+            .set_document_status(&id, "ready")
+            .map_err(|e| e.to_string())?;
+        index_coordinator.schedule_pending_indexes();
         return Ok(cache_path.to_string_lossy().into_owned());
     }
 
@@ -410,9 +421,13 @@ pub async fn get_document_file_url(
         .map_err(|e| e.to_string())?;
 
     let store = crate::drive_auth::KeychainTokenStore::new();
-    let result = download_drive_file_async(file_id.clone(), library_root, move |id| {
-        crate::drive_api::download_drive_file(&store, &id)
-    })
+    let result = download_drive_file_async_guarded(
+        file_id.clone(),
+        library_root,
+        Arc::clone(&state.cache_generation),
+        Arc::clone(&state.cache_lock),
+        move |id| crate::drive_api::download_drive_file(&store, &id),
+    )
     .await;
     let path = match result {
         Ok(path) => path,
@@ -463,8 +478,35 @@ where
     .map_err(|error| format!("download task failed: {error}"))?
 }
 
+pub(crate) async fn download_drive_file_async_guarded<F>(
+    file_id: String,
+    library_root: PathBuf,
+    cache_generation: Arc<AtomicU64>,
+    cache_lock: Arc<Mutex<()>>,
+    downloader: F,
+) -> Result<String, String>
+where
+    F: FnOnce(String) -> Result<Vec<u8>, String> + Send + 'static,
+{
+    let starting_generation = cache_generation.load(Ordering::Acquire);
+    let path = download_drive_file_async(file_id, library_root, downloader).await?;
+    let _guard = cache_lock
+        .lock()
+        .map_err(|_| "cache unavailable".to_owned())?;
+    if starting_generation != cache_generation.load(Ordering::Acquire) {
+        let _ = std::fs::remove_file(&path);
+        return Err("cache_cleared_during_download".to_owned());
+    }
+    Ok(path)
+}
+
 #[tauri::command]
 pub fn clear_drive_cache(state: State<'_, LibraryStore>) -> Result<(), String> {
+    let _cache_guard = state
+        .cache_lock
+        .lock()
+        .map_err(|_| "cache unavailable".to_owned())?;
+    state.cache_generation.fetch_add(1, Ordering::AcqRel);
     let cache = crate::drive_cache::Cache::new(state.library_root.clone());
     cache.clear()?;
 

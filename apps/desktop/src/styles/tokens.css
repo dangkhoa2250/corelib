@@ -234,3 +234,7 @@ select {
     gap: 24px 16px;
   }
 }
+
+.outline-node-title:hover {
+  background: #e5e5ea;
+}

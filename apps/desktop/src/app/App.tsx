@@ -2,16 +2,36 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { LibraryDocument } from "../domain/document";
-import { importLocalDocuments, listDocuments, searchDocuments } from "../lib/desktop";
+import {
+  importLocalDocuments,
+  listDocuments,
+  searchDocuments,
+  DriveEntry,
+  listDrive,
+  connectDrive,
+  importDrive,
+  clearDriveCache,
+  getDocumentFileUrl as nativeGetDocumentFileUrl,
+  saveReadPage as nativeSaveReadPage,
+  deleteDocument as nativeDeleteDocument,
+} from "../lib/desktop";
 import { LibraryPage } from "../features/library/LibraryPage";
-import { ReaderPlaceholder } from "../features/reader/ReaderPlaceholder";
+import { ReaderPage } from "../features/reader/ReaderPage";
 import { CommandPalette } from "../features/search/CommandPalette";
+import { DrivePicker } from "../features/drive/DrivePicker";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
   pick: () => Promise<string[] | null>;
   importDocuments: (paths: string[]) => Promise<LibraryDocument[]>;
   search?: (query: string) => Promise<LibraryDocument[]>;
+  getDocumentFileUrl?: (id: string) => Promise<string>;
+  saveReadPage?: (id: string, page: number) => Promise<LibraryDocument>;
+  deleteDocument?: (id: string) => Promise<void>;
+  connectDrive?: () => Promise<void>;
+  listDrive?: (folderId?: string) => Promise<DriveEntry[]>;
+  importDrive?: (ids: string[]) => Promise<LibraryDocument[]>;
+  clearDriveCache?: () => Promise<void>;
 }
 
 async function pickLocalPdfs(): Promise<string[] | null> {
@@ -33,6 +53,13 @@ const nativeLibraryApi: LibraryApi = {
   pick: pickLocalPdfs,
   importDocuments: importLocalDocuments,
   search: searchDocuments,
+  getDocumentFileUrl: nativeGetDocumentFileUrl,
+  saveReadPage: nativeSaveReadPage,
+  deleteDocument: nativeDeleteDocument,
+  connectDrive,
+  listDrive,
+  importDrive,
+  clearDriveCache,
 };
 
 function errorMessage(error: unknown): string {
@@ -64,6 +91,10 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  const [driveEntries, setDriveEntries] = useState<DriveEntry[]>([]);
+  const [driveFolderStack, setDriveFolderStack] = useState<string[]>([]);
+  const [driveCurrentFolderId, setDriveCurrentFolderId] = useState<string | undefined>();
   const requestId = useRef(0);
 
   const load = useCallback(async () => {
@@ -131,14 +162,108 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
     [libraryApi],
   );
 
+  const loadDriveFolder = useCallback(async (folderId?: string) => {
+    const list = libraryApi.listDrive ?? listDrive;
+    const connect = libraryApi.connectDrive ?? connectDrive;
+    try {
+      const entries = await list(folderId);
+      setDriveEntries(entries);
+      setDriveCurrentFolderId(folderId);
+    } catch (e) {
+      if (errorMessage(e).includes("not connected") || errorMessage(e).includes("revoked")) {
+        await connect();
+        const entries = await list(folderId);
+        setDriveEntries(entries);
+        setDriveCurrentFolderId(folderId);
+      } else {
+        setError(errorMessage(e));
+      }
+    }
+  }, [libraryApi]);
+
+  const handleOpenDrive = useCallback(async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      setDriveFolderStack([]);
+      await loadDriveFolder(undefined);
+      setDrivePickerOpen(true);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [loadDriveFolder]);
+
+  const handleNavigateDrive = useCallback(
+    (folderId?: string) => {
+      const parentId = driveFolderStack[driveFolderStack.length - 1];
+      const navigatingUp =
+        driveFolderStack.length > 0 &&
+        (folderId === parentId || (!folderId && parentId === "root"));
+      if (navigatingUp) {
+        setDriveFolderStack((stack) => stack.slice(0, -1));
+        void loadDriveFolder(folderId === "root" ? undefined : folderId);
+        return;
+      }
+
+      setDriveFolderStack((stack) => [...stack, driveCurrentFolderId ?? "root"]);
+      void loadDriveFolder(folderId);
+    },
+    [driveCurrentFolderId, driveFolderStack, loadDriveFolder],
+  );
+
+  const handleAddDriveDocuments = useCallback(async (ids: string[]) => {
+    setError(null);
+    try {
+      const imported = await (libraryApi.importDrive ?? importDrive)(ids);
+      setDocuments((current) => mergeDocuments(current, imported));
+      setDrivePickerOpen(false);
+      await load();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }, [libraryApi, load]);
+
+  const handleClearCache = useCallback(async () => {
+    setError(null);
+    try {
+      await (libraryApi.clearDriveCache ?? clearDriveCache)();
+      await load();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }, [libraryApi, load]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    setError(null);
+    try {
+      await (libraryApi.deleteDocument ?? nativeDeleteDocument)(id);
+      await load();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }, [libraryApi, load]);
+
+  const handlePageChange = useCallback(async (id: string, page: number) => {
+    try {
+      const updated = await (libraryApi.saveReadPage ?? nativeSaveReadPage)(id, page);
+      if (updated) {
+        setDocuments((current) => mergeDocuments(current, [updated]));
+      }
+    } catch (_) {}
+  }, [libraryApi]);
+
   const palette = <CommandPalette search={search} onOpen={handleOpen} />;
 
   if (route.name === "reader") {
     return (
       <>
-        <ReaderPlaceholder
+        <ReaderPage
           document={route.document}
           onBack={() => setRoute({ name: "library" })}
+          getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
+          onPageChange={handlePageChange}
         />
         {palette}
       </>
@@ -158,7 +283,20 @@ export function App({ libraryApi = nativeLibraryApi }: AppProps) {
           }
         }}
         onImport={() => void handleImport()}
+        onOpenDrive={() => void handleOpenDrive()}
+        onClearCache={() => void handleClearCache()}
+        onDelete={(id) => void handleDelete(id)}
+        getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
       />
+      {drivePickerOpen && (
+        <DrivePicker
+          entries={driveEntries}
+          parentId={driveFolderStack.length > 0 ? driveFolderStack[driveFolderStack.length - 1] : undefined}
+          onNavigateFolder={handleNavigateDrive}
+          onAdd={handleAddDriveDocuments}
+          onClose={() => setDrivePickerOpen(false)}
+        />
+      )}
       {palette}
       {loading ? <p role="status" aria-label="Loading library">Loading library…</p> : null}
       {error ? (

@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use crate::model::DocumentSummary;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATIONS: [(&str, &str); 2] = [
+const MIGRATIONS: [(&str, &str); 3] = [
     (
         "0001_library",
         include_str!("../migrations/0001_library.sql"),
@@ -18,6 +18,10 @@ const MIGRATIONS: [(&str, &str); 2] = [
     (
         "0002_index_claims",
         include_str!("../migrations/0002_index_claims.sql"),
+    ),
+    (
+        "0003_drive_source",
+        include_str!("../migrations/0003_drive_source.sql"),
     ),
 ];
 const SUMMARY_COLUMNS: &str =
@@ -71,6 +75,8 @@ pub struct NewLocalDocument {
 
 pub struct IndexingRecord {
     pub id: String,
+    pub source: String,
+    pub source_ref: Option<String>,
     pub managed_path: Option<String>,
     pub status: String,
     pub index_state: String,
@@ -124,6 +130,35 @@ impl LibraryDatabase {
             .into_iter()
             .next()
             .ok_or(LibraryDbError::DocumentNotFound)
+    }
+
+    pub fn insert_drive(
+        &mut self,
+        id: &str,
+        drive_file_id: &str,
+        title: &str,
+    ) -> Result<DocumentSummary> {
+        let timestamp = portable_timestamp();
+        self.connection.execute(
+            "INSERT OR IGNORE INTO documents (
+                id, source, source_ref, title, status, index_state, created_at, updated_at
+             ) VALUES (?1, 'google_drive', ?2, ?3, 'download_required', 'pending', ?4, ?4)",
+            params![id, drive_file_id, title, timestamp],
+        )?;
+
+        let summary = self
+            .connection
+            .query_row(
+                &format!(
+                    "SELECT {SUMMARY_COLUMNS} FROM documents
+                     WHERE source = 'google_drive' AND source_ref = ?1"
+                ),
+                params![drive_file_id],
+                summary_from_row,
+            )
+            .optional()?
+            .ok_or(LibraryDbError::DocumentNotFound)?;
+        Ok(summary)
     }
 
     pub fn insert_local_batch(
@@ -251,6 +286,27 @@ impl LibraryDatabase {
         Ok(())
     }
 
+    pub fn delete_document(&mut self, id: &str) -> Result<Option<String>> {
+        let managed_path: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT managed_path FROM documents WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        let transaction = self.connection.transaction()?;
+        transaction.execute(
+            "DELETE FROM document_text WHERE document_id = ?1",
+            params![id],
+        )?;
+        transaction.execute("DELETE FROM documents WHERE id = ?1", params![id])?;
+        transaction.commit()?;
+
+        Ok(managed_path)
+    }
+
     pub fn reset_pending_index_claims(&mut self) -> Result<()> {
         self.connection.execute(
             "UPDATE documents SET index_claimed_at = NULL WHERE index_state = 'pending'",
@@ -261,18 +317,21 @@ impl LibraryDatabase {
 
     pub fn pending_indexing_records(&self) -> Result<Vec<IndexingRecord>> {
         let mut statement = self.connection.prepare(
-            "SELECT id, managed_path, status, index_state
+            "SELECT id, source, source_ref, managed_path, status, index_state
              FROM documents
-             WHERE status = 'processing' AND index_state = 'pending' AND managed_path IS NOT NULL
+             WHERE (status = 'processing' OR (source = 'google_drive' AND status = 'ready'))
+               AND index_state = 'pending'
              ORDER BY created_at ASC, id ASC",
         )?;
         let records = statement
             .query_map([], |row| {
                 Ok(IndexingRecord {
                     id: row.get(0)?,
-                    managed_path: row.get(1)?,
-                    status: row.get(2)?,
-                    index_state: row.get(3)?,
+                    source: row.get(1)?,
+                    source_ref: row.get(2)?,
+                    managed_path: row.get(3)?,
+                    status: row.get(4)?,
+                    index_state: row.get(5)?,
                 })
             })?
             .collect::<std::result::Result<Vec<_>, _>>()
@@ -285,7 +344,7 @@ impl LibraryDatabase {
             "UPDATE documents
              SET index_claimed_at = ?1
              WHERE id = ?2
-               AND status = 'processing'
+               AND (status = 'processing' OR (source = 'google_drive' AND status = 'ready'))
                AND index_state = 'pending'
                AND index_claimed_at IS NULL",
             params![portable_timestamp(), id],
@@ -309,19 +368,40 @@ impl LibraryDatabase {
     pub fn indexing_record(&self, id: &str) -> Result<Option<IndexingRecord>> {
         self.connection
             .query_row(
-                "SELECT id, managed_path, status, index_state FROM documents WHERE id = ?1",
+                "SELECT id, source, source_ref, managed_path, status, index_state FROM documents WHERE id = ?1",
                 params![id],
                 |row| {
                     Ok(IndexingRecord {
                         id: row.get(0)?,
-                        managed_path: row.get(1)?,
-                        status: row.get(2)?,
-                        index_state: row.get(3)?,
+                        source: row.get(1)?,
+                        source_ref: row.get(2)?,
+                        managed_path: row.get(3)?,
+                        status: row.get(4)?,
+                        index_state: row.get(5)?,
                     })
                 },
             )
             .optional()
             .map_err(Into::into)
+    }
+
+    pub fn set_document_status(&mut self, id: &str, status: &str) -> Result<()> {
+        let updated = self.connection.execute(
+            "UPDATE documents SET status = ?1, updated_at = ?2 WHERE id = ?3",
+            params![status, portable_timestamp(), id],
+        )?;
+        if updated == 0 {
+            return Err(LibraryDbError::DocumentNotFound);
+        }
+        Ok(())
+    }
+
+    pub fn clear_drive_cache(&mut self) -> Result<()> {
+        self.connection.execute(
+            "UPDATE documents SET status = 'download_required' WHERE source = 'google_drive'",
+            [],
+        )?;
+        Ok(())
     }
 
     #[cfg(test)]

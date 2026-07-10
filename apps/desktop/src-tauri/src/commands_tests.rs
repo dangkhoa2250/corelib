@@ -3,7 +3,7 @@ use std::{
     path::Path,
     sync::{
         atomic::{AtomicUsize, Ordering},
-        mpsc, Arc,
+        mpsc, Arc, Mutex,
     },
     time::Duration,
 };
@@ -15,8 +15,9 @@ use tauri::Manager;
 use tempfile::tempdir;
 
 use crate::commands::{
-    download_drive_file_async, import_local_documents, validate_import_paths, validate_read_page,
-    IndexTask, IndexWorkerPool, LibraryStore, INDEX_QUEUE_CAPACITY,
+    download_drive_file_async, download_drive_file_async_guarded, get_document_file_url,
+    import_local_documents, validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool,
+    LibraryStore, INDEX_QUEUE_CAPACITY,
 };
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
@@ -45,6 +46,89 @@ fn drive_download_runs_off_command_thread_without_holding_database_lock() {
         task.await.expect("download task should join")
     });
     assert!(result.is_ok());
+}
+
+#[test]
+fn cached_drive_document_becomes_ready_and_indexes_once() {
+    let directory = tempdir().expect("create temporary directory");
+    let library_root = directory.path().join("library");
+    let (app, tasks) = app_with_controlled_indexer(&library_root);
+    let mut database = LibraryDatabase::open(&library_root).expect("open database");
+    database
+        .insert_drive("drive-document", "drive-file-1", "Cached.pdf")
+        .expect("insert Drive document");
+    drop(database);
+    let cache = crate::drive_cache::Cache::new(library_root.clone());
+    let cached_path = cache
+        .put("drive-file-1", b"%PDF-1.4\ncached\n")
+        .expect("seed cache");
+
+    let path = tauri::async_runtime::block_on(get_document_file_url(
+        "drive-document".to_owned(),
+        app.state(),
+    ))
+    .expect("cache hit should return the cached path");
+    assert_eq!(path, cached_path.to_string_lossy());
+    let document = crate::commands::list_documents(app.state())
+        .expect("list documents")
+        .pop()
+        .expect("cached document");
+    assert_eq!(document.status, "ready");
+    tasks
+        .try_recv()
+        .expect("cache hit should schedule indexing")();
+    assert!(
+        tasks.try_recv().is_err(),
+        "indexing should be scheduled once"
+    );
+
+    tauri::async_runtime::block_on(get_document_file_url(
+        "drive-document".to_owned(),
+        app.state(),
+    ))
+    .expect("second cache hit should return the cached path");
+    assert!(
+        tasks.try_recv().is_err(),
+        "claimed indexing should not duplicate"
+    );
+}
+
+#[test]
+fn clearing_cache_invalidates_an_in_flight_download() {
+    let directory = tempdir().expect("create temporary directory");
+    let library_root = directory.path().join("library");
+    let generation = Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let cache_lock = Arc::new(Mutex::new(()));
+    let (started_tx, started_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let generation_for_task = Arc::clone(&generation);
+    let lock_for_task = Arc::clone(&cache_lock);
+    let root_for_task = library_root.clone();
+    let task = tauri::async_runtime::spawn(download_drive_file_async_guarded(
+        "drive-file-1".to_owned(),
+        root_for_task,
+        generation_for_task,
+        lock_for_task,
+        move |_file_id| {
+            started_tx.send(()).expect("signal worker start");
+            release_rx.recv().expect("wait for clear");
+            Ok(b"%PDF-1.4\nin-flight\n".to_vec())
+        },
+    ));
+    started_rx.recv().expect("download should start");
+    {
+        let _guard = cache_lock.lock().expect("lock cache");
+        generation.fetch_add(1, Ordering::SeqCst);
+        crate::drive_cache::Cache::new(library_root.clone())
+            .clear()
+            .expect("clear cache");
+    }
+    release_tx.send(()).expect("release download");
+    let result = tauri::async_runtime::block_on(task).expect("guarded download task should join");
+    assert_eq!(result, Err("cache_cleared_during_download".to_owned()));
+    assert!(!crate::drive_cache::Cache::new(library_root)
+        .path_for("drive-file-1")
+        .exists());
 }
 
 fn app_with_library(path: &Path) -> tauri::App<tauri::test::MockRuntime> {
