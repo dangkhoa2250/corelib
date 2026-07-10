@@ -1694,6 +1694,7 @@ dependencies = [
 name = "library_desktop"
 version = "0.1.0"
 dependencies = [
+ "libc",
  "rusqlite",
  "serde",
  "sha2",
