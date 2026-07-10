@@ -181,7 +181,7 @@ fn scheduled_state(
     let due_at = now
         .checked_add_signed(Duration::seconds(interval_seconds))
         .ok_or(SchedulerError::SchedulingFailed)?
-        .to_rfc3339_opts(SecondsFormat::Secs, true);
+        .to_rfc3339_opts(SecondsFormat::Millis, true);
     let memory_state_json = serde_json::to_string(&StoredMemoryState {
         stability: item_state.memory.stability,
         difficulty: item_state.memory.difficulty,

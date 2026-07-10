@@ -1,10 +1,12 @@
-use chrono::{TimeZone, Utc};
+use chrono::{SecondsFormat, TimeZone, Timelike, Utc};
 
 use crate::scheduler::{Rating, ReviewScheduler, SchedulerConfig};
 
 fn fixed_now() -> chrono::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 7, 10, 5, 30, 0)
         .single()
+        .expect("fixed timestamp")
+        .with_nanosecond(123_000_000)
         .expect("fixed timestamp")
 }
 
@@ -59,6 +61,21 @@ fn apply_returns_the_selected_rating_schedule() {
     assert_eq!(scheduled, preview.easy);
     assert!(scheduled.memory_state_json.contains("stability"));
     assert!(scheduled.due_at.ends_with('Z'));
+}
+
+#[test]
+fn scheduled_due_at_preserves_millisecond_precision() {
+    let now = fixed_now();
+    let scheduled = ReviewScheduler::default()
+        .apply(None, 0, Rating::Good, now)
+        .expect("schedule a good rating");
+    let expected = now
+        .checked_add_signed(chrono::Duration::seconds(scheduled.interval_seconds))
+        .expect("expected due timestamp")
+        .to_rfc3339_opts(SecondsFormat::Millis, true);
+
+    assert_eq!(scheduled.due_at, expected);
+    assert!(scheduled.due_at.contains(".123Z"));
 }
 
 #[test]
