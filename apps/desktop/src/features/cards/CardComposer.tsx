@@ -72,11 +72,18 @@ export function CardComposer({
   const dialogRef = useRef<HTMLElement | null>(null);
   const frontRef = useRef<HTMLTextAreaElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+  const deckSelectionTouchedRef = useRef(false);
 
   const sourceIsAvailable = hasRequiredDocumentId(draft);
   const usingNewDeck = deckValue === NEW_DECK_VALUE;
   const selectedDeck = activeDecks.find((deck) => deck.id === deckValue);
   const visibleError = sourceIsAvailable ? error : SOURCE_UNAVAILABLE_MESSAGE;
+
+  useEffect(() => {
+    if (!deckSelectionTouchedRef.current && deckValue === NEW_DECK_VALUE && activeDecks.length > 0) {
+      setDeckValue(activeDecks[0].id);
+    }
+  }, [activeDecks, deckValue]);
 
   useEffect(() => {
     previousFocusRef.current = document.activeElement instanceof HTMLElement
@@ -225,7 +232,10 @@ export function CardComposer({
               <select
                 aria-label="Deck"
                 disabled={saving}
-                onChange={(event) => setDeckValue(event.target.value)}
+                onChange={(event) => {
+                  deckSelectionTouchedRef.current = true;
+                  setDeckValue(event.target.value);
+                }}
                 value={deckValue}
               >
                 {activeDecks.map((deck) => (

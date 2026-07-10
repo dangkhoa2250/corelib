@@ -69,6 +69,72 @@ test("prefills the front from the selection and lets both card sides be edited",
   expect(back).toHaveValue("A set closed under vector addition and scalar multiplication.");
 });
 
+test("hydrates the first loaded deck when the composer opened before decks resolved", async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
+  const onCancel = vi.fn();
+  const user = userEvent.setup();
+  const view = render(
+    <CardComposer
+      draft={draft}
+      decks={[]}
+      onSave={onSave}
+      onCancel={onCancel}
+    />,
+  );
+
+  expect(screen.getByRole("combobox", { name: "Deck" })).toHaveValue("__new_deck__");
+
+  view.rerender(
+    <CardComposer
+      draft={draft}
+      decks={[decks[0]]}
+      onSave={onSave}
+      onCancel={onCancel}
+    />,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByRole("combobox", { name: "Deck" })).toHaveValue("math");
+  });
+  await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  expect(onSave).toHaveBeenCalledExactlyOnceWith({
+    deckName: "Mathematics",
+    front: draft.quote,
+    back: "A set with vector operations.",
+    source: draft,
+    tags: [],
+  });
+});
+
+test("does not replace an explicit new deck choice when decks finish loading", async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
+  const onCancel = vi.fn();
+  const user = userEvent.setup();
+  const view = render(
+    <CardComposer
+      draft={draft}
+      decks={decks}
+      onSave={onSave}
+      onCancel={onCancel}
+    />,
+  );
+
+  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "__new_deck__");
+  view.rerender(
+    <CardComposer
+      draft={draft}
+      decks={[decks[0]]}
+      onSave={onSave}
+      onCancel={onCancel}
+    />,
+  );
+
+  expect(screen.getByRole("combobox", { name: "Deck" })).toHaveValue("__new_deck__");
+  expect(screen.getByRole("textbox", { name: "New deck name" })).toBeInTheDocument();
+});
+
 test("requires both card sides before it saves", async () => {
   const { onSave, user } = renderComposer();
 
