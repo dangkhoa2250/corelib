@@ -1,8 +1,9 @@
+use chrono::{SecondsFormat, Utc};
 use rusqlite::{params, OptionalExtension, Row};
 use uuid::Uuid;
 
 use crate::{
-    library_db::{portable_timestamp, LibraryDatabase, LibraryDbError, Result},
+    library_db::{LibraryDatabase, LibraryDbError, Result},
     model::{CardSourcePayload, LearningCardSummary, SearchResultPayload, SelectionRect},
 };
 
@@ -43,6 +44,10 @@ fn norm(value: &str, field: &str) -> Result<String> {
     } else {
         Ok(value.to_string())
     }
+}
+
+fn learning_timestamp() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 impl LibraryDatabase {
@@ -88,7 +93,7 @@ impl LibraryDatabase {
             }
         }
         let tx = self.connection.transaction()?;
-        let now = portable_timestamp();
+        let now = learning_timestamp();
         let deck_id: String = tx
             .query_row("SELECT id FROM decks WHERE name = ?1", params![deck], |r| {
                 r.get(0)
@@ -252,7 +257,7 @@ impl LibraryDatabase {
             return Err(invalid("invalid review"));
         }
         let tx = self.connection.transaction()?;
-        let reviewed_at = portable_timestamp();
+        let reviewed_at = learning_timestamp();
         let changed = tx.execute("UPDATE cards SET state=?1,due_at=?2,stability=?3,difficulty=?4,memory_state_json=?5,reps=reps+1,lapses=lapses+CASE WHEN ?6='again' THEN 1 ELSE 0 END,last_review_at=?7,updated_at=?7 WHERE id=?8 AND state=?9 AND due_at=?10", params![next_state,next_due_at,review.stability,review.difficulty,review.memory_state_json,rating,reviewed_at,review.card_id,prior_state,prior_due_at])?;
         if changed != 1 {
             return Err(invalid("card review precondition failed"));

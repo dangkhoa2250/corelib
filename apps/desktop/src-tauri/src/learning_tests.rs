@@ -93,13 +93,13 @@ fn due_cards_order_and_filter_state() {
     let (_dir, mut db) = db();
     let first = db.create_card(card("first")).expect("first");
     let second = db.create_card(card("second")).expect("second");
-    let due = db.due_cards("9999999999", 20).expect("due");
-    let mut expected = vec![first.id, second.id];
-    expected.sort();
-    assert_eq!(
-        due.iter().map(|c| c.id.clone()).collect::<Vec<_>>(),
-        expected
+    let due = db.due_cards("9999-12-31T00:00:00.000Z", 20).expect("due");
+    assert_eq!(due.len(), 2);
+    assert!(
+        due[0].due_at < due[1].due_at || (due[0].due_at == due[1].due_at && due[0].id < due[1].id)
     );
+    assert!(due.iter().any(|card| card.id == first.id));
+    assert!(due.iter().any(|card| card.id == second.id));
 }
 
 #[test]
@@ -116,7 +116,9 @@ fn due_cards_honors_limits_above_five_hundred() {
         .expect("create bulk card");
     }
     assert_eq!(
-        db.due_cards("9999999999", 501).expect("due cards").len(),
+        db.due_cards("9999-12-31T00:00:00.000Z", 501)
+            .expect("due cards")
+            .len(),
         501
     );
 }
@@ -157,7 +159,7 @@ fn review_updates_card_and_log_atomically() {
             prior_state: "new".into(),
             next_state: "review".into(),
             prior_due_at: created.due_at.clone(),
-            next_due_at: "9999999999".into(),
+            next_due_at: "9999-12-31T00:00:00.000Z".into(),
             interval_seconds: 86400,
             elapsed_ms: 10,
             stability: Some(2.0),
@@ -181,7 +183,7 @@ fn review_log_failure_rolls_back_card_update() {
         prior_state: "new".into(),
         next_state: "review".into(),
         prior_due_at: created.due_at.clone(),
-        next_due_at: "9999999999".into(),
+        next_due_at: "9999-12-31T00:00:00.000Z".into(),
         interval_seconds: 1,
         elapsed_ms: 1,
         stability: Some(2.0),
@@ -204,7 +206,7 @@ fn rejects_invalid_review_state_and_empty_timestamps() {
         prior_state: "new".into(),
         next_state: "bogus".into(),
         prior_due_at: " ".into(),
-        next_due_at: "9999999999".into(),
+        next_due_at: "9999-12-31T00:00:00.000Z".into(),
         interval_seconds: 1,
         elapsed_ms: 1,
         stability: None,
@@ -230,7 +232,7 @@ fn rejects_nonfinite_review_parameters_and_nonobject_memory() {
                 prior_state: "new".into(),
                 next_state: "review".into(),
                 prior_due_at: created.due_at.clone(),
-                next_due_at: "9999999999".into(),
+                next_due_at: "9999-12-31T00:00:00.000Z".into(),
                 interval_seconds: 1,
                 elapsed_ms: 1,
                 stability,
