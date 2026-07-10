@@ -8,6 +8,7 @@ pub mod indexer;
 pub mod library_db;
 pub mod library_store;
 pub mod model;
+pub mod scheduler;
 
 #[cfg(test)]
 mod drive_tests;
@@ -23,6 +24,9 @@ mod library_db_tests;
 
 #[cfg(test)]
 mod library_store_tests;
+
+#[cfg(test)]
+mod scheduler_tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
