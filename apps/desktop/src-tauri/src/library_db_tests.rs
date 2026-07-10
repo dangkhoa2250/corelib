@@ -1,5 +1,6 @@
 use std::{sync::Arc, thread};
 
+use rusqlite::{params, Connection, OptionalExtension};
 use tempfile::tempdir;
 
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
@@ -160,6 +161,225 @@ fn concurrent_database_opens_apply_the_migration_once() {
     for handle in handles {
         assert!(handle.join().expect("join opener").is_ok());
     }
+}
+
+#[test]
+fn opening_a_database_applies_the_learning_schema() {
+    let directory = tempdir().expect("create temporary directory");
+    let database = LibraryDatabase::open(directory.path()).expect("open database");
+    drop(database);
+
+    let connection = Connection::open(directory.path().join("library.sqlite3"))
+        .expect("open database connection");
+    let migration = connection
+        .query_row(
+            "SELECT id FROM schema_migrations WHERE id = ?1",
+            params!["0004_learning"],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .expect("query migration");
+
+    assert_eq!(migration.as_deref(), Some("0004_learning"));
+
+    let table_count = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type IN ('table', 'virtual table')
+               AND name IN ('decks', 'cards', 'card_sources', 'review_logs', 'tags', 'card_tags', 'card_text')",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("count learning tables");
+    assert_eq!(table_count, 7);
+
+    let index_count = connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'index'
+               AND name IN (
+                 'cards_state_due_at_id',
+                 'card_sources_document_id_page',
+                 'review_logs_card_id_reviewed_at'
+               )",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("count learning indexes");
+    assert_eq!(index_count, 3);
+}
+
+#[test]
+fn learning_schema_enforces_scheduler_relations_and_values() {
+    let directory = tempdir().expect("create temporary directory");
+    let database = LibraryDatabase::open(directory.path()).expect("open database");
+    drop(database);
+
+    let connection = Connection::open(directory.path().join("library.sqlite3"))
+        .expect("open database connection");
+    connection
+        .execute_batch("PRAGMA foreign_keys = ON;")
+        .expect("enable foreign keys");
+    let timestamp = "2026-07-10T00:00:00Z";
+    connection
+        .execute(
+            "INSERT INTO documents (
+               id, source, content_hash, title, managed_path, status, index_state, created_at, updated_at
+             ) VALUES (?1, 'local_managed', ?2, ?3, ?4, 'ready', 'ready', ?5, ?5)",
+            params![
+                "document-1",
+                "document-content",
+                "Source document",
+                "/managed/source.pdf",
+                timestamp,
+            ],
+        )
+        .expect("insert source document");
+    connection
+        .execute(
+            "INSERT INTO decks (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            params!["deck-1", "Biology", timestamp],
+        )
+        .expect("insert deck");
+    connection
+        .execute(
+            "INSERT INTO cards (
+               id, deck_id, front, back, state, due_at, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, 'new', ?5, ?6, ?6)",
+            params!["card-1", "deck-1", "   ", "ATP", timestamp, timestamp],
+        )
+        .expect("insert whitespace card for repository-level validation");
+    connection
+        .execute(
+            "INSERT INTO card_sources (card_id, document_id, page, quote, rects_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params!["card-1", "document-1", 3, "ATP stores energy.", "[]"],
+        )
+        .expect("insert card source");
+    connection
+        .execute(
+            "INSERT INTO review_logs (
+               id, card_id, reviewed_at, rating, prior_state, next_state,
+               prior_due_at, next_due_at, interval_seconds, elapsed_ms, scheduler_version
+             ) VALUES (?1, ?2, ?3, 'good', 'new', 'review', ?3, ?3, 86400, 4500, 'fsrs-v1')",
+            params!["review-1", "card-1", timestamp],
+        )
+        .expect("insert review log");
+    connection
+        .execute(
+            "INSERT INTO tags (id, name) VALUES (?1, ?2)",
+            params!["tag-1", "biology"],
+        )
+        .expect("insert tag");
+    connection
+        .execute(
+            "INSERT INTO card_tags (card_id, tag_id) VALUES (?1, ?2)",
+            params!["card-1", "tag-1"],
+        )
+        .expect("tag card");
+    connection
+        .execute(
+            "INSERT INTO card_text (card_id, body) VALUES (?1, ?2)",
+            params!["card-1", "ATP is an energy molecule"],
+        )
+        .expect("index card text");
+
+    let full_text_card_id = connection
+        .query_row(
+            "SELECT card_id FROM card_text WHERE card_text MATCH ?1",
+            params!["energy"],
+            |row| row.get::<_, String>(0),
+        )
+        .expect("search card text");
+    assert_eq!(full_text_card_id, "card-1");
+    assert!(connection
+        .execute(
+            "UPDATE decks SET archived = 2 WHERE id = ?1",
+            params!["deck-1"],
+        )
+        .is_err());
+    assert!(connection
+        .execute(
+            "UPDATE cards SET state = 'unknown' WHERE id = ?1",
+            params!["card-1"],
+        )
+        .is_err());
+    assert!(connection
+        .execute(
+            "UPDATE card_sources SET page = 0 WHERE card_id = ?1",
+            params!["card-1"],
+        )
+        .is_err());
+    assert!(connection
+        .execute(
+            "UPDATE review_logs SET rating = 'unknown' WHERE id = ?1",
+            params!["review-1"],
+        )
+        .is_err());
+    assert!(connection
+        .execute(
+            "INSERT INTO cards (
+               id, deck_id, front, back, state, due_at, created_at, updated_at
+             ) VALUES (?1, 'missing-deck', 'front', 'back', 'new', ?2, ?2, ?2)",
+            params!["invalid-card", timestamp],
+        )
+        .is_err());
+
+    connection
+        .execute("DELETE FROM cards WHERE id = ?1", params!["card-1"])
+        .expect("delete card");
+    for table in ["card_sources", "review_logs", "card_tags"] {
+        let count = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |row| {
+                row.get::<_, i64>(0)
+            })
+            .expect("count cascaded rows");
+        assert_eq!(count, 0, "{table} rows should cascade with the card");
+    }
+}
+
+#[test]
+fn opening_a_pre_learning_database_preserves_existing_documents() {
+    let directory = tempdir().expect("create temporary directory");
+    let database_path = directory.path().join("library.sqlite3");
+    let connection = Connection::open(&database_path).expect("open legacy database");
+    connection
+        .execute_batch(
+            "CREATE TABLE schema_migrations (id TEXT PRIMARY KEY NOT NULL);
+             INSERT INTO schema_migrations (id)
+             VALUES ('0001_library'), ('0002_index_claims'), ('0003_drive_source');",
+        )
+        .expect("record legacy migrations");
+    connection
+        .execute_batch(include_str!("../migrations/0001_library.sql"))
+        .expect("create legacy library schema");
+    connection
+        .execute_batch(include_str!("../migrations/0002_index_claims.sql"))
+        .expect("apply legacy index claim migration");
+    connection
+        .execute_batch(include_str!("../migrations/0003_drive_source.sql"))
+        .expect("apply legacy drive migration");
+    connection
+        .execute(
+            "INSERT INTO documents (
+               id, source, content_hash, title, managed_path, status, index_state, created_at, updated_at
+             ) VALUES (?1, 'local_managed', ?2, ?3, ?4, 'ready', 'ready', ?5, ?5)",
+            params![
+                "legacy-document",
+                "legacy-content",
+                "Legacy document",
+                "/managed/legacy.pdf",
+                "2026-07-10T00:00:00Z",
+            ],
+        )
+        .expect("insert legacy document");
+    drop(connection);
+
+    let database = LibraryDatabase::open(directory.path()).expect("upgrade legacy database");
+    let documents = database.list().expect("list preserved documents");
+
+    assert_eq!(documents.len(), 1);
+    assert_eq!(documents[0].id, "legacy-document");
 }
 
 #[test]

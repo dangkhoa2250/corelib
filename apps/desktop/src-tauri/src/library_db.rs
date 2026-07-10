@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use crate::model::DocumentSummary;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATIONS: [(&str, &str); 3] = [
+const MIGRATIONS: [(&str, &str); 4] = [
     (
         "0001_library",
         include_str!("../migrations/0001_library.sql"),
@@ -22,6 +22,10 @@ const MIGRATIONS: [(&str, &str); 3] = [
     (
         "0003_drive_source",
         include_str!("../migrations/0003_drive_source.sql"),
+    ),
+    (
+        "0004_learning",
+        include_str!("../migrations/0004_learning.sql"),
     ),
 ];
 const SUMMARY_COLUMNS: &str =
@@ -89,6 +93,7 @@ impl LibraryDatabase {
 
         let mut connection = Connection::open(database_path(app_data_directory))?;
         connection.busy_timeout(Duration::from_secs(5))?;
+        connection.execute_batch("PRAGMA foreign_keys = ON;")?;
         let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
         transaction.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY NOT NULL);",
