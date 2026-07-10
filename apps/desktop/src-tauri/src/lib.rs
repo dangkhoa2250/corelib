@@ -61,6 +61,7 @@ pub fn run() {
             commands::list_decks,
             commands::create_deck,
             commands::list_due_cards,
+            commands::get_card,
             commands::preview_card_review,
             commands::rate_card,
             commands::get_card_source,

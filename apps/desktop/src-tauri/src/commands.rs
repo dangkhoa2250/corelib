@@ -633,6 +633,14 @@ pub fn list_due_cards(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+pub fn get_card(id: String, state: State<'_, LibraryStore>) -> Result<LearningCardSummary, String> {
+    learning_lock(&state)?
+        .card_by_id(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "card not found".to_owned())
+}
+
 fn parse_now(value: &str) -> Result<DateTime<Utc>, String> {
     DateTime::parse_from_rfc3339(value)
         .map(|v| v.with_timezone(&Utc))

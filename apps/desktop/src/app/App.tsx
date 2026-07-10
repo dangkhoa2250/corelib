@@ -5,12 +5,12 @@ import type { LibraryDocument } from "../domain/document";
 import {
   importLocalDocuments,
   listDocuments,
-  searchDocuments,
   DriveEntry,
   listDrive,
   connectDrive,
   importDrive,
   clearDriveCache,
+  getDocument as nativeGetDocument,
   getDocumentFileUrl as nativeGetDocumentFileUrl,
   saveReadPage as nativeSaveReadPage,
   deleteDocument as nativeDeleteDocument,
@@ -19,15 +19,17 @@ import { LibraryPage } from "../features/library/LibraryPage";
 import { ReaderPage } from "../features/reader/ReaderPage";
 import { CommandPalette } from "../features/search/CommandPalette";
 import { DrivePicker } from "../features/drive/DrivePicker";
+import { ReviewPage } from "../features/review/ReviewPage";
 import { CardComposer, type CardSaveInput } from "../features/cards/CardComposer";
-import { createCard as nativeCreateCard, listDecks as nativeListDecks } from "../lib/learning";
-import type { CardSource, Deck, LearningCard } from "../domain/learning";
+import { createCard as nativeCreateCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource } from "../lib/learning";
+import type { CardSource, Deck, LearningCard, ReviewPreview, ReviewRating } from "../domain/learning";
+import type { SearchResult } from "../lib/learning";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
   pick: () => Promise<string[] | null>;
   importDocuments: (paths: string[]) => Promise<LibraryDocument[]>;
-  search?: (query: string) => Promise<LibraryDocument[]>;
+  search?: (query: string) => Promise<SearchResult[]>;
   getDocumentFileUrl?: (id: string) => Promise<string>;
   saveReadPage?: (id: string, page: number) => Promise<LibraryDocument>;
   deleteDocument?: (id: string) => Promise<void>;
@@ -35,6 +37,7 @@ export interface LibraryApi {
   listDrive?: (folderId?: string) => Promise<DriveEntry[]>;
   importDrive?: (ids: string[]) => Promise<LibraryDocument[]>;
   clearDriveCache?: () => Promise<void>;
+  getDocument?: (id: string) => Promise<LibraryDocument>;
 }
 
 async function pickLocalPdfs(): Promise<string[] | null> {
@@ -55,7 +58,7 @@ const nativeLibraryApi: LibraryApi = {
   list: listDocuments,
   pick: pickLocalPdfs,
   importDocuments: importLocalDocuments,
-  search: searchDocuments,
+  search: nativeSearchEverything,
   getDocumentFileUrl: nativeGetDocumentFileUrl,
   saveReadPage: nativeSaveReadPage,
   deleteDocument: nativeDeleteDocument,
@@ -63,6 +66,7 @@ const nativeLibraryApi: LibraryApi = {
   listDrive,
   importDrive,
   clearDriveCache,
+  getDocument: nativeGetDocument,
 };
 
 function errorMessage(error: unknown): string {
@@ -170,33 +174,68 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     }
     setComposerError(null);
     setRoute({ name: "composer", document: readerDocument, source });
-    void learningApi.listDecks()
+    void learning.listDecks()
       .then((decks) => setComposerDecks(decks))
       .catch((loadError) => setComposerError(errorMessage(loadError)));
-  }, [documents, learningApi]);
+  }, [documents, learning]);
 
   const handleSaveCard = useCallback(async (input: CardSaveInput) => {
-    await learningApi.createCard(input);
+    await learning.createCard(input);
     const sourceDocument = documents?.find((candidate) => candidate.id === input.source.documentId);
     if (!sourceDocument) {
       throw new Error("This source document is no longer available.");
     }
     const readerDocument = { ...sourceDocument, lastReadPage: input.source.page };
     setRoute({ name: "reader", document: readerDocument });
-  }, [documents, learningApi]);
+  }, [documents, learning]);
 
   const search = useCallback(
     async (query: string) => {
-      const currentRequestId = ++requestId.current;
-      const results = await (libraryApi.search ?? searchDocuments)(query);
-      if (currentRequestId === requestId.current) {
-        setDocuments((current) => mergeDocuments(current, results));
-        setLoading(false);
-      }
-      return results;
+      return (libraryApi.search ?? nativeSearchEverything)(query);
     },
     [libraryApi],
   );
+
+  const handleOpenSearchResult = useCallback(async (result: SearchResult) => {
+    if ("source" in (result as object)) {
+      handleOpen(result as unknown as LibraryDocument);
+      return;
+    }
+    if (result.kind === "card") {
+      try {
+        const card = await learning.getCard(result.id);
+        const preview = await learning.previewCardReview(card.id);
+        setRoute({ name: "review", cards: [card], previews: { [card.id]: preview } });
+      } catch (openError) { setError(errorMessage(openError)); }
+      return;
+    }
+    try {
+      const document = documents?.find((candidate) => candidate.id === result.id)
+        ?? await (libraryApi.getDocument ?? nativeGetDocument)(result.id);
+      setDocuments((current) => mergeDocuments(current, [document]));
+      handleOpen(document);
+    } catch (openError) { setError(errorMessage(openError)); }
+  }, [documents, handleOpen, learning, libraryApi]);
+
+  const handleReviewToday = useCallback(async () => {
+    try {
+      const cards = await learning.listDueCards();
+      const pairs = await Promise.all(cards.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
+      setRoute({ name: "review", cards, previews: Object.fromEntries(pairs) });
+    } catch (reviewError) { setError(errorMessage(reviewError)); }
+  }, [learning]);
+
+  const handleRate = useCallback(async (card: LearningCard, rating: ReviewRating, elapsedMs: number) => {
+    await learning.rateCard(card.id, rating, elapsedMs);
+  }, [learning]);
+
+  const handleShowSource = useCallback(async (card: LearningCard) => {
+    const source = card.source ?? await learning.getCardSource(card.id);
+    if (!source?.documentId) { setError("Source is unavailable."); return; }
+    const document = documents?.find((candidate) => candidate.id === source.documentId)
+      ?? await (libraryApi.getDocument ?? nativeGetDocument)(source.documentId);
+    setRoute({ name: "reader", document: { ...document, lastReadPage: source.page } });
+  }, [documents, learning, libraryApi]);
 
   const loadDriveFolder = useCallback(async (folderId?: string) => {
     const list = libraryApi.listDrive ?? listDrive;
@@ -290,7 +329,11 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     } catch (_) {}
   }, [libraryApi]);
 
-  const palette = <CommandPalette search={search} onOpen={handleOpen} />;
+  const palette = <CommandPalette search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
+
+  if (route.name === "review") {
+    return <><ReviewPage cards={route.cards} previews={route.previews} onRate={handleRate} onShowSource={(card) => void handleShowSource(card)} />{palette}</>;
+  }
 
   if (route.name === "reader") {
     return (
@@ -334,6 +377,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
           }
         }}
         onImport={() => void handleImport()}
+        onReviewToday={() => void handleReviewToday()}
         onOpenDrive={() => void handleOpenDrive()}
         onClearCache={() => void handleClearCache()}
         onDelete={(id) => void handleDelete(id)}
