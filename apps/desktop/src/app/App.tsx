@@ -263,6 +263,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
       throw new Error(errorMessage(sourceError));
     }
     setRoute({ name: "reader", document: { ...document, lastReadPage: source.page } });
+    return true;
   }, [documents, learning, libraryApi]);
 
   const loadDriveFolder = useCallback(async (folderId?: string) => {

@@ -65,6 +65,14 @@ test("shows resolver failures when the source is not hydrated", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("source lookup failed");
 });
 
+test("does not report an error when a resolver hydrates the source", async () => {
+  const user = userEvent.setup();
+  const unavailable = { ...card, source: null };
+  render(<ReviewPage cards={[unavailable]} previews={{ [card.id]: preview }} onRate={vi.fn()} onShowSource={vi.fn().mockResolvedValue(true)} />);
+  await user.click(screen.getByRole("button", { name: /Show source/i }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+});
+
 test("keeps review open when opening a source fails", async () => {
   const user = userEvent.setup();
   render(<ReviewPage cards={[card]} previews={{ [card.id]: preview }} onRate={vi.fn()} onShowSource={vi.fn().mockRejectedValue(new Error("document missing"))} />);

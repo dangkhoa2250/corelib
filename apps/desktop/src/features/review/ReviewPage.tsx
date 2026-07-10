@@ -5,7 +5,7 @@ export interface ReviewPageProps {
   cards: LearningCard[];
   previews: Record<string, ReviewPreview>;
   onRate: (card: LearningCard, rating: ReviewRating, elapsedMs: number) => Promise<void>;
-  onShowSource: (card: LearningCard) => void | Promise<void>;
+  onShowSource: (card: LearningCard) => boolean | void | Promise<boolean | void>;
   onBack?: () => void;
 }
 
@@ -45,8 +45,8 @@ export function ReviewPage({ cards, previews, onRate, onShowSource, onBack }: Re
         {!revealed ? <button type="button" onClick={() => setRevealed(true)}>Show answer</button> : null}
         <button type="button" onClick={async () => {
           try {
-            await onShowSource(card);
-            if (!card.source?.documentId) setError("Source is unavailable.");
+            const resolved = await onShowSource(card);
+            if (!card.source?.documentId && resolved !== true) setError("Source is unavailable.");
           } catch (sourceError) { setError(errorMessage(sourceError)); }
         }}>Show source</button>
         {error ? <div role="alert">{error}</div> : null}
