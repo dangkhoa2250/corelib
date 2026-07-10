@@ -14,6 +14,10 @@ export function clampZoomScale(scale: number) {
   return Math.min(Math.max(scale, MIN_ZOOM_SCALE), MAX_ZOOM_SCALE);
 }
 
+export function getCenteredPageOffset(viewportWidth: number, contentWidth: number) {
+  return Math.max(0, (viewportWidth - contentWidth) / 2);
+}
+
 export function getZoomAnchorScrollPosition({
   scrollLeft,
   scrollTop,
@@ -335,6 +339,7 @@ const PdfPage = React.memo(
       <div
         ref={containerRef}
         id={`pdf-page-${pageNumber}`}
+        className="reader-pdf-page"
         style={{
           width: `${defaultWidth}px`,
           height: `${defaultHeight}px`,
@@ -526,11 +531,35 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
     }
     if (scalingDivRef.current) {
       scalingDivRef.current.style.transform = `scale(${scale})`;
+      const viewportWidth = pagesContainerRef.current?.clientWidth ?? 0;
+      scalingDivRef.current.style.left = `${getCenteredPageOffset(viewportWidth, baseWidth * scale)}px`;
     }
     if (zoomLabelRef.current) {
       zoomLabelRef.current.textContent = `${Math.round(scale * 100)}%`;
     }
   }, [defaultSize, pdfDoc]);
+
+  useEffect(() => {
+    const container = pagesContainerRef.current;
+    if (!container) return;
+
+    const updatePageStackPosition = () => {
+      if (!scalingDivRef.current) return;
+      const baseWidth = defaultSize.width + 48;
+      const contentWidth = baseWidth * scaleRef.current;
+      scalingDivRef.current.style.left = `${getCenteredPageOffset(container.clientWidth, contentWidth)}px`;
+    };
+
+    updatePageStackPosition();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(updatePageStackPosition) : null;
+    observer?.observe(container);
+    window.addEventListener("resize", updatePageStackPosition);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", updatePageStackPosition);
+    };
+  }, [defaultSize]);
 
   // Debounce renderScale: only re-render canvases after zoom gesture ends
   const scheduleRenderScaleSync = useCallback((newScale: number) => {
@@ -732,33 +761,19 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
         }}
       >
         {/* Tab switcher */}
-        <div style={{ display: "flex", borderBottom: "1px solid #e5e5ea" }}>
+        <div className="reader-sidebar__tabs">
           <button
             type="button"
-            style={{
-              flex: 1,
-              padding: "12px",
-              border: "none",
-              background: sidebarTab === "pages" ? "#ffffff" : "transparent",
-              fontWeight: sidebarTab === "pages" ? "650" : "normal",
-              cursor: "pointer",
-            }}
+            className={`reader-sidebar__tab ${sidebarTab === "pages" ? "is-active" : ""}`}
             onClick={() => setSidebarTab("pages")}
           >
             Pages
           </button>
           {outline && (
             <button
-              type="button"
-              style={{
-                flex: 1,
-                padding: "12px",
-                border: "none",
-                background: sidebarTab === "outline" ? "#ffffff" : "transparent",
-                fontWeight: sidebarTab === "outline" ? "650" : "normal",
-                cursor: "pointer",
-              }}
-              onClick={() => setSidebarTab("outline")}
+            type="button"
+            className={`reader-sidebar__tab ${sidebarTab === "outline" ? "is-active" : ""}`}
+            onClick={() => setSidebarTab("outline")}
             >
               Outline
             </button>
@@ -766,7 +781,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
         </div>
 
         {/* Content */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "12px" }}>
+        <div className="reader-sidebar__content">
           {sidebarTab === "pages" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {pagesArray.map((pageNumber) => (
@@ -804,35 +819,50 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
             padding: "0 20px",
           }}
         >
-          <button type="button" onClick={onBack}>
-            Back to Library
+          <button
+            type="button"
+            className="reader-icon-button reader-icon-button--back"
+            aria-label="Back to Library"
+            title="Back to Library"
+            onClick={onBack}
+          >
+            ‹
           </button>
 
-          <h1 style={{ margin: 0, fontSize: "16px", fontWeight: "650" }}>{document.title}</h1>
+          <h1 className="reader-toolbar__title">{document.title}</h1>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div className="reader-toolbar__group reader-toolbar__group--page">
             <button
               type="button"
+              className="reader-icon-button"
+              aria-label="Previous page"
+              title="Previous page"
               disabled={currentPage <= 1}
               onClick={() => handlePageSelect(currentPage - 1)}
             >
-              Previous
+              ‹
             </button>
-            <span style={{ fontSize: "14px" }}>
+            <span className="reader-page-indicator">
               Page {currentPage} of {pdfDoc?.numPages}
             </span>
             <button
               type="button"
+              className="reader-icon-button"
+              aria-label="Next page"
+              title="Next page"
               disabled={currentPage >= (pdfDoc?.numPages ?? 1)}
               onClick={() => handlePageSelect(currentPage + 1)}
             >
-              Next
+              ›
             </button>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <div className="reader-toolbar__group">
             <button
               type="button"
+              className="reader-icon-button"
+              aria-label="Zoom out"
+              title="Zoom out"
               onClick={() => {
                 const container = pagesContainerRef.current;
                 if (!container) return;
@@ -843,13 +873,16 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
                 );
               }}
             >
-              Zoom -
+              −
             </button>
-            <span ref={zoomLabelRef} style={{ fontSize: "14px", minWidth: "48px", textAlign: "center" }}>
+            <span ref={zoomLabelRef} className="reader-zoom-label">
               100%
             </span>
             <button
               type="button"
+              className="reader-icon-button"
+              aria-label="Zoom in"
+              title="Zoom in"
               onClick={() => {
                 const container = pagesContainerRef.current;
                 if (!container) return;
@@ -860,34 +893,35 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
                 );
               }}
             >
-              Zoom +
+              +
             </button>
           </div>
 
           {/* Search box */}
-          <form onSubmit={(e) => void handleSearch(e)} style={{ display: "flex", gap: "6px" }}>
+          <form className="reader-search" onSubmit={(e) => void handleSearch(e)}>
             <input
               type="search"
+              className="reader-search__input"
               placeholder="Search in PDF..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                padding: "4px 8px",
-                borderRadius: "4px",
-                border: "1px solid #d1d1d6",
-              }}
             />
             {searchResults.length > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ fontSize: "12px" }}>
+              <div className="reader-search__results">
+                <span>
                   {searchIndex + 1}/{searchResults.length}
                 </span>
-                <button type="button" onClick={handleNextSearchResult}>
+                <button
+                  type="button"
+                  className="reader-icon-button"
+                  aria-label="Next search match"
+                  onClick={handleNextSearchResult}
+                >
                   Next Match
                 </button>
               </div>
             )}
-            {searching && <span style={{ fontSize: "12px" }}>Searching...</span>}
+            {searching && <span className="reader-search__results">Searching...</span>}
           </form>
         </header>
 
@@ -903,6 +937,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
         >
           <div
             ref={zoomLayoutRef}
+            className="reader-page-stack"
             style={{
               width: `${(defaultSize.width + 48) * scaleRef.current}px`,
               height: `${((pdfDoc?.numPages ?? 0) * (defaultSize.height + 20) + 48) * scaleRef.current}px`,
@@ -911,6 +946,7 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange 
           >
             <div
             ref={scalingDivRef}
+            className="reader-page-column"
             style={{
               width: `${defaultSize.width + 48}px`,
               height: `${(pdfDoc?.numPages ?? 0) * (defaultSize.height + 20) + 48}px`,
