@@ -17,10 +17,12 @@ import {
 } from "../lib/desktop";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { ReaderPage } from "../features/reader/ReaderPage";
-import { CommandPalette } from "../features/search/CommandPalette";
+import { CommandPalette, type CommandPaletteHandle } from "../features/search/CommandPalette";
 import { DrivePicker } from "../features/drive/DrivePicker";
 import { ReviewPage } from "../features/review/ReviewPage";
 import { CardComposer, type CardSaveInput } from "../features/cards/CardComposer";
+import { MemoraPage } from "../features/memora/MemoraPage";
+import { AppSidebar, type AppSection } from "./AppSidebar";
 import { createCard as nativeCreateCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource } from "../lib/learning";
 import type { CardSource, Deck, LearningCard, ReviewPreview, ReviewRating } from "../domain/learning";
 import type { SearchResult } from "../lib/learning";
@@ -99,6 +101,7 @@ interface AppProps {
 
 type AppRoute =
   | { name: "library" }
+  | { name: "memora" }
   | { name: "reader"; document: LibraryDocument }
   | { name: "composer"; document: LibraryDocument; source: CardSource }
   | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> };
@@ -133,6 +136,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
   const [driveFolderStack, setDriveFolderStack] = useState<string[]>([]);
   const [driveCurrentFolderId, setDriveCurrentFolderId] = useState<string | undefined>();
   const requestId = useRef(0);
+  const paletteRef = useRef<CommandPaletteHandle>(null);
 
   const load = useCallback(async () => {
     const currentRequestId = ++requestId.current;
@@ -355,7 +359,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     } catch (_) {}
   }, [libraryApi]);
 
-  const palette = <CommandPalette search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
+  const palette = <CommandPalette ref={paletteRef} search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
 
   if (route.name === "review") {
     return <><ReviewPage cards={route.cards} previews={route.previews} onRate={handleRate} onShowSource={handleShowSource} onBack={() => setRoute({ name: "library" })} />{palette}</>;
@@ -390,44 +394,63 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     );
   }
 
+  const activeSection: AppSection = route.name === "memora" ? "memora" : "library";
+
   return (
-    <>
-      <LibraryPage
-        documents={documents ?? []}
-        onOpen={(id) => {
-          const document = documents?.find((candidate) => candidate.id === id);
-          if (document) {
-            handleOpen(document);
-          } else {
-            setError("This document is no longer available.");
-          }
-        }}
-        onImport={() => void handleImport()}
-        onReviewToday={() => void handleReviewToday()}
-        onOpenDrive={() => void handleOpenDrive()}
-        onClearCache={() => void handleClearCache()}
-        onDelete={(id) => void handleDelete(id)}
-        getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
+    <div className="app-shell">
+      <AppSidebar
+        active={activeSection}
+        onNavigate={(section) => setRoute(section === "memora" ? { name: "memora" } : { name: "library" })}
+        onSearchClick={() => paletteRef.current?.open()}
       />
-      {drivePickerOpen && (
-        <DrivePicker
-          entries={driveEntries}
-          parentId={driveFolderStack.length > 0 ? driveFolderStack[driveFolderStack.length - 1] : undefined}
-          onNavigateFolder={handleNavigateDrive}
-          onAdd={handleAddDriveDocuments}
-          onClose={() => setDrivePickerOpen(false)}
-        />
-      )}
+      <div className="app-shell__content">
+        {route.name === "memora" ? (
+          <MemoraPage
+            listDecks={learning.listDecks}
+            listDueCards={() => learning.listDueCards()}
+            onReviewToday={() => void handleReviewToday()}
+          />
+        ) : (
+          <>
+            <LibraryPage
+              documents={documents ?? []}
+              onOpen={(id) => {
+                const document = documents?.find((candidate) => candidate.id === id);
+                if (document) {
+                  handleOpen(document);
+                } else {
+                  setError("This document is no longer available.");
+                }
+              }}
+              onImport={() => void handleImport()}
+              onReviewToday={() => void handleReviewToday()}
+              onOpenDrive={() => void handleOpenDrive()}
+              onClearCache={() => void handleClearCache()}
+              onDelete={(id) => void handleDelete(id)}
+              getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
+            />
+            {loading ? <p role="status" aria-label="Loading library">Loading library…</p> : null}
+            {error ? (
+              <div role="alert">
+                <p>{error}</p>
+                <button type="button" onClick={() => void load()}>
+                  Retry
+                </button>
+              </div>
+            ) : null}
+          </>
+        )}
+        {drivePickerOpen && (
+          <DrivePicker
+            entries={driveEntries}
+            parentId={driveFolderStack.length > 0 ? driveFolderStack[driveFolderStack.length - 1] : undefined}
+            onNavigateFolder={handleNavigateDrive}
+            onAdd={handleAddDriveDocuments}
+            onClose={() => setDrivePickerOpen(false)}
+          />
+        )}
+      </div>
       {palette}
-      {loading ? <p role="status" aria-label="Loading library">Loading library…</p> : null}
-      {error ? (
-        <div role="alert">
-          <p>{error}</p>
-          <button type="button" onClick={() => void load()}>
-            Retry
-          </button>
-        </div>
-      ) : null}
-    </>
+    </div>
   );
 }

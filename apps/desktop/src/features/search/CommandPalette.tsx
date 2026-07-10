@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 
 import type { SearchResult } from "../../lib/learning";
 
@@ -7,13 +7,17 @@ interface CommandPaletteProps {
   onOpen: (result: SearchResult) => void;
 }
 
+export interface CommandPaletteHandle {
+  open: () => void;
+}
+
 const SEARCH_DEBOUNCE_MS = 150;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
+export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(function CommandPalette({ search, onOpen }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -35,19 +39,25 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
     setIsOpen(false);
   }, []);
 
+  const open = useCallback(() => {
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    setIsOpen(true);
+  }, []);
+
+  useImperativeHandle(ref, () => ({ open }), [open]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
-        previousFocusRef.current = document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null;
-        setIsOpen(true);
+        open();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [open]);
 
   useEffect(() => {
     if (isOpen) {
@@ -194,4 +204,4 @@ export function CommandPalette({ search, onOpen }: CommandPaletteProps) {
       </section>
     </div>
   );
-}
+});

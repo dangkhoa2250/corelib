@@ -464,3 +464,49 @@ test("hydrates a missing card source without showing a false unavailable alert",
   expect(await screen.findByRole("heading", { name: "Linear Algebra" })).toBeInTheDocument();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
+
+test("navigates between Library and Memora via the sidebar", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
+        createCard: vi.fn(),
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  expect(await screen.findByRole("heading", { level: 1, name: "Memora" })).toBeInTheDocument();
+  expect(await screen.findByText("English")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Library" }));
+  expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+});
+
+test("opens the search palette from the sidebar search field", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
+  expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  expect(screen.getByRole("searchbox", { name: "Search your library" })).toHaveFocus();
+});
