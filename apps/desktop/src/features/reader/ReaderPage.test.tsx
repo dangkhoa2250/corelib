@@ -135,6 +135,10 @@ it("renders PDF document and sidebar thumbnails", async () => {
   expect(screen.getByRole("button", { name: "Go to page 1" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Go to page 2" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Go to page 3" })).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(globalThis.document.querySelector(".textLayer")).toHaveStyle({ "--scale-factor": "1.5" });
+  });
 });
 
 it("exposes a Preview-style reader layout and labeled controls", async () => {

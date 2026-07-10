@@ -215,6 +215,11 @@ const PdfPage = React.memo(
           const annotationLayerContainer = annotationLayerRef.current;
           if (!canvas || !textLayerContainer || !annotationLayerContainer) return;
 
+          // pdf.js positions text spans using --scale-factor. Keep it in sync
+          // with the viewport scale so selection geometry matches the canvas.
+          textLayerContainer.style.setProperty("--scale-factor", String(renderScale));
+          annotationLayerContainer.style.setProperty("--scale-factor", String(renderScale));
+
           const context = canvas.getContext("2d");
           if (!context) return;
 
