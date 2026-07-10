@@ -9,9 +9,14 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const MIN_ZOOM_SCALE = 0.5;
 const MAX_ZOOM_SCALE = 3;
+const MAX_CANVAS_PIXEL_RATIO = 1.5;
 
 export function clampZoomScale(scale: number) {
   return Math.min(Math.max(scale, MIN_ZOOM_SCALE), MAX_ZOOM_SCALE);
+}
+
+export function getCanvasPixelRatio(devicePixelRatio: number) {
+  return Math.min(Math.max(devicePixelRatio, 1), MAX_CANVAS_PIXEL_RATIO);
 }
 
 export function getCenteredPageOffset(viewportWidth: number, contentWidth: number) {
@@ -87,7 +92,7 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active }: ThumbnailPagePro
         if (!canvas) return;
         const context = canvas.getContext("2d");
         if (!context) return;
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1);
         canvas.width = viewport.width * dpr;
         canvas.height = viewport.height * dpr;
         canvas.style.width = `${viewport.width}px`;
@@ -189,7 +194,7 @@ const PdfPage = React.memo(
         },
         {
           root: pagesContainerRef?.current || null,
-          rootMargin: "600px",
+          rootMargin: "360px",
         }
       );
       observer.observe(container);
@@ -223,7 +228,7 @@ const PdfPage = React.memo(
           const context = canvas.getContext("2d");
           if (!context) return;
 
-          const dpr = window.devicePixelRatio || 1;
+          const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1);
           canvas.width = viewport.width * dpr;
           canvas.height = viewport.height * dpr;
           canvas.style.width = `${viewport.width}px`;
@@ -482,7 +487,7 @@ interface ReaderPageProps {
 export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange }: ReaderPageProps) {
   const [pdfDoc, setPdfDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(document.lastReadPage ?? 1);
-  const [renderScale, setRenderScale] = useState(1.5);
+  const [renderScale, setRenderScale] = useState(1);
   const [loadingDoc, setLoadingDoc] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [defaultSize, setDefaultSize] = useState<{ width: number; height: number }>({ width: 600, height: 800 });

@@ -2,7 +2,13 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi, beforeAll } from "vitest";
 
 import type { LibraryDocument } from "../../domain/document";
-import { clampZoomScale, ReaderPage, getCenteredPageOffset, getZoomAnchorScrollPosition } from "./ReaderPage";
+import {
+  clampZoomScale,
+  ReaderPage,
+  getCanvasPixelRatio,
+  getCenteredPageOffset,
+  getZoomAnchorScrollPosition,
+} from "./ReaderPage";
 
 beforeAll(() => {
   HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
@@ -102,6 +108,12 @@ it("clamps zoom scales to the supported range", () => {
   expect(clampZoomScale(0.1)).toBe(0.5);
 });
 
+it("caps canvas raster density to avoid unnecessary Retina over-rendering", () => {
+  expect(getCanvasPixelRatio(1)).toBe(1);
+  expect(getCanvasPixelRatio(2)).toBe(1.5);
+  expect(getCanvasPixelRatio(3)).toBe(1.5);
+});
+
 it("centers the scaled page stack when it is narrower than the reader viewport", () => {
   expect(getCenteredPageOffset(1200, 600)).toBe(300);
   expect(getCenteredPageOffset(600, 1200)).toBe(0);
@@ -137,7 +149,7 @@ it("renders PDF document and sidebar thumbnails", async () => {
   expect(screen.getByRole("button", { name: "Go to page 3" })).toBeInTheDocument();
 
   await waitFor(() => {
-    expect(globalThis.document.querySelector(".textLayer")).toHaveStyle({ "--scale-factor": "1.5" });
+    expect(globalThis.document.querySelector(".textLayer")).toHaveStyle({ "--scale-factor": "1" });
   });
 });
 
