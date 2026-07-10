@@ -5,7 +5,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::{params, Connection, OptionalExtension, Row};
+use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 
 use crate::model::DocumentSummary;
 
@@ -67,11 +67,11 @@ impl LibraryDatabase {
         fs::create_dir_all(app_data_directory)?;
 
         let mut connection = Connection::open(database_path(app_data_directory))?;
-        connection.execute_batch(
+        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        transaction.execute_batch(
             "CREATE TABLE IF NOT EXISTS schema_migrations (id TEXT PRIMARY KEY NOT NULL);",
         )?;
-
-        let migration_is_applied = connection
+        let migration_is_applied = transaction
             .query_row(
                 "SELECT 1 FROM schema_migrations WHERE id = ?1",
                 params![MIGRATION_ID],
@@ -79,16 +79,14 @@ impl LibraryDatabase {
             )
             .optional()?
             .is_some();
-
         if !migration_is_applied {
-            let transaction = connection.transaction()?;
             transaction.execute_batch(MIGRATION)?;
             transaction.execute(
                 "INSERT INTO schema_migrations (id) VALUES (?1)",
                 params![MIGRATION_ID],
             )?;
-            transaction.commit()?;
         }
+        transaction.commit()?;
 
         Ok(Self { connection })
     }
@@ -104,22 +102,50 @@ impl LibraryDatabase {
     }
 
     pub fn insert_local(&mut self, document: NewLocalDocument) -> Result<DocumentSummary> {
-        let timestamp = portable_timestamp();
-        self.connection.execute(
-            "INSERT OR IGNORE INTO documents (
-                id, source, content_hash, title, managed_path, status, index_state, created_at, updated_at
-             ) VALUES (?1, 'local_managed', ?2, ?3, ?4, 'ready', 'pending', ?5, ?5)",
-            params![
-                document.id,
-                document.content_hash,
-                document.title,
-                document.managed_path,
-                timestamp,
-            ],
-        )?;
-
-        self.summary_by_content_hash(&document.content_hash)?
+        self.insert_local_batch(vec![document])?
+            .into_iter()
+            .next()
             .ok_or(LibraryDbError::DocumentNotFound)
+    }
+
+    pub fn insert_local_batch(
+        &mut self,
+        documents: Vec<NewLocalDocument>,
+    ) -> Result<Vec<DocumentSummary>> {
+        let transaction = self.connection.transaction()?;
+        let timestamp = portable_timestamp();
+        let mut summaries = Vec::with_capacity(documents.len());
+
+        for document in documents {
+            transaction.execute(
+                "INSERT OR IGNORE INTO documents (
+                    id, source, content_hash, title, managed_path, status, index_state, created_at, updated_at
+                 ) VALUES (?1, 'local_managed', ?2, ?3, ?4, 'ready', 'pending', ?5, ?5)",
+                params![
+                    document.id,
+                    document.content_hash,
+                    document.title,
+                    document.managed_path,
+                    timestamp,
+                ],
+            )?;
+
+            let summary = transaction
+                .query_row(
+                    &format!(
+                        "SELECT {SUMMARY_COLUMNS} FROM documents
+                         WHERE source = 'local_managed' AND content_hash = ?1"
+                    ),
+                    params![document.content_hash],
+                    summary_from_row,
+                )
+                .optional()?
+                .ok_or(LibraryDbError::DocumentNotFound)?;
+            summaries.push(summary);
+        }
+
+        transaction.commit()?;
+        Ok(summaries)
     }
 
     pub fn search(&self, query: &str) -> Result<Vec<DocumentSummary>> {
@@ -165,6 +191,18 @@ impl LibraryDatabase {
             .ok_or(LibraryDbError::DocumentNotFound)
     }
 
+    #[cfg(test)]
+    pub(crate) fn install_insert_failure_for_test(&mut self) -> Result<()> {
+        self.connection.execute_batch(
+            "CREATE TRIGGER fail_local_document_insert_for_test
+             BEFORE INSERT ON documents
+             BEGIN
+               SELECT RAISE(FAIL, 'test insert failure');
+             END;",
+        )?;
+        Ok(())
+    }
+
     fn metadata_matches(&self, query: &str) -> Result<Vec<DocumentSummary>> {
         let pattern = format!("%{}%", escape_like(query));
         let mut statement = self.connection.prepare(&format!(
@@ -188,16 +226,6 @@ impl LibraryDatabase {
             .query_map(params![query], |row| row.get(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         Ok(ids)
-    }
-
-    fn summary_by_content_hash(&self, content_hash: &str) -> Result<Option<DocumentSummary>> {
-        let mut statement = self.connection.prepare(&format!(
-            "SELECT {SUMMARY_COLUMNS} FROM documents
-             WHERE source = 'local_managed' AND content_hash = ?1"
-        ))?;
-        Ok(statement
-            .query_row(params![content_hash], summary_from_row)
-            .optional()?)
     }
 
     fn summary_by_id(&self, id: &str) -> Result<Option<DocumentSummary>> {

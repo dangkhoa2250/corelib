@@ -1,4 +1,5 @@
 use std::{
+    fs,
     path::{Path, PathBuf},
     sync::Mutex,
 };
@@ -8,7 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     library_db::{LibraryDatabase, NewLocalDocument},
-    library_store::{content_hash, import_pdf},
+    library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
     model::DocumentSummary,
 };
 
@@ -25,6 +26,15 @@ impl LibraryStore {
             database: Mutex::new(database),
             library_root: app_data_directory,
         })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn install_insert_failure_for_test(&self) -> Result<(), String> {
+        self.database
+            .lock()
+            .map_err(|_| "library database is unavailable".to_owned())?
+            .install_insert_failure_for_test()
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -43,16 +53,48 @@ pub fn import_local_documents(
     paths: Vec<String>,
     state: State<'_, LibraryStore>,
 ) -> Result<Vec<DocumentSummary>, String> {
-    validate_import_paths(&paths)?;
+    let documents = prepare_local_documents(&paths)?;
 
     let mut database = state
         .database
         .lock()
         .map_err(|_| "library database is unavailable".to_owned())?;
-    paths
+    let mut created_paths = Vec::new();
+    let imported_documents = documents
         .iter()
-        .map(|path| import_local_document(path, &state.library_root, &mut database))
-        .collect()
+        .map(|document| {
+            let imported = import_pdf_with_status(
+                &state.library_root,
+                &document.source_path,
+                &document.content_hash,
+            )
+            .map_err(|_| "unable to import PDF".to_owned())?;
+            if imported.created {
+                created_paths.push(imported.managed_path.clone());
+            }
+            Ok(NewLocalDocument {
+                id: document.id.clone(),
+                title: document.title.clone(),
+                content_hash: document.content_hash.clone(),
+                managed_path: imported.managed_path,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>();
+
+    let imported_documents = match imported_documents {
+        Ok(documents) => documents,
+        Err(error) => {
+            remove_new_managed_files(&created_paths);
+            return Err(error);
+        }
+    };
+
+    database
+        .insert_local_batch(imported_documents)
+        .map_err(|error| {
+            remove_new_managed_files(&created_paths);
+            error.to_string()
+        })
 }
 
 #[tauri::command]
@@ -110,28 +152,41 @@ pub fn validate_read_page(page: i64) -> Result<(), String> {
     Ok(())
 }
 
-fn import_local_document(
-    source: &str,
-    library_root: &Path,
-    database: &mut LibraryDatabase,
-) -> Result<DocumentSummary, String> {
-    let source_path = Path::new(source);
-    let content_hash = content_hash(source_path).map_err(|_| "unable to import PDF".to_owned())?;
-    let managed_path = import_pdf(library_root, source_path, &content_hash)
-        .map_err(|_| "unable to import PDF".to_owned())?;
-    let title = source_path
-        .file_stem()
-        .and_then(|title| title.to_str())
-        .filter(|title| !title.trim().is_empty())
-        .ok_or_else(|| "PDF file name is invalid".to_owned())?
-        .to_owned();
+struct PreparedLocalDocument {
+    source_path: PathBuf,
+    id: String,
+    title: String,
+    content_hash: String,
+}
 
-    database
-        .insert_local(NewLocalDocument {
-            id: Uuid::new_v4().to_string(),
-            title,
-            content_hash,
-            managed_path,
+fn prepare_local_documents(paths: &[String]) -> Result<Vec<PreparedLocalDocument>, String> {
+    validate_import_paths(paths)?;
+
+    paths
+        .iter()
+        .map(|source| {
+            let source_path = PathBuf::from(source);
+            let title = source_path
+                .file_stem()
+                .and_then(|title| title.to_str())
+                .filter(|title| !title.trim().is_empty())
+                .ok_or_else(|| "PDF file name is invalid".to_owned())?
+                .to_owned();
+            validate_pdf_input(&source_path).map_err(|_| "unable to import PDF".to_owned())?;
+            let content_hash =
+                content_hash(&source_path).map_err(|_| "unable to import PDF".to_owned())?;
+            Ok(PreparedLocalDocument {
+                source_path,
+                id: Uuid::new_v4().to_string(),
+                title,
+                content_hash,
+            })
         })
-        .map_err(|error| error.to_string())
+        .collect()
+}
+
+fn remove_new_managed_files(paths: &[String]) {
+    for path in paths {
+        let _ = fs::remove_file(path);
+    }
 }
