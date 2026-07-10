@@ -7,6 +7,9 @@ use tempfile::tempdir;
 
 use crate::library_store::{content_hash, import_pdf, import_pdf_with_status_and_copier};
 
+#[cfg(windows)]
+use crate::library_store::open_pdf_input_after_metadata_for_test;
+
 #[test]
 fn importing_the_same_pdf_twice_reuses_the_managed_file() {
     let temporary_directory = tempdir().expect("create temporary directory");
@@ -93,6 +96,42 @@ fn failed_managed_copy_removes_the_partial_file_and_temp_artifact() {
             .count(),
         0,
         "failed copies must not leave temp artifacts"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn safe_open_rejects_a_path_replaced_with_a_symlink_after_metadata_validation() {
+    use std::os::windows::fs::symlink_file;
+
+    let temporary_directory = tempdir().expect("create temporary directory");
+    let source_path = temporary_directory.path().join("source.pdf");
+    let replacement_path = temporary_directory.path().join("replacement.pdf");
+    fs::write(&source_path, b"%PDF-1.4\noriginal\n").expect("write original PDF");
+    fs::write(&replacement_path, b"%PDF-1.4\nreplacement\n").expect("write replacement PDF");
+
+    let mut symlink_creation_error = None;
+    let result = open_pdf_input_after_metadata_for_test(&source_path, || {
+        fs::remove_file(&source_path).expect("remove validated source pathname");
+        match symlink_file(&replacement_path, &source_path) {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                symlink_creation_error = Some(error);
+                Ok(())
+            }
+        }
+    });
+
+    if let Some(error) = symlink_creation_error {
+        if error.kind() == io::ErrorKind::PermissionDenied {
+            return;
+        }
+        panic!("create replacement symlink: {error}");
+    }
+
+    assert!(
+        result.is_err(),
+        "safe open must not follow the replacement symlink"
     );
 }
 

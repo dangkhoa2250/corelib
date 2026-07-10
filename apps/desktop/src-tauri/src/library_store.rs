@@ -7,6 +7,16 @@ use std::{
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+#[cfg(windows)]
+// Win32 `FILE_FLAG_OPEN_REPARSE_POINT` from
+// https://learn.microsoft.com/windows/win32/fileio/file-attribute-constants
+const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+
+#[cfg(windows)]
+// Win32 `FILE_ATTRIBUTE_REPARSE_POINT` from
+// https://learn.microsoft.com/windows/win32/fileio/file-attribute-constants
+const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x0000_0400;
+
 pub struct ImportedPdf {
     pub managed_path: String,
     pub created: bool,
@@ -102,6 +112,11 @@ where
 }
 
 fn open_pdf_input(path: &Path) -> io::Result<File> {
+    validate_pdf_path(path)?;
+    open_pdf_input_after_metadata(path)
+}
+
+fn validate_pdf_path(path: &Path) -> io::Result<()> {
     let metadata = fs::symlink_metadata(path)?;
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         return Err(io::Error::new(
@@ -110,6 +125,23 @@ fn open_pdf_input(path: &Path) -> io::Result<File> {
         ));
     }
 
+    Ok(())
+}
+
+#[cfg(all(test, windows))]
+pub(crate) fn open_pdf_input_after_metadata_for_test<F>(
+    path: &Path,
+    after_metadata: F,
+) -> io::Result<File>
+where
+    F: FnOnce() -> io::Result<()>,
+{
+    validate_pdf_path(path)?;
+    after_metadata()?;
+    open_pdf_input_after_metadata(path)
+}
+
+fn open_pdf_input_after_metadata(path: &Path) -> io::Result<File> {
     let mut options = OpenOptions::new();
     options.read(true);
     #[cfg(unix)]
@@ -118,8 +150,26 @@ fn open_pdf_input(path: &Path) -> io::Result<File> {
 
         options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
     let mut source = options.open(path)?;
-    if !source.metadata()?.is_file() {
+    let source_metadata = source.metadata()?;
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+
+        if source_metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "PDF input must be a regular file",
+            ));
+        }
+    }
+    if !source_metadata.is_file() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "PDF input must be a regular file",
