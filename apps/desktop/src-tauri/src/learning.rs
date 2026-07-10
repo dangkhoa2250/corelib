@@ -34,6 +34,67 @@ pub struct AppliedReview {
     pub memory_state_json: Option<String>,
 }
 
+impl LibraryDatabase {
+    pub fn list_decks(&self) -> Result<Vec<crate::model::DeckSummary>> {
+        let mut stmt = self.connection.prepare("SELECT id,name,description,color,archived FROM decks ORDER BY archived ASC, name COLLATE NOCASE ASC, id ASC")?;
+        let rows = stmt.query_map([], |r| {
+            Ok(crate::model::DeckSummary {
+                id: r.get(0)?,
+                name: r.get(1)?,
+                description: r.get(2)?,
+                color: r.get(3)?,
+                archived: r.get::<_, i64>(4)? != 0,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    pub fn create_deck(&mut self, name: &str) -> Result<crate::model::DeckSummary> {
+        let name = norm(name, "deck name is required")?;
+        let now = learning_timestamp();
+        let id = Uuid::new_v4().to_string();
+        self.connection
+            .execute(
+                "INSERT INTO decks(id,name,created_at,updated_at) VALUES(?1,?2,?3,?3)",
+                params![id, name, now],
+            )
+            .map_err(|e| {
+                if matches!(e, rusqlite::Error::SqliteFailure(_, _)) {
+                    invalid("deck already exists")
+                } else {
+                    e.into()
+                }
+            })?;
+        self.connection
+            .query_row(
+                "SELECT id,name,description,color,archived FROM decks WHERE id=?1",
+                params![id],
+                |r| {
+                    Ok(crate::model::DeckSummary {
+                        id: r.get(0)?,
+                        name: r.get(1)?,
+                        description: r.get(2)?,
+                        color: r.get(3)?,
+                        archived: r.get::<_, i64>(4)? != 0,
+                    })
+                },
+            )
+            .map_err(Into::into)
+    }
+
+    pub fn card_memory_state(&self, id: &str) -> Result<Option<String>> {
+        self.connection
+            .query_row(
+                "SELECT memory_state_json FROM cards WHERE id=?1",
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+}
+
 fn invalid(message: &str) -> LibraryDbError {
     LibraryDbError::InvalidLearning(message.to_string())
 }

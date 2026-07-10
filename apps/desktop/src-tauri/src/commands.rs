@@ -9,14 +9,23 @@ use std::{
     thread,
 };
 
+use chrono::{DateTime, Utc};
+use serde::Deserialize;
+
 use tauri::State;
 use uuid::Uuid;
 
 use crate::{
     indexer::index_managed_pdf,
+    learning::{AppliedReview, NewCard, NewCardSource},
     library_db::{LibraryDatabase, NewLocalDocument},
     library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
     model::DocumentSummary,
+    model::{
+        CardSourcePayload, DeckSummary, LearningCardSummary, ReviewIntervalPayload,
+        ReviewPreviewPayload, SearchResultPayload, SelectionRect,
+    },
+    scheduler::{Rating, ReviewScheduler, ScheduledState},
 };
 
 pub type IndexTask = Box<dyn FnOnce() + Send + 'static>;
@@ -532,4 +541,267 @@ pub fn delete_document(id: String, state: State<'_, LibraryStore>) -> Result<(),
         let _ = std::fs::remove_file(path);
     }
     Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardSourceInput {
+    pub document_id: Option<String>,
+    pub page: i64,
+    pub quote: String,
+    pub rects: Vec<SelectionRect>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateCardInput {
+    pub deck_name: String,
+    pub front: String,
+    pub back: String,
+    pub source: Option<CardSourceInput>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+fn learning_lock(
+    store: &LibraryStore,
+) -> Result<std::sync::MutexGuard<'_, crate::library_db::LibraryDatabase>, String> {
+    store
+        .database
+        .lock()
+        .map_err(|_| "library database is unavailable".to_owned())
+}
+
+#[tauri::command]
+pub fn create_card(
+    input: CreateCardInput,
+    state: State<'_, LibraryStore>,
+) -> Result<LearningCardSummary, String> {
+    let source = input
+        .source
+        .map(|s| -> Result<NewCardSource, String> {
+            let document_id = s
+                .document_id
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "source document is required".to_owned())?;
+            let rects_json = serde_json::to_string(&s.rects)
+                .map_err(|_| "source rects are invalid".to_owned())?;
+            Ok(NewCardSource {
+                document_id,
+                page: s.page,
+                quote: s.quote,
+                rects_json,
+            })
+        })
+        .transpose()?;
+    learning_lock(&state)?
+        .create_card(NewCard {
+            deck_name: input.deck_name,
+            front: input.front,
+            back: input.back,
+            source,
+            tags: input.tags,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_decks(state: State<'_, LibraryStore>) -> Result<Vec<DeckSummary>, String> {
+    learning_lock(&state)?
+        .list_decks()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_deck(name: String, state: State<'_, LibraryStore>) -> Result<DeckSummary, String> {
+    learning_lock(&state)?
+        .create_deck(&name)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_due_cards(
+    limit: Option<usize>,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<LearningCardSummary>, String> {
+    let limit = limit.unwrap_or(20).min(100);
+    learning_lock(&state)?
+        .due_cards(
+            &Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            limit,
+        )
+        .map_err(|e| e.to_string())
+}
+
+fn parse_now(value: &str) -> Result<DateTime<Utc>, String> {
+    DateTime::parse_from_rfc3339(value)
+        .map(|v| v.with_timezone(&Utc))
+        .map_err(|_| "invalid learning timestamp".to_owned())
+}
+
+fn elapsed_days(last: Option<&str>, now: DateTime<Utc>) -> Result<u32, String> {
+    let Some(last) = last else { return Ok(0) };
+    let then = parse_now(last)?;
+    Ok((now.signed_duration_since(then).num_seconds().max(0) as f64 / 86_400.0).floor() as u32)
+}
+
+fn interval_label(seconds: i64) -> String {
+    if seconds < 3600 {
+        format!("{}m", (seconds.max(60) + 59) / 60)
+    } else if seconds < 86_400 {
+        format!("{}h", (seconds + 3599) / 3600)
+    } else {
+        format!("{}d", (seconds + 43_199) / 86_400)
+    }
+}
+
+fn preview_payload(state: &ScheduledState) -> ReviewIntervalPayload {
+    ReviewIntervalPayload {
+        due_at: state.due_at.clone(),
+        interval_label: interval_label(state.interval_seconds),
+    }
+}
+
+#[tauri::command]
+pub fn preview_card_review(
+    id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<ReviewPreviewPayload, String> {
+    let db = learning_lock(&state)?;
+    let card = db
+        .card_by_id(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "card not found".to_owned())?;
+    let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
+    let preview = ReviewScheduler::default()
+        .preview(
+            memory.as_deref(),
+            elapsed_days(card.last_review_at.as_deref(), Utc::now())?,
+            Utc::now(),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(ReviewPreviewPayload {
+        again: preview_payload(&preview.again),
+        hard: preview_payload(&preview.hard),
+        good: preview_payload(&preview.good),
+        easy: preview_payload(&preview.easy),
+    })
+}
+
+#[tauri::command]
+pub fn rate_card(
+    id: String,
+    rating: Rating,
+    elapsed_ms: i64,
+    state: State<'_, LibraryStore>,
+) -> Result<LearningCardSummary, String> {
+    if elapsed_ms < 0 {
+        return Err("elapsedMs must be nonnegative".to_owned());
+    }
+    let mut db = learning_lock(&state)?;
+    let card = db
+        .card_by_id(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "card not found".to_owned())?;
+    let now = Utc::now();
+    let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
+    let next = ReviewScheduler::default()
+        .apply(
+            memory.as_deref(),
+            elapsed_days(card.last_review_at.as_deref(), now)?,
+            rating,
+            now,
+        )
+        .map_err(|e| e.to_string())?;
+    db.apply_review_atomic(AppliedReview {
+        card_id: id,
+        rating: serde_json::to_string(&rating)
+            .unwrap()
+            .trim_matches('"')
+            .to_owned(),
+        prior_state: card.state,
+        next_state: next.state,
+        prior_due_at: card.due_at,
+        next_due_at: next.due_at,
+        interval_seconds: next.interval_seconds,
+        elapsed_ms,
+        stability: next.stability.map(f64::from),
+        difficulty: next.difficulty.map(f64::from),
+        memory_state_json: Some(next.memory_state_json),
+    })
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_card_source(
+    id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<Option<CardSourcePayload>, String> {
+    learning_lock(&state)?
+        .card_source(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_document(id: String, state: State<'_, LibraryStore>) -> Result<DocumentSummary, String> {
+    learning_lock(&state)?
+        .get_document(&id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "document not found".to_owned())
+}
+
+#[tauri::command]
+pub fn search_everything(
+    query: String,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<SearchResultPayload>, String> {
+    let db = learning_lock(&state)?;
+    let mut output = db
+        .search(&query)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|d| SearchResultPayload {
+            kind: "document".into(),
+            id: d.id,
+            title: d.title,
+            subtitle: d.author,
+        })
+        .collect::<Vec<_>>();
+    output.extend(db.learning_search(&query, 30).map_err(|e| e.to_string())?);
+    output.sort_by(|a, b| {
+        a.kind
+            .cmp(&b.kind)
+            .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    output.truncate(30);
+    Ok(output)
+}
+
+#[cfg(test)]
+mod learning_command_tests {
+    use super::{elapsed_days, interval_label, parse_now};
+    use chrono::TimeZone;
+
+    #[test]
+    fn elapsed_days_is_nonnegative_and_whole_days() {
+        let now = chrono::Utc.with_ymd_and_hms(2026, 7, 10, 0, 0, 0).unwrap();
+        assert_eq!(elapsed_days(None, now).unwrap(), 0);
+        assert_eq!(
+            elapsed_days(Some("2026-07-08T12:00:00.000Z"), now).unwrap(),
+            1
+        );
+        assert_eq!(
+            elapsed_days(Some("2026-07-11T00:00:00.000Z"), now).unwrap(),
+            0
+        );
+        assert!(parse_now("bad").is_err());
+    }
+
+    #[test]
+    fn interval_labels_are_compact_and_readable() {
+        assert_eq!(interval_label(60), "1m");
+        assert_eq!(interval_label(3600), "1h");
+        assert_eq!(interval_label(86_400), "1d");
+    }
 }

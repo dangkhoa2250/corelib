@@ -136,6 +136,10 @@ impl LibraryDatabase {
         Ok(summaries)
     }
 
+    pub fn get_document(&self, id: &str) -> Result<Option<DocumentSummary>> {
+        self.summary_by_id(id).map_err(Into::into)
+    }
+
     pub fn insert_local(&mut self, document: NewLocalDocument) -> Result<DocumentSummary> {
         self.insert_local_batch(vec![document])?
             .into_iter()
