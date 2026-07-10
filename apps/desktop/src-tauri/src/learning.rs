@@ -72,10 +72,19 @@ impl LibraryDatabase {
             if source.quote.trim().is_empty() {
                 return Err(invalid("source quote is required"));
             }
-            let rects: serde_json::Value = serde_json::from_str(&source.rects_json)
-                .map_err(|_| invalid("source rects must be valid JSON"))?;
-            if !rects.is_array() {
-                return Err(invalid("source rects must be an array"));
+            let rects: Vec<SelectionRect> = serde_json::from_str(&source.rects_json)
+                .map_err(|_| invalid("source rects must be an array of rectangles"))?;
+            if rects.iter().any(|rect| {
+                !rect.x.is_finite()
+                    || !rect.y.is_finite()
+                    || !rect.width.is_finite()
+                    || !rect.height.is_finite()
+                    || rect.width < 0.0
+                    || rect.height < 0.0
+            }) {
+                return Err(invalid(
+                    "source rect dimensions must be finite and nonnegative",
+                ));
             }
         }
         let tx = self.connection.transaction()?;
@@ -144,9 +153,10 @@ impl LibraryDatabase {
         if limit == 0 {
             return Ok(Vec::new());
         }
+        let limit = i64::try_from(limit).map_err(|_| invalid("due card limit is too large"))?;
         let mut stmt = self.connection.prepare("SELECT id FROM cards WHERE state IN ('new','learning','review','relearning') AND due_at <= ?1 ORDER BY due_at,id LIMIT ?2")?;
         let ids = stmt
-            .query_map(params![now, limit.min(500)], |r| r.get::<_, String>(0))?
+            .query_map(params![now, limit], |r| r.get::<_, String>(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         ids.into_iter()
             .map(|id| self.card_by_id(&id).map(|x| x.expect("card selected")))
@@ -210,26 +220,34 @@ impl LibraryDatabase {
     }
 
     pub fn apply_review_atomic(&mut self, review: AppliedReview) -> Result<LearningCardSummary> {
-        if !matches!(review.rating.as_str(), "again" | "hard" | "good" | "easy")
+        let rating = review.rating.trim();
+        let prior_state = review.prior_state.trim();
+        let next_state = review.next_state.trim();
+        let prior_due_at = review.prior_due_at.trim();
+        let next_due_at = review.next_due_at.trim();
+        if !matches!(rating, "again" | "hard" | "good" | "easy")
             || !matches!(
-                review.prior_state.as_str(),
+                prior_state,
                 "new" | "learning" | "review" | "relearning" | "suspended"
             )
-            || review.next_state.trim().is_empty()
+            || !matches!(
+                next_state,
+                "new" | "learning" | "review" | "relearning" | "suspended"
+            )
             || review.interval_seconds < 0
             || review.elapsed_ms < 0
-            || review.prior_due_at.is_empty()
-            || review.next_due_at.is_empty()
+            || prior_due_at.is_empty()
+            || next_due_at.is_empty()
         {
             return Err(invalid("invalid review"));
         }
         let tx = self.connection.transaction()?;
         let reviewed_at = portable_timestamp();
-        let changed = tx.execute("UPDATE cards SET state=?1,due_at=?2,stability=?3,difficulty=?4,memory_state_json=?5,reps=reps+1,lapses=lapses+CASE WHEN ?6='again' THEN 1 ELSE 0 END,last_review_at=?7,updated_at=?7 WHERE id=?8 AND state=?9 AND due_at=?10", params![review.next_state,review.next_due_at,review.stability,review.difficulty,review.memory_state_json,review.rating,reviewed_at,review.card_id,review.prior_state,review.prior_due_at])?;
+        let changed = tx.execute("UPDATE cards SET state=?1,due_at=?2,stability=?3,difficulty=?4,memory_state_json=?5,reps=reps+1,lapses=lapses+CASE WHEN ?6='again' THEN 1 ELSE 0 END,last_review_at=?7,updated_at=?7 WHERE id=?8 AND state=?9 AND due_at=?10", params![next_state,next_due_at,review.stability,review.difficulty,review.memory_state_json,rating,reviewed_at,review.card_id,prior_state,prior_due_at])?;
         if changed != 1 {
             return Err(invalid("card review precondition failed"));
         }
-        tx.execute("INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'fsrs-6')", params![Uuid::new_v4().to_string(),review.card_id,reviewed_at,review.rating,review.prior_state,review.next_state,review.prior_due_at,review.next_due_at,review.interval_seconds,review.elapsed_ms])?;
+        tx.execute("INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'fsrs-6')", params![Uuid::new_v4().to_string(),review.card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,review.interval_seconds,review.elapsed_ms])?;
         tx.commit()?;
         self.card_by_id(&review.card_id)?
             .ok_or(LibraryDbError::DocumentNotFound)

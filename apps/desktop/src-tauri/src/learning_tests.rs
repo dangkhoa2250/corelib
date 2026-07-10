@@ -71,6 +71,24 @@ fn rejects_missing_or_invalid_source() {
 }
 
 #[test]
+fn rejects_malformed_rects_before_writing_any_learning_rows() {
+    let (_dir, mut db) = db();
+    let mut malformed = card("front");
+    malformed.source.as_mut().unwrap().rects_json = "[1]".into();
+    assert!(db.create_card(malformed).is_err());
+    let count: i64 = db
+        .connection
+        .query_row("SELECT (SELECT COUNT(*) FROM decks) + (SELECT COUNT(*) FROM cards) + (SELECT COUNT(*) FROM tags) + (SELECT COUNT(*) FROM card_text)", [], |row| row.get(0))
+        .expect("count learning rows");
+    assert_eq!(count, 0);
+
+    let mut negative = card("front");
+    negative.source.as_mut().unwrap().rects_json =
+        r#"[{"x":0,"y":0,"width":-1,"height":2}]"#.into();
+    assert!(db.create_card(negative).is_err());
+}
+
+#[test]
 fn due_cards_order_and_filter_state() {
     let (_dir, mut db) = db();
     let first = db.create_card(card("first")).expect("first");
@@ -81,6 +99,25 @@ fn due_cards_order_and_filter_state() {
     assert_eq!(
         due.iter().map(|c| c.id.clone()).collect::<Vec<_>>(),
         expected
+    );
+}
+
+#[test]
+fn due_cards_honors_limits_above_five_hundred() {
+    let (_dir, mut db) = db();
+    for index in 0..501 {
+        db.create_card(NewCard {
+            deck_name: "Bulk".into(),
+            front: format!("front-{index}"),
+            back: "answer".into(),
+            source: None,
+            tags: Vec::new(),
+        })
+        .expect("create bulk card");
+    }
+    assert_eq!(
+        db.due_cards("9999999999", 501).expect("due cards").len(),
+        501
     );
 }
 
@@ -155,4 +192,24 @@ fn review_log_failure_rolls_back_card_update() {
     let unchanged = db.card_by_id(&created.id).expect("read").unwrap();
     assert_eq!(unchanged.state, "new");
     assert_eq!(unchanged.reps, 0);
+}
+
+#[test]
+fn rejects_invalid_review_state_and_empty_timestamps() {
+    let (_dir, mut db) = db();
+    let created = db.create_card(card("invalid review")).expect("create");
+    let invalid = AppliedReview {
+        card_id: created.id,
+        rating: "good".into(),
+        prior_state: "new".into(),
+        next_state: "bogus".into(),
+        prior_due_at: " ".into(),
+        next_due_at: "9999999999".into(),
+        interval_seconds: 1,
+        elapsed_ms: 1,
+        stability: None,
+        difficulty: None,
+        memory_state_json: None,
+    };
+    assert!(db.apply_review_atomic(invalid).is_err());
 }
