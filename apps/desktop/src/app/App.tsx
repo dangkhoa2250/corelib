@@ -14,6 +14,7 @@ import {
   getDocumentFileUrl as nativeGetDocumentFileUrl,
   saveReadPage as nativeSaveReadPage,
   deleteDocument as nativeDeleteDocument,
+  renameDocument as nativeRenameDocument,
 } from "../lib/desktop";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { ReaderPage } from "../features/reader/ReaderPage";
@@ -33,6 +34,7 @@ export interface LibraryApi {
   getDocumentFileUrl?: (id: string) => Promise<string>;
   saveReadPage?: (id: string, page: number) => Promise<LibraryDocument>;
   deleteDocument?: (id: string) => Promise<void>;
+  renameDocument?: (id: string, title: string) => Promise<LibraryDocument>;
   connectDrive?: () => Promise<void>;
   listDrive?: (folderId?: string) => Promise<DriveEntry[]>;
   importDrive?: (ids: string[]) => Promise<LibraryDocument[]>;
@@ -62,6 +64,7 @@ const nativeLibraryApi: LibraryApi = {
   getDocumentFileUrl: nativeGetDocumentFileUrl,
   saveReadPage: nativeSaveReadPage,
   deleteDocument: nativeDeleteDocument,
+  renameDocument: nativeRenameDocument,
   connectDrive,
   listDrive,
   importDrive,
@@ -251,7 +254,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
 
   const handleShowSource = useCallback(async (card: LearningCard) => {
     const source = card.source ?? await learning.getCardSource(card.id);
-    if (!source?.documentId) { setError("Source is unavailable."); return; }
+    if (!source?.documentId) throw new Error("Source is unavailable.");
     let document: LibraryDocument;
     try {
       document = documents?.find((candidate) => candidate.id === source.documentId)
@@ -345,6 +348,16 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     }
   }, [libraryApi, load]);
 
+  const handleRename = useCallback(async (id: string, newTitle: string) => {
+    setError(null);
+    try {
+      await (libraryApi.renameDocument ?? nativeRenameDocument)(id, newTitle);
+      await load();
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }, [libraryApi, load]);
+
   const handlePageChange = useCallback(async (id: string, page: number) => {
     try {
       const updated = await (libraryApi.saveReadPage ?? nativeSaveReadPage)(id, page);
@@ -406,6 +419,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
         onOpenDrive={() => void handleOpenDrive()}
         onClearCache={() => void handleClearCache()}
         onDelete={(id) => void handleDelete(id)}
+        onRename={(id, newTitle) => void handleRename(id, newTitle)}
         getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
       />
       {drivePickerOpen && (

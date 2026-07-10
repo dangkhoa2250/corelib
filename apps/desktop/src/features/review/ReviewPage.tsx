@@ -44,8 +44,10 @@ export function ReviewPage({ cards, previews, onRate, onShowSource, onBack }: Re
         <p aria-live="polite">Elapsed {Math.floor(elapsed / 1000)}s</p>
         {!revealed ? <button type="button" onClick={() => setRevealed(true)}>Show answer</button> : null}
         <button type="button" onClick={async () => {
-          if (!card.source?.documentId) { setError("Source is unavailable."); return; }
-          try { await onShowSource(card); } catch (sourceError) { setError(errorMessage(sourceError)); }
+          try {
+            await onShowSource(card);
+            if (!card.source?.documentId) setError("Source is unavailable.");
+          } catch (sourceError) { setError(errorMessage(sourceError)); }
         }}>Show source</button>
         {error ? <div role="alert">{error}</div> : null}
         {revealed ? <div role="group" aria-label="Rate card">
