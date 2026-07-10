@@ -110,8 +110,8 @@ it("clamps zoom scales to the supported range", () => {
 
 it("caps canvas raster density to avoid unnecessary Retina over-rendering", () => {
   expect(getCanvasPixelRatio(1)).toBe(1);
-  expect(getCanvasPixelRatio(2)).toBe(1.5);
-  expect(getCanvasPixelRatio(3)).toBe(1.5);
+  expect(getCanvasPixelRatio(2)).toBe(2);
+  expect(getCanvasPixelRatio(3)).toBe(3);
 });
 
 it("centers the scaled page stack when it is narrower than the reader viewport", () => {

@@ -12,7 +12,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const MIN_ZOOM_SCALE = 0.5;
 const MAX_ZOOM_SCALE = 3;
-const MAX_CANVAS_PIXEL_RATIO = 1.5;
+const MAX_CANVAS_PIXEL_RATIO = 3.0;
 
 export function clampZoomScale(scale: number) {
   return Math.min(Math.max(scale, MIN_ZOOM_SCALE), MAX_ZOOM_SCALE);
@@ -412,7 +412,7 @@ const PdfPage = React.memo(
             display: isVisible ? "block" : "none",
           }}
         >
-          <canvas ref={canvasRef} />
+          <canvas ref={canvasRef} style={{ background: "#ffffff" }} />
           <div
             ref={textLayerRef}
             className="textLayer"
