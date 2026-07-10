@@ -1,7 +1,11 @@
 use std::{
     fs,
     path::Path,
-    sync::{mpsc, Arc},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        mpsc, Arc,
+    },
+    time::Duration,
 };
 
 #[cfg(target_os = "macos")]
@@ -162,6 +166,65 @@ fn a_rejected_index_schedule_leaves_the_document_durably_pending() {
             .expect("claim pending index")
             .is_some(),
         "a full queue must release its claim so startup or a later schedule can retry"
+    );
+}
+
+#[test]
+fn completed_workers_drain_overflowed_pending_indexes_without_another_import_or_restart() {
+    let directory = tempdir().expect("create temporary directory");
+    let library_root = directory.path().join("library");
+    let (sender, tasks) = mpsc::sync_channel(INDEX_QUEUE_CAPACITY);
+    let scheduled = Arc::new(AtomicUsize::new(0));
+    let scheduled_by_scheduler = Arc::clone(&scheduled);
+    let app = tauri::test::mock_builder()
+        .manage(
+            LibraryStore::open_with_scheduler(
+                library_root,
+                Arc::new(move |task: IndexTask| match sender.try_send(task) {
+                    Ok(()) => {
+                        scheduled_by_scheduler.fetch_add(1, Ordering::SeqCst);
+                        true
+                    }
+                    Err(_) => false,
+                }),
+            )
+            .expect("open library"),
+        )
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("build test application");
+    let sources = (0..INDEX_QUEUE_CAPACITY + 2)
+        .map(|index| {
+            let path = directory.path().join(format!("overflow-{index}.pdf"));
+            fs::write(&path, format!("%PDF-1.4\nmalformed-{index}\n"))
+                .expect("write valid PDF header");
+            path.to_string_lossy().into_owned()
+        })
+        .collect();
+
+    let imported = import_local_documents(sources, app.state()).expect("import documents");
+
+    assert_eq!(
+        scheduled.load(Ordering::SeqCst),
+        INDEX_QUEUE_CAPACITY,
+        "only the bounded queue capacity is scheduled initially"
+    );
+
+    for _ in 0..imported.len() {
+        tasks
+            .recv_timeout(Duration::from_secs(1))
+            .expect("each completed worker should schedule the next pending document")();
+    }
+
+    assert!(
+        tasks.try_recv().is_err(),
+        "all work should complete exactly once without a busy retry loop"
+    );
+    assert!(
+        crate::commands::list_documents(app.state())
+            .expect("list documents")
+            .iter()
+            .all(|document| document.status == "ready"),
+        "every overflowed document should finish after worker completions"
     );
 }
 

@@ -71,10 +71,62 @@ impl IndexWorkerPool {
     }
 }
 
+struct IndexCoordinator {
+    database: Arc<Mutex<LibraryDatabase>>,
+    schedule_index: IndexScheduler,
+}
+
+impl IndexCoordinator {
+    fn schedule_managed_pdf_index(self: &Arc<Self>, id: String) {
+        let claimed = self
+            .database
+            .lock()
+            .ok()
+            .and_then(|mut database| database.claim_pending_index(&id).ok().flatten());
+        let Some(record) = claimed else {
+            return;
+        };
+        let Some(managed_path) = record.managed_path else {
+            return;
+        };
+        let database = Arc::clone(&self.database);
+        let coordinator = Arc::clone(self);
+        let scheduled = (self.schedule_index)(Box::new(move || {
+            index_managed_pdf(&database, &id, Path::new(&managed_path));
+            coordinator.schedule_pending_indexes();
+        }));
+        if !scheduled {
+            let _ = self
+                .database
+                .lock()
+                .ok()
+                .and_then(|mut database| database.release_pending_index_claim(&record.id).ok());
+        }
+    }
+
+    fn schedule_pending_indexes(self: &Arc<Self>) {
+        let records = match self
+            .database
+            .lock()
+            .map_err(|_| "library database is unavailable".to_owned())
+            .and_then(|database| {
+                database
+                    .pending_indexing_records()
+                    .map_err(|error| error.to_string())
+            }) {
+            Ok(records) => records,
+            Err(_) => return,
+        };
+        for record in records {
+            self.schedule_managed_pdf_index(record.id);
+        }
+    }
+}
+
 pub struct LibraryStore {
     database: Arc<Mutex<LibraryDatabase>>,
     library_root: PathBuf,
-    schedule_index: IndexScheduler,
+    index_coordinator: Arc<IndexCoordinator>,
 }
 
 impl LibraryStore {
@@ -92,10 +144,15 @@ impl LibraryStore {
     ) -> Result<Self, String> {
         let database =
             LibraryDatabase::open(&app_data_directory).map_err(|error| error.to_string())?;
-        let store = Self {
-            database: Arc::new(Mutex::new(database)),
-            library_root: app_data_directory,
+        let database = Arc::new(Mutex::new(database));
+        let index_coordinator = Arc::new(IndexCoordinator {
+            database: Arc::clone(&database),
             schedule_index,
+        });
+        let store = Self {
+            database,
+            library_root: app_data_directory,
+            index_coordinator,
         };
         store.requeue_pending_indexes()?;
         Ok(store)
@@ -110,43 +167,8 @@ impl LibraryStore {
             .map_err(|error| error.to_string())
     }
 
-    fn schedule_managed_pdf_index(&self, id: String) {
-        let claimed = self
-            .database
-            .lock()
-            .ok()
-            .and_then(|mut database| database.claim_pending_index(&id).ok().flatten());
-        let Some(record) = claimed else {
-            return;
-        };
-        let Some(managed_path) = record.managed_path else {
-            return;
-        };
-        let database = Arc::clone(&self.database);
-        let scheduled = (self.schedule_index)(Box::new(move || {
-            index_managed_pdf(&database, &id, Path::new(&managed_path));
-        }));
-        if !scheduled {
-            let _ = self
-                .database
-                .lock()
-                .ok()
-                .and_then(|mut database| database.release_pending_index_claim(&record.id).ok());
-        }
-    }
-
     fn schedule_pending_indexes(&self) -> Result<(), String> {
-        let records = self
-            .database
-            .lock()
-            .map_err(|_| "library database is unavailable".to_owned())?
-            .pending_indexing_records()
-            .map_err(|error| error.to_string())?;
-        for record in records {
-            if record.managed_path.is_some() {
-                self.schedule_managed_pdf_index(record.id);
-            }
-        }
+        self.index_coordinator.schedule_pending_indexes();
         Ok(())
     }
 
