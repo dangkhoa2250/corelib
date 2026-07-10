@@ -132,6 +132,29 @@ it("renders PDF document and sidebar thumbnails", async () => {
   expect(screen.getByRole("button", { name: "Go to page 3" })).toBeInTheDocument();
 });
 
+it("exposes a Preview-style reader layout and labeled controls", async () => {
+  render(
+    <ReaderPage
+      document={document}
+      onBack={() => {}}
+      getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+      onPageChange={vi.fn().mockResolvedValue(undefined)}
+    />,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Linear Algebra" })).toBeInTheDocument();
+  });
+
+  expect(globalThis.document.querySelector(".reader-sidebar")).toBeInTheDocument();
+  expect(globalThis.document.querySelector(".reader-toolbar__title")).toBeInTheDocument();
+  expect(globalThis.document.querySelector(".reader-canvas-container")).toHaveClass("reader-canvas-container");
+  expect(globalThis.document.querySelector(".reader-page-stack")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Back to Library" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
+});
+
 it("calls onPageChange when page rendering succeeds", async () => {
   const getDocumentFileUrl = vi.fn().mockResolvedValue("/mocked/path.pdf");
   const onPageChange = vi.fn().mockResolvedValue(undefined);
