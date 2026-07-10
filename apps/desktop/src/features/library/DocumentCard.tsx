@@ -11,6 +11,9 @@ interface DocumentCardProps {
   document: LibraryDocument;
   onOpen: () => void;
   onDelete?: () => void;
+  onRename?: (newTitle: string) => void;
+  menuOpen?: boolean;
+  onMenuToggle?: (open: boolean) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
 }
 
@@ -62,8 +65,6 @@ function DynamicCover({
         const dpr = window.devicePixelRatio || 1;
         canvas.width = viewport.width * dpr;
         canvas.height = viewport.height * dpr;
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
         context.scale(dpr, dpr);
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
@@ -90,7 +91,15 @@ function DynamicCover({
   );
 }
 
-export function DocumentCard({ document, onOpen, onDelete, getDocumentFileUrl }: DocumentCardProps) {
+export function DocumentCard({
+  document,
+  onOpen,
+  onDelete,
+  onRename,
+  menuOpen = false,
+  onMenuToggle,
+  getDocumentFileUrl,
+}: DocumentCardProps) {
   const statusLabel = documentStatusLabel(document);
 
   return (
@@ -118,35 +127,116 @@ export function DocumentCard({ document, onOpen, onDelete, getDocumentFileUrl }:
           <span className="document-card__status">{statusLabel}</span>
         ) : null}
       </button>
-      {onDelete && (
-        <button
-          type="button"
-          aria-label={`Delete ${document.title}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          style={{
-            position: "absolute",
-            top: "8px",
-            right: "8px",
-            background: "rgba(255, 59, 48, 0.9)",
-            color: "white",
-            border: "none",
-            borderRadius: "50%",
-            width: "24px",
-            height: "24px",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "12px",
-            fontWeight: "bold",
-            zIndex: 10,
-          }}
-        >
-          ✕
-        </button>
+      {(onDelete || onRename) && (
+        <div style={{ position: "absolute", top: "8px", right: "8px", zIndex: 10 }}>
+          <button
+            type="button"
+            aria-label={`Actions for ${document.title}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMenuToggle?.(!menuOpen);
+            }}
+            style={{
+              background: "rgba(255, 255, 255, 0.9)",
+              border: "none",
+              borderRadius: "50%",
+              width: "28px",
+              height: "28px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+              color: "#55555a",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 1)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.9)")}
+          >
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
+              <circle cx="5" cy="10" r="2" />
+              <circle cx="10" cy="10" r="2" />
+              <circle cx="15" cy="10" r="2" />
+            </svg>
+          </button>
+          {menuOpen && (
+            <div
+              style={{
+                position: "absolute",
+                top: "36px",
+                right: "0",
+                background: "rgba(255, 255, 255, 0.95)",
+                border: "1px solid rgba(0, 0, 0, 0.12)",
+                borderRadius: "10px",
+                boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                backdropFilter: "blur(10px)",
+                padding: "4px",
+                minWidth: "120px",
+                zIndex: 100,
+                display: "flex",
+                flexDirection: "column",
+                gap: "2px",
+              }}
+            >
+              {onRename && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMenuToggle?.(false);
+                    const newTitle = window.prompt("Rename book:", document.title);
+                    if (newTitle && newTitle.trim()) {
+                      onRename(newTitle.trim());
+                    }
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "8px 12px",
+                    textAlign: "left",
+                    fontSize: "14px",
+                    color: "#1d1d1f",
+                    cursor: "pointer",
+                    width: "100%",
+                    fontWeight: 500,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e8f2ff")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  Rename
+                </button>
+              )}
+              {onDelete && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMenuToggle?.(false);
+                    if (window.confirm(`Are you sure you want to remove "${document.title}"?`)) {
+                      onDelete();
+                    }
+                  }}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "8px 12px",
+                    textAlign: "left",
+                    fontSize: "14px",
+                    color: "#ff3b30",
+                    cursor: "pointer",
+                    width: "100%",
+                    fontWeight: 500,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#ffebeb")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </article>
   );

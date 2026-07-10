@@ -89,8 +89,6 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active }: ThumbnailPagePro
         const dpr = window.devicePixelRatio || 1;
         canvas.width = viewport.width * dpr;
         canvas.height = viewport.height * dpr;
-        canvas.style.width = `${viewport.width}px`;
-        canvas.style.height = `${viewport.height}px`;
         context.scale(dpr, dpr);
         await page.render({ canvasContext: context, viewport }).promise;
         if (isCurrent) {

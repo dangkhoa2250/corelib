@@ -322,6 +322,19 @@ impl LibraryDatabase {
         Ok(managed_path)
     }
 
+    pub fn rename_document(&mut self, id: &str, title: &str) -> Result<DocumentSummary> {
+        let updated = self.connection.execute(
+            "UPDATE documents SET title = ?1, updated_at = ?2 WHERE id = ?3",
+            params![title, portable_timestamp(), id],
+        )?;
+        if updated == 0 {
+            return Err(LibraryDbError::DocumentNotFound);
+        }
+
+        self.summary_by_id(id)?
+            .ok_or(LibraryDbError::DocumentNotFound)
+    }
+
     pub fn reset_pending_index_claims(&mut self) -> Result<()> {
         self.connection.execute(
             "UPDATE documents SET index_claimed_at = NULL WHERE index_state = 'pending'",

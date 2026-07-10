@@ -67,6 +67,7 @@ pub fn run() {
             commands::get_card_source,
             commands::search_everything,
             commands::get_document,
+            commands::rename_document,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -86,3 +86,11 @@ export function deleteDocument(
 ): Promise<void> {
   return call<void>("delete_document", { id });
 }
+
+export function renameDocument(
+  id: string,
+  title: string,
+  call: Invoke = invoke as Invoke,
+): Promise<LibraryDocument> {
+  return call<LibraryDocument>("rename_document", { id, title });
+}

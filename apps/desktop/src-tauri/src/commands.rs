@@ -543,6 +543,20 @@ pub fn delete_document(id: String, state: State<'_, LibraryStore>) -> Result<(),
     Ok(())
 }
 
+#[tauri::command]
+pub fn rename_document(
+    id: String,
+    title: String,
+    state: State<'_, LibraryStore>,
+) -> Result<DocumentSummary, String> {
+    state
+        .database
+        .lock()
+        .map_err(|_| "database unavailable".to_owned())?
+        .rename_document(&id, &title)
+        .map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CardSourceInput {
