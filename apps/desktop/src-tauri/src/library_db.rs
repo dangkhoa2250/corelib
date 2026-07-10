@@ -43,6 +43,7 @@ pub enum LibraryDbError {
     Sql(rusqlite::Error),
     InvalidPage,
     DocumentNotFound,
+    InvalidLearning(String),
 }
 
 impl fmt::Display for LibraryDbError {
@@ -52,6 +53,7 @@ impl fmt::Display for LibraryDbError {
             Self::Sql(_) => formatter.write_str("unable to access the library database"),
             Self::InvalidPage => formatter.write_str("page must be positive"),
             Self::DocumentNotFound => formatter.write_str("document not found"),
+            Self::InvalidLearning(message) => formatter.write_str(message),
         }
     }
 }
@@ -71,7 +73,7 @@ impl From<rusqlite::Error> for LibraryDbError {
 }
 
 pub struct LibraryDatabase {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 pub struct NewLocalDocument {
@@ -464,7 +466,7 @@ fn database_path(app_data_directory: &Path) -> PathBuf {
     app_data_directory.join(DATABASE_FILE)
 }
 
-fn portable_timestamp() -> String {
+pub(crate) fn portable_timestamp() -> String {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

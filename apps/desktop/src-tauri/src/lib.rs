@@ -5,6 +5,7 @@ pub mod drive_api;
 pub mod drive_auth;
 pub mod drive_cache;
 pub mod indexer;
+pub mod learning;
 pub mod library_db;
 pub mod library_store;
 pub mod model;
@@ -24,6 +25,9 @@ mod library_db_tests;
 
 #[cfg(test)]
 mod library_store_tests;
+
+#[cfg(test)]
+mod learning_tests;
 
 #[cfg(test)]
 mod scheduler_tests;
