@@ -2,19 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
-import type { LibraryDocument } from "../../domain/document";
+import type { SearchResult } from "../../lib/learning";
 import { CommandPalette } from "./CommandPalette";
 
-const document: LibraryDocument = {
-  id: "linear-algebra",
-  title: "Linear Algebra",
-  author: "Gilbert Strang",
-  source: "local_managed",
-  coverUrl: null,
-  indexed: true,
-  status: "ready",
-  lastReadPage: null,
-};
+const document: SearchResult = { kind: "document", id: "linear-algebra", title: "Linear Algebra", subtitle: "Gilbert Strang" };
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -46,8 +37,8 @@ test("opens with Cmd+K, searches, and opens the selected result from the keyboar
 
 test("discards stale async search results", async () => {
   const user = userEvent.setup();
-  const first = deferred<LibraryDocument[]>();
-  const second = deferred<LibraryDocument[]>();
+  const first = deferred<SearchResult[]>();
+  const second = deferred<SearchResult[]>();
   const search = vi
     .fn()
     .mockReturnValueOnce(first.promise)
