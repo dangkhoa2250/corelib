@@ -137,7 +137,7 @@ impl LibraryDatabase {
     }
 
     pub fn get_document(&self, id: &str) -> Result<Option<DocumentSummary>> {
-        self.summary_by_id(id).map_err(Into::into)
+        self.summary_by_id(id)
     }
 
     pub fn insert_local(&mut self, document: NewLocalDocument) -> Result<DocumentSummary> {

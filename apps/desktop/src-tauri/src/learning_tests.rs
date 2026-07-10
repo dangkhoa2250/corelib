@@ -165,6 +165,7 @@ fn review_updates_card_and_log_atomically() {
             stability: Some(2.0),
             difficulty: Some(5.0),
             memory_state_json: Some("{}".into()),
+            scheduler_version: "test".into(),
         })
         .expect("review");
     assert_eq!(updated.state, "review");
@@ -189,6 +190,7 @@ fn review_log_failure_rolls_back_card_update() {
         stability: Some(2.0),
         difficulty: Some(5.0),
         memory_state_json: Some("{}".into()),
+        scheduler_version: "test".into(),
     });
     assert!(result.is_err());
     let unchanged = db.card_by_id(&created.id).expect("read").unwrap();
@@ -212,6 +214,7 @@ fn rejects_invalid_review_state_and_empty_timestamps() {
         stability: None,
         difficulty: None,
         memory_state_json: None,
+        scheduler_version: "test".into(),
     };
     assert!(db.apply_review_atomic(invalid).is_err());
 }
@@ -238,6 +241,7 @@ fn rejects_nonfinite_review_parameters_and_nonobject_memory() {
                 stability,
                 difficulty,
                 memory_state_json: memory,
+                scheduler_version: "test".into(),
             })
             .is_err());
     }

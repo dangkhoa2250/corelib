@@ -32,6 +32,7 @@ pub struct AppliedReview {
     pub stability: Option<f64>,
     pub difficulty: Option<f64>,
     pub memory_state_json: Option<String>,
+    pub scheduler_version: String,
 }
 
 impl LibraryDatabase {
@@ -323,7 +324,7 @@ impl LibraryDatabase {
         if changed != 1 {
             return Err(invalid("card review precondition failed"));
         }
-        tx.execute("INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,'fsrs-6')", params![Uuid::new_v4().to_string(),review.card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,review.interval_seconds,review.elapsed_ms])?;
+        tx.execute("INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)", params![Uuid::new_v4().to_string(),review.card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,review.interval_seconds,review.elapsed_ms,review.scheduler_version])?;
         tx.commit()?;
         self.card_by_id(&review.card_id)?
             .ok_or(LibraryDbError::DocumentNotFound)

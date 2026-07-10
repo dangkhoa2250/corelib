@@ -673,11 +673,12 @@ pub fn preview_card_review(
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "card not found".to_owned())?;
     let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
+    let now = Utc::now();
     let preview = ReviewScheduler::default()
         .preview(
             memory.as_deref(),
-            elapsed_days(card.last_review_at.as_deref(), Utc::now())?,
-            Utc::now(),
+            elapsed_days(card.last_review_at.as_deref(), now)?,
+            now,
         )
         .map_err(|e| e.to_string())?;
     Ok(ReviewPreviewPayload {
@@ -713,12 +714,15 @@ pub fn rate_card(
             now,
         )
         .map_err(|e| e.to_string())?;
+    let rating_name = match rating {
+        Rating::Again => "again",
+        Rating::Hard => "hard",
+        Rating::Good => "good",
+        Rating::Easy => "easy",
+    };
     db.apply_review_atomic(AppliedReview {
         card_id: id,
-        rating: serde_json::to_string(&rating)
-            .unwrap()
-            .trim_matches('"')
-            .to_owned(),
+        rating: rating_name.to_owned(),
         prior_state: card.state,
         next_state: next.state,
         prior_due_at: card.due_at,
@@ -728,6 +732,7 @@ pub fn rate_card(
         stability: next.stability.map(f64::from),
         difficulty: next.difficulty.map(f64::from),
         memory_state_json: Some(next.memory_state_json),
+        scheduler_version: ReviewScheduler::default().config().version.clone(),
     })
     .map_err(|e| e.to_string())
 }
