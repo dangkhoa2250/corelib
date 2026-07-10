@@ -159,7 +159,10 @@ impl LibraryDatabase {
             .query_map(params![now, limit], |r| r.get::<_, String>(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         ids.into_iter()
-            .map(|id| self.card_by_id(&id).map(|x| x.expect("card selected")))
+            .map(|id| {
+                self.card_by_id(&id)?
+                    .ok_or(LibraryDbError::DocumentNotFound)
+            })
             .collect()
     }
 
@@ -238,6 +241,13 @@ impl LibraryDatabase {
             || review.elapsed_ms < 0
             || prior_due_at.is_empty()
             || next_due_at.is_empty()
+            || review.stability.is_some_and(|value| !value.is_finite())
+            || review.difficulty.is_some_and(|value| !value.is_finite())
+            || review.memory_state_json.as_deref().is_some_and(|raw| {
+                serde_json::from_str::<serde_json::Value>(raw)
+                    .map(|value| !value.is_object())
+                    .unwrap_or(true)
+            })
         {
             return Err(invalid("invalid review"));
         }
@@ -263,10 +273,26 @@ impl LibraryDatabase {
         if query.trim().is_empty() || limit == 0 {
             return Ok(Vec::new());
         }
-        let mut out = Vec::new();
-        if let Ok(mut stmt) = self.connection.prepare("SELECT c.id,c.front,d.name,cs.document_id FROM card_text ft JOIN cards c ON c.id=ft.card_id JOIN decks d ON d.id=c.deck_id LEFT JOIN card_sources cs ON cs.card_id=c.id WHERE card_text MATCH ?1 LIMIT ?2") {
-            if let Ok(rows) = stmt.query_map(params![query, limit.min(100)], |r| Ok(SearchResultPayload { kind:"card".into(), id:r.get(0)?, title:r.get(1)?, subtitle: { let deck:String=r.get(2)?; let doc:Option<String>=r.get(3)?; Some(match doc {Some(x)=>format!("{} · {}",deck,x),None=>deck})} })) { out = rows.filter_map(|r| r.ok()).collect(); }
-        }
-        Ok(out)
+        let expression = query
+            .split_whitespace()
+            .map(|token| format!("\"{}\"", token.replace('"', "\"\"")))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut stmt = self.connection.prepare("SELECT c.id,c.front,d.name,cs.document_id FROM card_text ft JOIN cards c ON c.id=ft.card_id JOIN decks d ON d.id=c.deck_id LEFT JOIN card_sources cs ON cs.card_id=c.id WHERE card_text MATCH ?1 LIMIT ?2")?;
+        let rows = stmt.query_map(params![expression, limit.min(100)], |r| {
+            let deck: String = r.get(2)?;
+            let doc: Option<String> = r.get(3)?;
+            Ok(SearchResultPayload {
+                kind: "card".into(),
+                id: r.get(0)?,
+                title: r.get(1)?,
+                subtitle: Some(match doc {
+                    Some(document) => format!("{} · {}", deck, document),
+                    None => deck,
+                }),
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
     }
 }

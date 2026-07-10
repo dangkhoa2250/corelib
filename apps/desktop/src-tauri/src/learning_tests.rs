@@ -213,3 +213,30 @@ fn rejects_invalid_review_state_and_empty_timestamps() {
     };
     assert!(db.apply_review_atomic(invalid).is_err());
 }
+
+#[test]
+fn rejects_nonfinite_review_parameters_and_nonobject_memory() {
+    let (_dir, mut db) = db();
+    let created = db.create_card(card("invalid fsrs")).expect("create");
+    for (stability, difficulty, memory) in [
+        (Some(f64::NAN), None, None),
+        (None, Some(f64::INFINITY), None),
+        (None, None, Some("[]".into())),
+    ] {
+        assert!(db
+            .apply_review_atomic(AppliedReview {
+                card_id: created.id.clone(),
+                rating: "good".into(),
+                prior_state: "new".into(),
+                next_state: "review".into(),
+                prior_due_at: created.due_at.clone(),
+                next_due_at: "9999999999".into(),
+                interval_seconds: 1,
+                elapsed_ms: 1,
+                stability,
+                difficulty,
+                memory_state_json: memory,
+            })
+            .is_err());
+    }
+}
