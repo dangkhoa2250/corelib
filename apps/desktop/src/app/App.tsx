@@ -304,7 +304,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
   useEffect(() => {
     void load();
-  }, [load]);
+    void reloadDecks();
+  }, [load, reloadDecks]);
 
   const handleImport = useCallback(async () => {
     if (importing) {
@@ -384,6 +385,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
         { kind: "nav", id: "library", title: "Library", subtitle: null },
         { kind: "nav", id: "memora", title: "Memora", subtitle: null },
         { kind: "nav", id: "trash", title: "Trash", subtitle: null },
+        { kind: "nav", id: "settings", title: "Settings", subtitle: null },
+        { kind: "nav", id: "settings-model", title: "Settings \u2192 Model", subtitle: "AI providers, API keys, translate model" },
       ];
       const docResults: SearchResult[] = (documents ?? [])
         .filter((d) => fuzzyMatch(d.title, q))
@@ -412,6 +415,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       setRoute(
         result.id === "memora" ? { name: "memora" }
         : result.id === "trash" ? { name: "trash" }
+        : result.id === "settings" || result.id === "settings-model" ? { name: "settings" }
         : { name: "library" },
       );
       return;
