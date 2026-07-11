@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 
 import type { Deck, LearningCard, DeckStatistics } from "../../domain/learning";
-import { getDeckStatistics } from "../../lib/learning";
 
 interface MemoraPageProps {
   listDecks: () => Promise<Deck[]>;
@@ -11,6 +10,7 @@ interface MemoraPageProps {
   renameDeck: (id: string, name: string) => Promise<Deck>;
   deleteDeck: (id: string) => Promise<void>;
   countDeckCards: (id: string) => Promise<number>;
+  getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
   onOpenDeck: (deck: Deck) => void;
 }
 
@@ -124,7 +124,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, cou
 
   return (
     <li className="memora-deck-list__item">
-      <button className="memora-deck-list__open" onClick={onOpen} type="button">
+      <button aria-label={deck.name} className="memora-deck-list__open" onClick={onOpen} type="button">
         <span
           aria-hidden="true"
           className="memora-deck-list__dot"
@@ -189,7 +189,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, cou
   );
 }
 
-export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, onOpenDeck }: MemoraPageProps) {
+export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, getDeckStatistics, onOpenDeck }: MemoraPageProps) {
   const [decks, setDecks] = useState<Deck[] | null>(null);
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);

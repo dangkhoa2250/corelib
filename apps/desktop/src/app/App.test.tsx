@@ -87,6 +87,14 @@ const document = {
   lastReadPage: null,
 };
 
+const emptyDeckStatistics = {
+  totalCards: 0,
+  newCards: 0,
+  learningCards: 0,
+  reviewCards: 0,
+  dueCards: 0,
+};
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((resolvePromise) => {
@@ -130,6 +138,7 @@ test("keeps Card Browser inside Memora rather than in the application sidebar", 
         listDecks: vi.fn().mockResolvedValue([]),
         createCard: vi.fn(),
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );
@@ -316,6 +325,8 @@ test("opens the card composer with the live source document and editable front/b
   const listDecks = vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]);
   const createCard = vi.fn().mockResolvedValue({});
   await openReaderAndSelectText(user, undefined, { listDecks, createCard });
+  await waitFor(() => expect(listDecks).toHaveBeenCalled());
+  listDecks.mockClear();
 
   await user.click(screen.getByRole("button", { name: "Create flashcard" }));
 
@@ -381,6 +392,7 @@ test("returns to the source page after saving or cancelling a card", async () =>
 
 test("navigates between Library and Memora via the sidebar", async () => {
   const user = userEvent.setup();
+  const getDeckStatistics = vi.fn().mockResolvedValue(emptyDeckStatistics);
 
   render(
     <App
@@ -393,6 +405,7 @@ test("navigates between Library and Memora via the sidebar", async () => {
         listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
         createCard: vi.fn(),
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics,
       }}
     />,
   );
@@ -402,6 +415,7 @@ test("navigates between Library and Memora via the sidebar", async () => {
   await user.click(screen.getByRole("button", { name: "Memora" }));
   expect(await screen.findByRole("heading", { level: 1, name: "Memora" })).toBeInTheDocument();
   expect(await screen.findByText("English")).toBeInTheDocument();
+  expect(getDeckStatistics).toHaveBeenCalledWith("deck-1");
 
   await user.click(screen.getByRole("button", { name: "Library" }));
   expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
@@ -423,6 +437,7 @@ test("creates a new deck from Memora", async () => {
         createCard: vi.fn(),
         createDeck,
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );
@@ -477,6 +492,7 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
         queryDeckCards,
         listActiveTags,
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );
@@ -584,6 +600,7 @@ test("deletes a card from a deck's card list", async () => {
         trashCards: trashCardsMock,
         listActiveTags,
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );
@@ -632,6 +649,7 @@ test("renames a deck from Memora", async () => {
         createCard: vi.fn(),
         renameDeck,
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );
@@ -670,6 +688,7 @@ test("deletes an empty deck from Memora", async () => {
         deleteDeck,
         countDeckCards,
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );
@@ -705,6 +724,7 @@ test("warns how many cards will be deleted before confirming a cascade delete", 
         deleteDeck,
         countDeckCards,
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );
@@ -738,6 +758,7 @@ test("surfaces an error when a deck deletion fails", async () => {
         deleteDeck,
         countDeckCards,
         listDueCards: vi.fn().mockResolvedValue([]),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );

@@ -630,6 +630,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
             renameDeck={handleRenameDeck}
             deleteDeck={handleDeleteDeck}
             countDeckCards={learning.countDeckCards}
+            getDeckStatistics={learning.getDeckStatistics}
             onOpenDeck={handleOpenDeck}
           />
         ) : route.name === "deckDetail" ? (
@@ -650,6 +651,14 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
             onPracticeAll={handlePracticeAll}
             onDirtyStateChange={setIsBrowserDirty}
             getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
+            getDeckStatistics={learning.getDeckStatistics}
+            queryDeckCards={learning.queryDeckCards}
+            moveCards={learning.moveCards}
+            setCardsSuspended={learning.setCardsSuspended}
+            trashCards={learning.trashCards}
+            listActiveTags={learning.listActiveTags}
+            createCard={learning.createCard}
+            updateAndMoveCard={learning.updateAndMoveCard}
             initialSearch={route.searchQuery}
           />
         ) : route.name === "cardBrowser" ? (

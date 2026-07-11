@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Deck, DeckStatistics, CardSource } from "../../domain/learning";
-import { getDeckStatistics } from "../../lib/learning";
-import { CardBrowser } from "../cards/CardBrowser";
+import { CardBrowser, type CardBrowserProps } from "../cards/CardBrowser";
 import { SourceViewer } from "../cards/SourceViewer";
 
 export interface DeckDetailPageProps {
@@ -16,6 +15,14 @@ export interface DeckDetailPageProps {
   onPracticeAll: (deckId: string) => void;
   onDirtyStateChange?: (dirty: boolean) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
+  getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
+  queryDeckCards: NonNullable<CardBrowserProps["queryDeckCards"]>;
+  moveCards: NonNullable<CardBrowserProps["moveCards"]>;
+  setCardsSuspended: NonNullable<CardBrowserProps["setCardsSuspended"]>;
+  trashCards: NonNullable<CardBrowserProps["trashCards"]>;
+  listActiveTags: NonNullable<CardBrowserProps["listActiveTags"]>;
+  createCard: NonNullable<CardBrowserProps["createCard"]>;
+  updateAndMoveCard: NonNullable<CardBrowserProps["updateAndMoveCard"]>;
 }
 
 function errorMessage(error: unknown): string {
@@ -33,6 +40,14 @@ export function DeckDetailPage({
   onPracticeAll,
   onDirtyStateChange,
   getDocumentFileUrl,
+  getDeckStatistics,
+  queryDeckCards,
+  moveCards,
+  setCardsSuspended,
+  trashCards,
+  listActiveTags,
+  createCard,
+  updateAndMoveCard,
   initialSearch,
 }: DeckDetailPageProps) {
   const [stats, setStats] = useState<DeckStatistics | null>(null);
@@ -46,7 +61,7 @@ export function DeckDetailPage({
         setError(errorMessage(e));
         setStats(null);
       });
-  }, [deck.id]);
+  }, [deck.id, getDeckStatistics]);
 
   useEffect(() => {
     refreshStats();
@@ -123,6 +138,13 @@ export function DeckDetailPage({
               getDocumentFileUrl={getDocumentFileUrl}
               sourceView={sourceView}
               onSourceViewChange={setSourceView}
+              queryDeckCards={queryDeckCards}
+              moveCards={moveCards}
+              setCardsSuspended={setCardsSuspended}
+              trashCards={trashCards}
+              listActiveTags={listActiveTags}
+              createCard={createCard}
+              updateAndMoveCard={updateAndMoveCard}
               hideSourcePanel
             />
           </div>
