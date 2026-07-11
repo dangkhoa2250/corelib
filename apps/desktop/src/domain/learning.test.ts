@@ -22,6 +22,7 @@ test("recognizes a complete new learning card as schedulable", () => {
       rects: [],
     },
     tags: ["search"],
+    frontLanguage: null,
   };
 
   expect(isSchedulableCard(card)).toBe(true);
@@ -46,6 +47,7 @@ test.each([
     lastReviewAt: null,
     source: null,
     tags: [],
+    frontLanguage: null,
     ...changes,
   };
 

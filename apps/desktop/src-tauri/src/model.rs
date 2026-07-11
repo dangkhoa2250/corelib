@@ -58,6 +58,8 @@ pub struct LearningCardSummary {
     pub last_review_at: Option<String>,
     pub source: Option<CardSourcePayload>,
     pub tags: Vec<String>,
+    #[serde(rename = "frontLanguage")]
+    pub front_language: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -103,6 +105,7 @@ pub struct UpdateCardPayload {
     pub front: String,
     pub back: String,
     pub tags: Vec<String>,
+    pub front_language: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -113,6 +116,7 @@ pub struct UpdateAndMoveCardPayload {
     pub back: String,
     pub tags: Vec<String>,
     pub destination_deck_id: Option<String>,
+    pub front_language: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -179,6 +183,7 @@ pub struct CardBrowserRowPayload {
     pub updated_at: String,
     pub deleted_at: Option<String>,
     pub deleted_from_deck_name: Option<String>,
+    pub front_language: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -232,6 +237,7 @@ mod tests {
                 }],
             }),
             tags: vec!["biology".into()],
+            front_language: Some("en".into()),
         };
         let interval = ReviewIntervalPayload {
             due_at: "2026-07-11T09:00:00Z".into(),
@@ -275,6 +281,7 @@ mod tests {
                     "rects": [{ "x": 1.0, "y": 2.0, "width": 3.0, "height": 4.0 }],
                 },
                 "tags": ["biology"],
+                "frontLanguage": "en",
             })
         );
         assert_eq!(
@@ -349,6 +356,7 @@ mod tests {
             updated_at: "2026-07-09T09:00:00Z".into(),
             deleted_at: Some("2026-07-10T10:00:00Z".into()),
             deleted_from_deck_name: Some("Biology".into()),
+            front_language: Some("en".into()),
         };
         let page = CardPagePayload {
             rows: vec![row],
@@ -369,6 +377,7 @@ mod tests {
         assert!(row_json.get("updatedAt").is_some());
         assert!(row_json.get("deletedAt").is_some());
         assert!(row_json.get("deletedFromDeckName").is_some());
+        assert!(row_json.get("frontLanguage").is_some());
         assert!(page_json.get("nextCursor").is_some());
 
         let bulk_json = serde_json::to_value(bulk_result).expect("serialize bulk result");

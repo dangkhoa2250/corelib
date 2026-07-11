@@ -4,7 +4,7 @@ import type { Deck, DeckStatistics, LearningCard, NewCardSource, ReviewPreview, 
 import type { LibraryDocument } from "../domain/document";
 
 export type SearchResult = { kind: "nav" | "document" | "card" | "deck" | "trash"; id: string; title: string; subtitle: string | null };
-export type CreateCardInput = { deckName: string; front: string; back: string; source?: NewCardSource; tags?: string[] };
+export type CreateCardInput = { deckName: string; front: string; back: string; source?: NewCardSource; tags?: string[]; frontLanguage?: string | null };
 
 export function createCard(input: CreateCardInput, call: Invoke = invoke as Invoke): Promise<LearningCard> { return call("create_card", { input }); }
 export function listDecks(call: Invoke = invoke as Invoke): Promise<Deck[]> { return call("list_decks"); }

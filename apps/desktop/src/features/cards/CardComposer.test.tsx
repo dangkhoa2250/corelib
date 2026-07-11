@@ -124,6 +124,7 @@ test("hydrates the first loaded deck when the composer opened before decks resol
     back: "A set with vector operations.",
     source: draft,
     tags: [],
+    frontLanguage: "en",
   });
 });
 
@@ -188,6 +189,7 @@ test("saves the selected source, chosen deck, and comma-separated tags", async (
     back: "A set with vector operations.",
     source: draft,
     tags: ["algebra", "definition"],
+    frontLanguage: "en",
   });
 });
 

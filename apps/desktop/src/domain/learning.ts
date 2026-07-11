@@ -39,6 +39,7 @@ export interface LearningCard {
   lastReviewAt: string | null;
   source: CardSource | null;
   tags: string[];
+  frontLanguage: string | null;
 }
 
 export interface Deck {
@@ -122,6 +123,7 @@ export interface UpdateCardInput {
   front: string;
   back: string;
   tags: string[];
+  frontLanguage: string | null;
 }
 
 export interface UpdateAndMoveCardInput {
@@ -130,4 +132,33 @@ export interface UpdateAndMoveCardInput {
   back: string;
   tags: string[];
   destinationDeckId: string | null;
+  frontLanguage: string | null;
 }
+
+export const SUPPORTED_LANGUAGES: Record<string, string> = {
+  ar: "Arabic",
+  zh: "Chinese",
+  nl: "Dutch",
+  en: "English",
+  fr: "French",
+  de: "German",
+  el: "Greek",
+  he: "Hebrew",
+  hi: "Hindi",
+  id: "Indonesian",
+  it: "Italian",
+  ja: "Japanese",
+  ko: "Korean",
+  fa: "Persian",
+  pl: "Polish",
+  pt: "Portuguese",
+  ro: "Romanian",
+  ru: "Russian",
+  es: "Spanish",
+  sv: "Swedish",
+  th: "Thai",
+  tr: "Turkish",
+  uk: "Ukrainian",
+  vi: "Vietnamese",
+  sgn: "Sign Languages",
+};

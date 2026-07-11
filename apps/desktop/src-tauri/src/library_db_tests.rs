@@ -703,12 +703,12 @@ fn upgrading_0005_adds_card_lifecycle_without_data_loss() {
     let migration: Option<String> = connection
         .query_row(
             "SELECT id FROM schema_migrations WHERE id = ?1",
-            params!["0006_card_lifecycle"],
+            params!["0007_youglish_clickable"],
             |row| row.get(0),
         )
         .optional()
         .expect("query migration table");
-    assert_eq!(migration.as_deref(), Some("0006_card_lifecycle"));
+    assert_eq!(migration.as_deref(), Some("0007_youglish_clickable"));
 
     let mut table_info = connection
         .prepare("PRAGMA table_info(cards);")

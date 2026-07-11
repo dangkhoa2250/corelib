@@ -576,6 +576,7 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
     front: "What is a mitochondrion?",
     back: "The powerhouse of the cell",
     tags: ["biology"],
+    frontLanguage: "en",
   });
 
   // Verify it is listed in Card Browser table

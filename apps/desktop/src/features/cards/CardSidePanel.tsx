@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import type { Deck, CardBrowserRow } from "../../domain/learning";
 import { createCard, updateAndMoveCard } from "../../lib/learning";
+import { detectLanguage } from "../../lib/languageDetector";
+import { LanguagePicker } from "./LanguagePicker";
 
 export interface CardSidePanelProps {
   card: CardBrowserRow | null;
@@ -27,6 +29,9 @@ export function CardSidePanel({
   const [deckId, setDeckId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [frontLanguage, setFrontLanguage] = useState<string | null>(null);
+  const [isManualLanguage, setIsManualLanguage] = useState(false);
+  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
 
   useEffect(() => {
     if (card) {
@@ -35,8 +40,25 @@ export function CardSidePanel({
       setTags(card.tags.join(", "));
       setDeckId(card.deckId ?? decks[0]?.id ?? "");
       setError(null);
+      setFrontLanguage(card.frontLanguage ?? null);
+      setIsManualLanguage(!!card.frontLanguage);
+      setDetectedLanguage(detectLanguage(card.front));
     }
   }, [card, decks]);
+
+  const handleFrontChange = (text: string) => {
+    setFront(text);
+    if (!isManualLanguage) {
+      const lang = detectLanguage(text);
+      setDetectedLanguage(lang);
+      setFrontLanguage(lang);
+    }
+  };
+
+  const handleLanguageChange = (lang: string | null) => {
+    setFrontLanguage(lang);
+    setIsManualLanguage(true);
+  };
 
   const isDirty =
     !card
@@ -44,7 +66,8 @@ export function CardSidePanel({
       : front !== (card.front ?? "") ||
         back !== (card.back ?? "") ||
         tags !== (card.tags.join(", ") ?? "") ||
-        deckId !== (card.deckId ?? decks[0]?.id ?? "");
+        deckId !== (card.deckId ?? decks[0]?.id ?? "") ||
+        frontLanguage !== (card.frontLanguage ?? null);
 
   // Notify parent of dirty changes
   useEffect(() => {
@@ -96,6 +119,7 @@ export function CardSidePanel({
           back,
           tags: tagList,
           destinationDeckId: deckId !== card.deckId ? deckId : null,
+          frontLanguage,
         });
       } else {
         // Create mode
@@ -106,6 +130,7 @@ export function CardSidePanel({
           front,
           back,
           tags: tagList,
+          frontLanguage,
         });
       }
       onSaveSuccess();
@@ -158,9 +183,20 @@ export function CardSidePanel({
               className="card-side-panel__textarea"
               rows={4}
               value={front}
-              onChange={e => setFront(e.target.value)}
+              onChange={e => handleFrontChange(e.target.value)}
               placeholder="Card front content"
               aria-label="Front"
+            />
+          </div>
+
+          <div className="card-side-panel__field">
+            <label className="card-side-panel__label">Front Language</label>
+            <LanguagePicker
+              value={frontLanguage}
+              onChange={handleLanguageChange}
+              disabled={saving}
+              detectedLanguage={detectedLanguage}
+              isManual={isManualLanguage}
             />
           </div>
 

@@ -15,12 +15,14 @@ pub struct NewCard {
     pub back: String,
     pub source: Option<NewCardSource>,
     pub tags: Vec<String>,
+    pub front_language: Option<String>,
 }
 pub struct UpdateCard {
     pub card_id: String,
     pub front: String,
     pub back: String,
     pub tags: Vec<String>,
+    pub front_language: Option<String>,
 }
 pub struct UpdateAndMoveCard {
     pub card_id: String,
@@ -28,6 +30,7 @@ pub struct UpdateAndMoveCard {
     pub back: String,
     pub tags: Vec<String>,
     pub destination_deck_id: Option<String>,
+    pub front_language: Option<String>,
 }
 pub struct BulkResult {
     pub affected_ids: Vec<String>,
@@ -322,12 +325,37 @@ fn norm(value: &str, field: &str) -> Result<String> {
     }
 }
 
+fn is_supported_youglish_language(lang: &str) -> bool {
+    matches!(
+        lang,
+        "ar" | "zh" | "nl" | "en" | "fr" | "de" | "el" | "he" | "hi" | "id" | "it" | "ja"
+            | "ko" | "fa" | "pl" | "pt" | "ro" | "ru" | "es" | "sv" | "th" | "tr"
+            | "uk" | "vi" | "sgn"
+    )
+}
+
+fn validate_front_language(lang: &Option<String>) -> Result<Option<String>> {
+    if let Some(ref l) = lang {
+        let normalized = l.trim().to_lowercase();
+        if normalized.is_empty() {
+            Ok(None)
+        } else if is_supported_youglish_language(&normalized) {
+            Ok(Some(normalized))
+        } else {
+            Err(invalid("unsupported front language"))
+        }
+    } else {
+        Ok(None)
+    }
+}
+
 fn learning_timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
 impl LibraryDatabase {
     pub fn create_card(&mut self, input: NewCard) -> Result<LearningCardSummary> {
+        let front_language = validate_front_language(&input.front_language)?;
         let deck = norm(&input.deck_name, "deck name is required")?;
         let front = norm(&input.front, "front is required")?;
         let back = norm(&input.back, "back is required")?;
@@ -391,7 +419,7 @@ impl LibraryDatabase {
             }
         }
         let id = Uuid::new_v4().to_string();
-        tx.execute("INSERT INTO cards (id,deck_id,front,back,state,due_at,reps,lapses,created_at,updated_at) VALUES (?1,?2,?3,?4,'new',?5,0,0,?5,?5)", params![id, deck_id, front, back, now])?;
+        tx.execute("INSERT INTO cards (id,deck_id,front,back,state,due_at,reps,lapses,created_at,updated_at,front_language) VALUES (?1,?2,?3,?4,'new',?5,0,0,?5,?5,?6)", params![id, deck_id, front, back, now, front_language])?;
         if let Some(source) = input.source {
             tx.execute("INSERT INTO card_sources (card_id,document_id,page,quote,rects_json) VALUES (?1,?2,?3,?4,?5)", params![id, source.document_id.trim(), source.page, source.quote.trim(), source.rects_json])?;
         }
@@ -448,7 +476,7 @@ impl LibraryDatabase {
     }
 
     pub fn card_by_id(&self, id: &str) -> Result<Option<LearningCardSummary>> {
-        let exists = self.connection.query_row("SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at FROM cards WHERE id=?1 AND deleted_at IS NULL", params![id], |r| self.hydrate_card(r)).optional()?;
+        let exists = self.connection.query_row("SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language FROM cards WHERE id=?1 AND deleted_at IS NULL", params![id], |r| self.hydrate_card(r)).optional()?;
         Ok(exists)
     }
 
@@ -494,6 +522,7 @@ impl LibraryDatabase {
             stability: row.get(8)?,
             difficulty: row.get(9)?,
             last_review_at: row.get(10)?,
+            front_language: row.get(11)?,
             source,
             tags,
         })
@@ -632,7 +661,7 @@ impl LibraryDatabase {
             validate_state(state)?;
         }
 
-        let mut sql = "SELECT c.id, c.deck_id, c.front, c.back, c.state, c.due_at, c.reps, c.lapses, c.stability, c.difficulty, c.last_review_at, c.created_at, c.updated_at, d.name, c.deleted_at, c.deleted_from_deck_name FROM cards c JOIN decks d ON c.deck_id = d.id WHERE c.deleted_at IS NULL".to_string();
+        let mut sql = "SELECT c.id, c.deck_id, c.front, c.back, c.state, c.due_at, c.reps, c.lapses, c.stability, c.difficulty, c.last_review_at, c.created_at, c.updated_at, d.name, c.deleted_at, c.deleted_from_deck_name, c.front_language FROM cards c JOIN decks d ON c.deck_id = d.id WHERE c.deleted_at IS NULL".to_string();
 
         let mut count_sql = "SELECT COUNT(*) FROM cards c WHERE c.deleted_at IS NULL".to_string();
 
@@ -814,6 +843,7 @@ impl LibraryDatabase {
         let deck_name: String = row.get(13)?;
         let deleted_at: Option<String> = row.get(14)?;
         let deleted_from_deck_name: Option<String> = row.get(15)?;
+        let front_language: Option<String> = row.get(16)?;
 
         let source = self
             .connection
@@ -863,10 +893,12 @@ impl LibraryDatabase {
             updated_at,
             deleted_at,
             deleted_from_deck_name,
+            front_language,
         })
     }
 
     pub fn update_card(&mut self, input: UpdateCard) -> Result<LearningCardSummary> {
+        let front_language = validate_front_language(&input.front_language)?;
         let front = norm(&input.front, "front is required")?;
         let back = norm(&input.back, "back is required")?;
         let mut tags = Vec::new();
@@ -890,8 +922,8 @@ impl LibraryDatabase {
         }
 
         tx.execute(
-            "UPDATE cards SET front=?1, back=?2, updated_at=?3 WHERE id=?4",
-            params![front, back, now, input.card_id],
+            "UPDATE cards SET front=?1, back=?2, updated_at=?3, front_language=?4 WHERE id=?5",
+            params![front, back, now, front_language, input.card_id],
         )?;
 
         tx.execute(
@@ -950,6 +982,7 @@ impl LibraryDatabase {
         &mut self,
         input: UpdateAndMoveCard,
     ) -> Result<LearningCardSummary> {
+        let front_language = validate_front_language(&input.front_language)?;
         let front = norm(&input.front, "front is required")?;
         let back = norm(&input.back, "back is required")?;
         let mut tags = Vec::new();
@@ -990,8 +1023,8 @@ impl LibraryDatabase {
         };
 
         tx.execute(
-            "UPDATE cards SET front = ?1, back = ?2, deck_id = ?3, updated_at = ?4 WHERE id = ?5",
-            params![front, back, final_deck_id, now, input.card_id],
+            "UPDATE cards SET front = ?1, back = ?2, deck_id = ?3, updated_at = ?4, front_language = ?5 WHERE id = ?6",
+            params![front, back, final_deck_id, now, front_language, input.card_id],
         )?;
 
         tx.execute(
@@ -1198,7 +1231,7 @@ impl LibraryDatabase {
             return Err(invalid("limit must be between 1 and 200"));
         }
 
-        let mut sql = "SELECT c.id, c.deck_id, c.front, c.back, c.state, c.due_at, c.reps, c.lapses, c.stability, c.difficulty, c.last_review_at, c.created_at, c.updated_at, COALESCE(d.name, c.deleted_from_deck_name, ''), c.deleted_at, c.deleted_from_deck_name FROM cards c LEFT JOIN decks d ON c.deck_id = d.id WHERE c.deleted_at IS NOT NULL".to_string();
+        let mut sql = "SELECT c.id, c.deck_id, c.front, c.back, c.state, c.due_at, c.reps, c.lapses, c.stability, c.difficulty, c.last_review_at, c.created_at, c.updated_at, COALESCE(d.name, c.deleted_from_deck_name, ''), c.deleted_at, c.deleted_from_deck_name, c.front_language FROM cards c LEFT JOIN decks d ON c.deck_id = d.id WHERE c.deleted_at IS NOT NULL".to_string();
 
         let mut count_sql =
             "SELECT COUNT(*) FROM cards c WHERE c.deleted_at IS NOT NULL".to_string();

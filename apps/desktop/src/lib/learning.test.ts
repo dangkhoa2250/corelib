@@ -38,9 +38,9 @@ describe("learning bridge", () => {
       payload: { deckId: "d", query: "q", states: ["new"], tags: ["t"], sort: "updated_desc", cursor: null, limit: 10 }
     });
 
-    await updateCard({ cardId: "c", front: "f", back: "b", tags: ["t"] }, call);
+    await updateCard({ cardId: "c", front: "f", back: "b", tags: ["t"], frontLanguage: null }, call);
     expect(call).toHaveBeenLastCalledWith("update_card", {
-      payload: { cardId: "c", front: "f", back: "b", tags: ["t"] }
+      payload: { cardId: "c", front: "f", back: "b", tags: ["t"], frontLanguage: null }
     });
 
     await moveCards(["c1"], "d2", call);

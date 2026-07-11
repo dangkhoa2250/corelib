@@ -333,6 +333,7 @@ export function CardBrowser({
       reps: 0,
       lapses: 0,
       stability: null,
+      frontLanguage: null,
       difficulty: null,
       lastReviewAt: null,
       source: null,

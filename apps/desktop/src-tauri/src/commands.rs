@@ -601,6 +601,7 @@ pub struct CreateCardInput {
     pub source: Option<CardSourceInput>,
     #[serde(default)]
     pub tags: Vec<String>,
+    pub front_language: Option<String>,
 }
 
 fn learning_lock(
@@ -641,6 +642,7 @@ pub fn create_card(
             back: input.back,
             source,
             tags: input.tags,
+            front_language: input.front_language,
         })
         .map_err(|e| e.to_string())
 }
@@ -925,6 +927,7 @@ pub fn update_card(
             front: payload.front,
             back: payload.back,
             tags: payload.tags,
+            front_language: payload.front_language,
         })
         .map_err(|e| e.to_string())
 }
@@ -942,6 +945,7 @@ pub fn update_and_move_card(
             back: payload.back,
             tags: payload.tags,
             destination_deck_id: payload.destination_deck_id,
+            front_language: payload.front_language,
         })
         .map_err(|e| e.to_string())
 }

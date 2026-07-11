@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import type { CardSource, NewCardSource } from "../reader/readerSelection";
+import { detectLanguage } from "../../lib/languageDetector";
+import { LanguagePicker } from "./LanguagePicker";
 
 const NEW_DECK_VALUE = "__new_deck__";
 const SOURCE_UNAVAILABLE_MESSAGE = "Source document is no longer available. Select text from an open document to create a card.";
@@ -28,6 +30,7 @@ export interface CardSaveInput {
   back: string;
   source?: NewCardSource;
   tags: string[];
+  frontLanguage?: string | null;
 }
 
 export interface CardComposerProps {
@@ -76,6 +79,32 @@ export function CardComposer({
   const [translating, setTranslating] = useState(false);
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [frontLanguage, setFrontLanguage] = useState<string | null>(() => detectLanguage(draft.quote));
+  const [isManualLanguage, setIsManualLanguage] = useState(false);
+  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(() => detectLanguage(draft.quote));
+
+  useEffect(() => {
+    const lang = detectLanguage(draft.quote);
+    setDetectedLanguage(lang);
+    if (!isManualLanguage) {
+      setFrontLanguage(lang);
+    }
+  }, [draft.quote, isManualLanguage]);
+
+  const handleFrontChange = (text: string) => {
+    setFront(text);
+    if (!isManualLanguage) {
+      const lang = detectLanguage(text);
+      setDetectedLanguage(lang);
+      setFrontLanguage(lang);
+    }
+  };
+
+  const handleLanguageChange = (lang: string | null) => {
+    setFrontLanguage(lang);
+    setIsManualLanguage(true);
+  };
   const dialogRef = useRef<HTMLElement | null>(null);
   const frontRef = useRef<HTMLTextAreaElement | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -178,6 +207,7 @@ export function CardComposer({
         back: trimmedBack,
         source: draft,
         tags: tagsFromInput(tags),
+        frontLanguage,
       });
     } catch (saveError) {
       setError(errorMessage(saveError));
@@ -253,10 +283,21 @@ export function CardComposer({
           <textarea
             aria-label="Front"
             disabled={saving}
-            onChange={(event) => setFront(event.target.value)}
+            onChange={(event) => handleFrontChange(event.target.value)}
             ref={frontRef}
             rows={5}
             value={front}
+          />
+        </label>
+
+        <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+          Front Language
+          <LanguagePicker
+            value={frontLanguage}
+            onChange={handleLanguageChange}
+            disabled={saving}
+            detectedLanguage={detectedLanguage}
+            isManual={isManualLanguage}
           />
         </label>
 

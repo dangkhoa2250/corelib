@@ -7,7 +7,7 @@ import { ReviewPage } from "./ReviewPage";
 const card: LearningCard = {
   id: "card-1", deckId: "english", front: "bonjour", back: "hello", state: "new",
   dueAt: "2026-07-10T00:00:00Z", reps: 0, lapses: 0, stability: null, difficulty: null,
-  lastReviewAt: null, tags: [], source: null,
+  lastReviewAt: null, tags: [], source: null, frontLanguage: null,
 };
 
 afterEach(() => vi.useRealTimers());
@@ -22,6 +22,31 @@ test("reveals rating buttons on card click and rates", async () => {
   expect(screen.getByRole("group", { name: "Rate card" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Good" }));
   expect(onRate).toHaveBeenCalledWith(card, "good", expect.any(Number));
+});
+
+test("keeps YouGlish available from the front text after the card flips", async () => {
+  const user = userEvent.setup();
+  const cardWithLanguage = { ...card, frontLanguage: "en" };
+  render(<ReviewPage cards={[cardWithLanguage]} previews={{}} onRate={vi.fn()} />);
+
+  await user.click(screen.getByRole("button", { name: /Flashcard/i }));
+
+  const wordButtons = screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" });
+  expect(wordButtons).toHaveLength(2);
+  await user.click(wordButtons[1]);
+
+  expect(screen.getByTitle("YouGlish pronunciation for bonjour")).toBeInTheDocument();
+});
+
+test("keeps an open YouGlish panel visible when the card flips", async () => {
+  const user = userEvent.setup();
+  const cardWithLanguage = { ...card, frontLanguage: "en" };
+  render(<ReviewPage cards={[cardWithLanguage]} previews={{}} onRate={vi.fn()} />);
+
+  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
+  await user.click(screen.getByRole("button", { name: /Flashcard/i }));
+
+  expect(screen.getByTitle("YouGlish pronunciation for bonjour")).toBeInTheDocument();
 });
 
 test("shows error on failed rate", async () => {

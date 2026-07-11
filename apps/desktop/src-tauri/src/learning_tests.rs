@@ -29,6 +29,7 @@ fn card(front: &str) -> NewCard {
             rects_json: "[]".into(),
         }),
         tags: vec!["English".into(), " english ".into(), "books".into()],
+        front_language: None,
     }
 }
 
@@ -113,6 +114,7 @@ fn due_cards_honors_limits_above_five_hundred() {
             back: "answer".into(),
             source: None,
             tags: Vec::new(),
+            front_language: None,
         })
         .expect("create bulk card");
     }
@@ -491,6 +493,7 @@ fn lifecycle_active() {
             front: "ATP energy updated".into(),
             back: "Adenosine triphosphate".into(),
             tags: vec!["biology".into(), "Cell".into()],
+            front_language: None,
         })
         .expect("update_card");
 
@@ -612,6 +615,7 @@ fn update_and_move_card_is_atomic() {
             back: "Adenosine triphosphate".into(),
             tags: vec!["energy".into()],
             destination_deck_id: Some(deck_chem.id.clone()),
+            front_language: None,
         })
         .expect("update_and_move");
 
@@ -639,6 +643,7 @@ fn update_and_move_card_is_atomic() {
             back: "Energy molecule".into(),
             tags: vec![],
             destination_deck_id: None,
+            front_language: None,
         })
         .expect("update only");
     assert_eq!(updated.front, "ATP v2");
@@ -660,6 +665,7 @@ fn update_and_move_card_is_atomic() {
             back: "Energy molecule v3".into(),
             tags: vec![],
             destination_deck_id: Some(deck_chem.id.clone()),
+            front_language: None,
         })
         .expect("same deck");
 
@@ -679,6 +685,7 @@ fn update_and_move_card_is_atomic() {
         back: "NEITHER SHOULD THIS".into(),
         tags: vec!["ghost".into()],
         destination_deck_id: Some("nonexistent-deck".into()),
+        front_language: None,
     });
     assert!(failed.is_err());
 
@@ -700,6 +707,7 @@ fn update_and_move_card_is_atomic() {
         back: "Energy molecule v3".into(),
         tags: vec![],
         destination_deck_id: Some(deck_bio.id.clone()),
+        front_language: None,
     })
     .expect("move back");
 
@@ -712,6 +720,7 @@ fn update_and_move_card_is_atomic() {
         back: "should fail".into(),
         tags: vec![],
         destination_deck_id: None,
+        front_language: None,
     });
     assert!(trashed_edit.is_err());
 }
@@ -949,4 +958,44 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
     assert_eq!(chem_stats.total_cards, 1);
     assert_eq!(chem_stats.new_cards, 1);
     assert_eq!(chem_stats.due_cards, 0);
+}
+
+#[test]
+fn invalid_language_codes_are_rejected() {
+    let (_dir, mut db) = db();
+    let mut card_to_create = card("ATP energy");
+    
+    // Test creation validation
+    card_to_create.front_language = Some("invalid_lang".to_string());
+    let failed_create = db.create_card(card_to_create);
+    assert!(failed_create.is_err());
+    
+    // Test valid code works
+    let mut card_valid = card("ATP energy");
+    card_valid.front_language = Some("en".to_string());
+    let created = db.create_card(card_valid).expect("create card with valid language");
+    assert_eq!(created.front_language, Some("en".to_string()));
+
+    // Test update validation
+    use crate::learning::UpdateCard;
+    let failed_update = db.update_card(UpdateCard {
+        card_id: created.id.clone(),
+        front: "ATP energy updated".into(),
+        back: "Adenosine triphosphate".into(),
+        tags: vec![],
+        front_language: Some("invalid_lang".to_string()),
+    });
+    assert!(failed_update.is_err());
+
+    // Test update and move validation
+    use crate::learning::UpdateAndMoveCard;
+    let failed_update_move = db.update_and_move_card(UpdateAndMoveCard {
+        card_id: created.id.clone(),
+        front: "ATP energy updated v2".into(),
+        back: "Adenosine triphosphate v2".into(),
+        tags: vec![],
+        destination_deck_id: None,
+        front_language: Some("invalid_lang".to_string()),
+    });
+    assert!(failed_update_move.is_err());
 }

@@ -30,6 +30,7 @@ const mockRows = [
     lastReviewAt: "2026-07-09T12:00:00Z",
     source: null,
     tags: ["energy"],
+    frontLanguage: null,
     createdAt: "2026-07-08T12:00:00Z",
     updatedAt: "2026-07-09T12:00:00Z",
     deletedAt: "2026-07-11T10:00:00Z",

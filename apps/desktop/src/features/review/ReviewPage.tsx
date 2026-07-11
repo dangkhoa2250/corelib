@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
 import type { LearningCard, ReviewPreview, ReviewRating } from "../../domain/learning";
+import { ClickableFrontText } from "./ClickableFrontText";
+import { YouGlishPanel } from "./YouGlishPanel";
+import { LanguagePicker } from "../cards/LanguagePicker";
+import { detectLanguage } from "../../lib/languageDetector";
+import { updateCard } from "../../lib/learning";
 
 export interface ReviewPageProps {
   cards: LearningCard[];
@@ -37,9 +42,35 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   const [ratingCounts, setRatingCounts] = useState<RatingCounts>({ again: 0, hard: 0, good: 0, easy: 0 });
+  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [showYouGlish, setShowYouGlish] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
+
   const isPractice = mode === "practice";
   const card = cards[index];
   const preview = card ? previews[card.id] : undefined;
+
+  const handleSelectLanguage = async (lang: string | null) => {
+    if (!lang || !card) return;
+    try {
+      await updateCard({
+        cardId: card.id,
+        front: card.front,
+        back: card.back,
+        tags: card.tags,
+        frontLanguage: lang,
+      });
+      card.frontLanguage = lang;
+      setRefreshCounter((prev) => prev + 1);
+    } catch (err) {
+      setError("Failed to update card language.");
+    }
+  };
+
+  useEffect(() => {
+    setSelectedWord(null);
+    setShowYouGlish(false);
+  }, [card?.id, refreshCounter]);
 
   useEffect(() => {
     if (isPractice) return;
@@ -155,14 +186,34 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
           <div className="review-page__card-face review-page__card-face--front">
             <div className="review-page__card-face-scroll">
               <p className="review-page__label">Front</p>
-              <div className="review-page__content">{card.front}</div>
+              <div className="review-page__content">
+                <ClickableFrontText
+                  text={card.front}
+                  frontLanguage={card.frontLanguage}
+                  selectedWord={selectedWord}
+                  onWordSelect={(word) => {
+                    setSelectedWord(word);
+                    setShowYouGlish(true);
+                  }}
+                />
+              </div>
             </div>
             <div className="review-page__flip-hint">Tap to flip</div>
           </div>
           <div className="review-page__card-face review-page__card-face--back">
             <div className="review-page__card-face-scroll">
               <p className="review-page__label">Front</p>
-              <div className="review-page__content review-page__content--small">{card.front}</div>
+              <div className="review-page__content review-page__content--small">
+                <ClickableFrontText
+                  text={card.front}
+                  frontLanguage={card.frontLanguage}
+                  selectedWord={selectedWord}
+                  onWordSelect={(word) => {
+                    setSelectedWord(word);
+                    setShowYouGlish(true);
+                  }}
+                />
+              </div>
               <hr className="review-page__divider" />
               <p className="review-page__label">Back</p>
               <div className="review-page__content">{card.back}</div>
@@ -170,6 +221,46 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
           </div>
         </div>
       </section>
+
+      {card && !card.frontLanguage && (
+        <div
+          style={{
+            marginTop: "16px",
+            padding: "16px",
+            borderRadius: "12px",
+            background: "#fff7ed",
+            border: "1px solid #ffedd5",
+            color: "#9a3412",
+            fontSize: "13px",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "10px",
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>
+            No confirmed front language. Select a language to enable YouGlish:
+          </span>
+          <div style={{ width: "260px" }}>
+            <LanguagePicker
+              value={card.frontLanguage}
+              onChange={handleSelectLanguage}
+              detectedLanguage={detectLanguage(card.front)}
+            />
+          </div>
+        </div>
+      )}
+
+      {showYouGlish && selectedWord && (
+        <YouGlishPanel
+          word={selectedWord}
+          frontLanguage={card.frontLanguage}
+          onClose={() => {
+            setSelectedWord(null);
+            setShowYouGlish(false);
+          }}
+        />
+      )}
 
       <footer className="review-page__footer">
         <p className="review-page__elapsed" aria-live="polite">{formatTime(Math.floor(elapsed / 1000))}</p>
