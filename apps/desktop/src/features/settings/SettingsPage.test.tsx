@@ -75,3 +75,19 @@ test("masks the API key by default and toggles visibility with the eye button", 
   await user.click(screen.getByRole("button", { name: "Hide API key" }));
   expect(input).toHaveAttribute("type", "password");
 });
+
+test("shows a masked saved-key state after the key is stored", async () => {
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn().mockResolvedValue(true)}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn()}
+    />,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByLabelText("API key")).toHaveAttribute("placeholder", "••••••••••••••••");
+  });
+  expect(screen.queryByRole("button", { name: "Show API key" })).not.toBeInTheDocument();
+});

@@ -110,6 +110,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
       if (apiKey.trim()) {
         await saveApiKey(provider, apiKey.trim());
         setApiKey("");
+        setShowApiKey(false);
       }
       setConnected((current) => ({ ...current, [provider]: true }));
       await loadModels(provider);
@@ -192,19 +193,21 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
               aria-label="API key"
               autoComplete="off"
               onChange={(event) => setApiKey(event.target.value)}
-              placeholder={connected[provider] ? "Saved securely — enter a new key to replace it" : "Paste API key"}
+              placeholder={connected[provider] ? "••••••••••••••••" : "Paste API key"}
               style={{ color: "#1d1d1f" }}
               type={showApiKey ? "text" : "password"}
               value={apiKey}
             />
-            <button
-              aria-label={showApiKey ? "Hide API key" : "Show API key"}
-              className="settings-page__secret-toggle"
-              onClick={() => setShowApiKey((visible) => !visible)}
-              type="button"
-            >
-              {showApiKey ? <IconEyeOff /> : <IconEye />}
-            </button>
+            {apiKey ? (
+              <button
+                aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                className="settings-page__secret-toggle"
+                onClick={() => setShowApiKey((visible) => !visible)}
+                type="button"
+              >
+                {showApiKey ? <IconEyeOff /> : <IconEye />}
+              </button>
+            ) : null}
           </span>
         </label>
 
