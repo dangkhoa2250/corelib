@@ -975,30 +975,30 @@ export function ReaderPage({
         className="reader-sidebar"
         style={{
           width: "260px",
-          borderRight: "1px solid #e5e5ea",
           display: "flex",
           flexDirection: "column",
-          background: "#f5f5f7",
         }}
       >
         {/* Tab switcher */}
-        <div className="reader-sidebar__tabs">
-          <button
-            type="button"
-            className={`reader-sidebar__tab ${sidebarTab === "pages" ? "is-active" : ""}`}
-            onClick={() => setSidebarTab("pages")}
-          >
-            Pages
-          </button>
-          {outline && (
+        <div className="reader-sidebar__header">
+          <div className="reader-sidebar__tabs">
             <button
-            type="button"
-            className={`reader-sidebar__tab ${sidebarTab === "outline" ? "is-active" : ""}`}
-            onClick={() => setSidebarTab("outline")}
+              type="button"
+              className={`reader-sidebar__tab ${sidebarTab === "pages" ? "is-active" : ""}`}
+              onClick={() => setSidebarTab("pages")}
             >
-              Outline
+              Pages
             </button>
-          )}
+            {outline && (
+              <button
+              type="button"
+              className={`reader-sidebar__tab ${sidebarTab === "outline" ? "is-active" : ""}`}
+              onClick={() => setSidebarTab("outline")}
+              >
+                Outline
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content */}

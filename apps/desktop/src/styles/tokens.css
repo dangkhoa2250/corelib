@@ -1891,10 +1891,14 @@ textarea::placeholder {
   background: var(--sidebar-bg) !important;
 }
 
+.reader-sidebar__header {
+  padding: 16px 8px 8px;
+}
+
 .reader-sidebar__tabs {
   display: flex;
   gap: 3px;
-  margin: 10px 10px 8px;
+  margin: 0 10px 8px;
   padding: 3px;
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
