@@ -419,9 +419,9 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 7px 10px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 8px;
   color: var(--text-secondary);
   background: var(--surface-1);
 }
@@ -429,6 +429,7 @@ textarea::placeholder {
 .settings-page__search input {
   width: 100%;
   min-width: 0;
+  padding: 0;
   border: 0;
   outline: 0;
   color: var(--text-primary);
