@@ -52,3 +52,26 @@ test("shows provider errors without losing the settings form", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Invalid API key");
   expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
 });
+
+test("masks the API key by default and toggles visibility with the eye button", async () => {
+  const user = userEvent.setup();
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn().mockResolvedValue(false)}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn()}
+    />,
+  );
+
+  const input = screen.getByLabelText("API key");
+  await user.type(input, "secret-key");
+  expect(input).toHaveAttribute("type", "password");
+  expect(input).toHaveStyle({ color: "rgb(29, 29, 31)" });
+
+  await user.click(screen.getByRole("button", { name: "Show API key" }));
+  expect(input).toHaveAttribute("type", "text");
+
+  await user.click(screen.getByRole("button", { name: "Hide API key" }));
+  expect(input).toHaveAttribute("type", "password");
+});

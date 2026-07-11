@@ -56,3 +56,22 @@ export function IconSettings({ size = 16 }: IconProps) {
     </svg>
   );
 }
+
+export function IconEye({ size = 16 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <path d="M2.5 12s3.2-5 9.5-5 9.5 5 9.5 5-3.2 5-9.5 5-9.5-5-9.5-5Z" />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  );
+}
+
+export function IconEyeOff({ size = 16 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <path d="m3 3 18 18" />
+      <path d="M10.6 6.2A10.5 10.5 0 0 1 12 6c6.3 0 9.5 6 9.5 6a16.7 16.7 0 0 1-3.1 3.5M6.2 6.9C3.8 8.5 2.5 12 2.5 12s3.2 6 9.5 6c1 0 1.9-.1 2.7-.4" />
+      <path d="M9.9 9.9a3 3 0 0 0 4.2 4.2" />
+    </svg>
+  );
+}

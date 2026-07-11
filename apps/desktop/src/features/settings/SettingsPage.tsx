@@ -7,6 +7,7 @@ import {
   type AiModel,
   type AiProviderId,
 } from "../../domain/ai";
+import { IconEye, IconEyeOff } from "../../app/icons";
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
@@ -59,6 +60,7 @@ export function readAiPreference(): { provider: AiProviderId | null; model: stri
 export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, onDefaultChange }: SettingsPageProps) {
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
+  const [showApiKey, setShowApiKey] = useState(false);
   const [connected, setConnected] = useState<Record<AiProviderId, boolean>>({
     "google-ai-studio": false,
     nvidia: false,
@@ -185,14 +187,25 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
 
         <label className="settings-page__field">
           <span>API key</span>
-          <input
-            aria-label="API key"
-            autoComplete="off"
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder={connected[provider] ? "Saved securely — enter a new key to replace it" : "Paste API key"}
-            type="password"
-            value={apiKey}
-          />
+          <span className="settings-page__secret-input">
+            <input
+              aria-label="API key"
+              autoComplete="off"
+              onChange={(event) => setApiKey(event.target.value)}
+              placeholder={connected[provider] ? "Saved securely — enter a new key to replace it" : "Paste API key"}
+              style={{ color: "#1d1d1f" }}
+              type={showApiKey ? "text" : "password"}
+              value={apiKey}
+            />
+            <button
+              aria-label={showApiKey ? "Hide API key" : "Show API key"}
+              className="settings-page__secret-toggle"
+              onClick={() => setShowApiKey((visible) => !visible)}
+              type="button"
+            >
+              {showApiKey ? <IconEyeOff /> : <IconEye />}
+            </button>
+          </span>
         </label>
 
         <div className="settings-page__actions">

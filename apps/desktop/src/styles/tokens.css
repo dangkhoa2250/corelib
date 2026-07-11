@@ -235,6 +235,37 @@ select {
   font-size: 14px;
 }
 
+.settings-page__secret-input {
+  position: relative;
+  display: block;
+}
+
+.settings-page__secret-input input {
+  padding-right: 44px;
+}
+
+.settings-page__secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: #6e6e73;
+  background: transparent;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.settings-page__secret-toggle:hover {
+  color: #1d1d1f;
+  background: #f2f2f7;
+}
+
 .settings-page__description {
   margin: 8px 0 0;
 }
