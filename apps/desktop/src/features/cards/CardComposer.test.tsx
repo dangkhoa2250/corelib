@@ -280,3 +280,8 @@ test("prevents a second save while the first one is pending", async () => {
   });
   expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
 });
+
+test("offers a pronunciation button beside the Front label", () => {
+  renderComposer();
+  expect(screen.getByRole("button", { name: "Play pronunciation" })).toBeInTheDocument();
+});

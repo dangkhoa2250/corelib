@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
+import { PronunciationButton } from "../../components/PronunciationButton";
 import type { CardSource, NewCardSource } from "../reader/readerSelection";
 
 const NEW_DECK_VALUE = "__new_deck__";
@@ -249,7 +250,10 @@ export function CardComposer({
         ) : null}
 
         <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
-          Front
+          <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            Front
+            <PronunciationButton text={front} />
+          </span>
           <textarea
             aria-label="Front"
             disabled={saving}
