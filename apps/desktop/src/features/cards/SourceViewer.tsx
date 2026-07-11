@@ -16,6 +16,7 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [pageDims, setPageDims] = useState<{ width: number; height: number } | null>(null);
   const [scale, setScale] = useState(1);
 
@@ -24,7 +25,11 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
     let renderTask: any = null;
 
     const load = async () => {
-      if (!source.documentId) return;
+      if (!source.documentId) {
+        setError("No source document");
+        setLoading(false);
+        return;
+      }
       try {
         const path = await getDocumentFileUrl(source.documentId);
         if (!active) return;
@@ -43,13 +48,13 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
         setPageDims({ width: scaled.width, height: scaled.height });
         setScale(s);
 
-        if (!canvasRef.current) return;
         const canvas = canvasRef.current;
+        if (!canvas) { setLoading(false); doc.destroy(); return; }
         const dpr = window.devicePixelRatio || 1;
         canvas.width = scaled.width * dpr;
         canvas.height = scaled.height * dpr;
         const ctx = canvas.getContext("2d");
-        if (!ctx) return;
+        if (!ctx) { setLoading(false); doc.destroy(); return; }
         ctx.scale(dpr, dpr);
 
         renderTask = page.render({ canvasContext: ctx, viewport: scaled });
@@ -57,8 +62,11 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
 
         setLoading(false);
         doc.destroy();
-      } catch (_) {
-        if (active) setLoading(false);
+      } catch (e) {
+        if (active) {
+          setError(e instanceof Error ? e.message : String(e));
+          setLoading(false);
+        }
       }
     };
 
@@ -74,6 +82,7 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
     <section className="source-viewer" aria-label="Card source PDF">
       <header className="source-viewer__header">
         <h3 className="source-viewer__title">Source</h3>
+        <span className="source-viewer__page-label">Page {source.page}</span>
         <button
           type="button"
           className="source-viewer__close-btn"
@@ -83,11 +92,9 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
           ×
         </button>
       </header>
-      <div className="source-viewer__info">
-        Page {source.page}
-      </div>
       <div ref={containerRef} className="source-viewer__page">
         {loading && <div className="source-viewer__loading">Loading PDF…</div>}
+        {error && <div className="source-viewer__error">{error}</div>}
         {pageDims && (
           <div style={{ position: "relative", width: pageDims.width, margin: "0 auto" }}>
             <canvas ref={canvasRef} style={{ width: pageDims.width, height: pageDims.height, display: "block" }} />

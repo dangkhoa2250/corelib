@@ -26,8 +26,8 @@ import { DeckDetailPage } from "../features/memora/DeckDetailPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended } from "../lib/learning";
-import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
+import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, DeckStatistics, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
 
 export interface LibraryApi {
@@ -110,6 +110,7 @@ interface LearningApi {
   moveCards?: (cardIds: string[], destinationDeckId: string) => Promise<BulkResult>;
   setCardsSuspended?: (cardIds: string[], suspended: boolean) => Promise<BulkResult>;
   trashCards?: (cardIds: string[]) => Promise<BulkResult>;
+  getDeckStatistics?: (deckId: string) => Promise<DeckStatistics>;
 }
 
 const nativeLearningApi: LearningApi = {
@@ -133,6 +134,7 @@ const nativeLearningApi: LearningApi = {
   moveCards: nativeMoveCards,
   setCardsSuspended: nativeSetCardsSuspended,
   trashCards: nativeTrashCards,
+  getDeckStatistics: nativeGetDeckStatistics,
 };
 
 interface AppProps {
@@ -171,6 +173,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     moveCards: learningApi.moveCards ?? nativeMoveCards,
     setCardsSuspended: learningApi.setCardsSuspended ?? nativeSetCardsSuspended,
     trashCards: learningApi.trashCards ?? nativeTrashCards,
+    getDeckStatistics: learningApi.getDeckStatistics ?? nativeGetDeckStatistics,
   }), [learningApi]);
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
   const [route, setRoute] = useState<AppRoute>({ name: "library" });
