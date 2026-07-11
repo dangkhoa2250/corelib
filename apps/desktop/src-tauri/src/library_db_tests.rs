@@ -140,7 +140,7 @@ fn updating_to_an_invalid_page_fails() {
         })
         .expect("insert document");
 
-    assert!(database.update_read_page("page-test", 0).is_err());
+    assert!(database.update_read_page("page-test", 0, None).is_err());
 }
 
 #[test]

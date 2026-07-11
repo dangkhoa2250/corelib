@@ -259,14 +259,15 @@ impl LibraryDatabase {
         Ok(matches)
     }
 
-    pub fn update_read_page(&mut self, id: &str, page: i64) -> Result<DocumentSummary> {
+    pub fn update_read_page(&mut self, id: &str, page: i64, num_pages: Option<i64>) -> Result<DocumentSummary> {
         if page <= 0 {
             return Err(LibraryDbError::InvalidPage);
         }
 
         let updated = self.connection.execute(
-            "UPDATE documents SET last_read_page = ?1, updated_at = ?2 WHERE id = ?3",
-            params![page, portable_timestamp(), id],
+            "UPDATE documents SET last_read_page = ?1, updated_at = ?2,
+             num_pages = COALESCE(?3, num_pages) WHERE id = ?4",
+            params![page, portable_timestamp(), num_pages, id],
         )?;
         if updated == 0 {
             return Err(LibraryDbError::DocumentNotFound);

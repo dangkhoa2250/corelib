@@ -17,6 +17,9 @@ import {
   deleteDocument as nativeDeleteDocument,
   listPageTags as nativeListPageTags,
   togglePageTag as nativeTogglePageTag,
+  saveGoogleDriveCredentials,
+  loadGoogleDriveCredentials,
+  clearGoogleDriveCredentials,
 } from "../lib/desktop";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { ReaderPage } from "../features/reader/ReaderPage";
@@ -44,7 +47,7 @@ export interface LibraryApi {
   importDocuments: (paths: string[]) => Promise<LibraryDocument[]>;
 
   getDocumentFileUrl?: (id: string) => Promise<string>;
-  saveReadPage?: (id: string, page: number) => Promise<LibraryDocument>;
+  saveReadPage?: (id: string, page: number, numPages?: number) => Promise<LibraryDocument>;
   deleteDocument?: (id: string) => Promise<void>;
   connectDrive?: () => Promise<void>;
   listDrive?: (folderId?: string) => Promise<DriveEntry[]>;
@@ -230,6 +233,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   const [composerDecks, setComposerDecks] = useState<Deck[]>([]);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
+  const [driveSetupModalOpen, setDriveSetupModalOpen] = useState(false);
   const [driveEntries, setDriveEntries] = useState<DriveEntry[]>([]);
   const [driveFolderStack, setDriveFolderStack] = useState<string[]>([]);
   const [driveCurrentFolderId, setDriveCurrentFolderId] = useState<string | undefined>();
@@ -497,13 +501,30 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       setDriveEntries(entries);
       setDriveCurrentFolderId(folderId);
     } catch (e) {
-      if (errorMessage(e).includes("not connected") || errorMessage(e).includes("revoked")) {
-        await connect();
-        const entries = await list(folderId);
-        setDriveEntries(entries);
-        setDriveCurrentFolderId(folderId);
+      console.error("loadDriveFolder initial try error:", e);
+      const msg = errorMessage(e);
+      if (msg.includes("not configured") || msg.includes("not found")) {
+        setDriveSetupModalOpen(true);
+        throw e;
+      } else if (msg.includes("not connected") || msg.includes("revoked")) {
+        try {
+          await connect();
+          const entries = await list(folderId);
+          setDriveEntries(entries);
+          setDriveCurrentFolderId(folderId);
+        } catch (connectErr) {
+          console.error("loadDriveFolder connect try error:", connectErr);
+          const connectMsg = errorMessage(connectErr);
+          if (connectMsg.includes("not configured") || connectMsg.includes("not found")) {
+            setDriveSetupModalOpen(true);
+          } else {
+            setError(connectMsg);
+          }
+          throw connectErr;
+        }
       } else {
-        setError(errorMessage(e));
+        setError(msg);
+        throw e;
       }
     }
   }, [libraryApi]);
@@ -516,7 +537,11 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       await loadDriveFolder(undefined);
       setDrivePickerOpen(true);
     } catch (e) {
-      setError(errorMessage(e));
+      console.error("handleOpenDrive outer error:", e);
+      const msg = errorMessage(e);
+      if (!msg.includes("not configured") && !msg.includes("not found")) {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -606,8 +631,14 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
           onTranslate={handleTranslate}
           onCloseComposer={handleCloseComposer}
           sourceHighlight={sourceHighlight}
-          listPageTags={libraryApi.listPageTags ?? nativeListPageTags}
-          togglePageTag={libraryApi.togglePageTag ?? nativeTogglePageTag}
+          listPageTags={async (id) => {
+            const fn = libraryApi.listPageTags ?? nativeListPageTags;
+            return (await fn?.(id)) ?? [];
+          }}
+          togglePageTag={async (id, page) => {
+            const fn = libraryApi.togglePageTag ?? nativeTogglePageTag;
+            return (await fn?.(id, page)) ?? [];
+          }}
         />
         {palette}
       </>
@@ -624,6 +655,9 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
         appleTranslationAvailable={aiApi.appleTranslationAvailable}
         onDefaultChange={handleTranslationDefaultChange}
         onBack={() => setRoute({ name: "library" })}
+        saveDriveCredentials={saveGoogleDriveCredentials}
+        loadDriveCredentials={loadGoogleDriveCredentials}
+        clearDriveCredentials={clearGoogleDriveCredentials}
       />
     );
   }
@@ -772,6 +806,52 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
         )}
       </div>
       {palette}
+      {driveSetupModalOpen && (
+        <div className="drive-setup-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="drive-setup-title">
+          <div className="drive-setup-modal">
+            <div className="drive-setup-modal__header">
+              <h2 id="drive-setup-title">Configure Google Drive</h2>
+              <button
+                className="drive-setup-modal__close-btn"
+                onClick={() => setDriveSetupModalOpen(false)}
+                aria-label="Close setup modal"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className="drive-setup-modal__body">
+              <p>To connect Google Drive, you need to configure your own Google Cloud OAuth credentials:</p>
+              <ol className="drive-setup-modal__steps">
+                <li>Go to the <strong>Google Cloud Console</strong>.</li>
+                <li>Enable the <strong>Google Drive API</strong>.</li>
+                <li>Configure the <strong>OAuth consent screen</strong> and add test users.</li>
+                <li>Create an OAuth Client ID for a <strong>Desktop app</strong>.</li>
+                <li>Go to <strong>Settings &gt; Google Drive</strong> to save your Client ID and Client Secret.</li>
+              </ol>
+            </div>
+            <div className="drive-setup-modal__footer">
+              <button
+                type="button"
+                className="drive-setup-modal__settings-btn"
+                onClick={() => {
+                  setDriveSetupModalOpen(false);
+                  setRoute({ name: "settings" });
+                }}
+              >
+                Configure in Settings
+              </button>
+              <button
+                type="button"
+                className="drive-setup-modal__cancel-btn"
+                onClick={() => setDriveSetupModalOpen(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -570,7 +570,7 @@ interface ReaderPageProps {
   document: LibraryDocument;
   onBack: () => void;
   getDocumentFileUrl: (id: string) => Promise<string>;
-  onPageChange: (id: string, page: number) => Promise<void>;
+  onPageChange: (id: string, page: number, numPages?: number) => Promise<void>;
   onCreateCard?: (draft: CardSource) => void;
   composerSource?: CardSource | null;
   composerDecks?: CardComposerDeck[];
@@ -668,7 +668,7 @@ export function ReaderPage({
     }
     const delay = import.meta.env.MODE === "test" ? 0 : 1000;
     savePageTimeoutRef.current = setTimeout(() => {
-      void onPageChange(document.id, pageNo);
+      void onPageChange(document.id, pageNo, pdfDoc?.numPages);
     }, delay);
   }, [document.id, onPageChange]);
 

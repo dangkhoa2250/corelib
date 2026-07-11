@@ -308,6 +308,7 @@ pub fn search_documents(
 pub fn save_read_page(
     id: String,
     page: i64,
+    num_pages: Option<i64>,
     state: State<'_, LibraryStore>,
 ) -> Result<DocumentSummary, String> {
     validate_read_page(page)?;
@@ -316,7 +317,7 @@ pub fn save_read_page(
         .database
         .lock()
         .map_err(|_| "library database is unavailable".to_owned())?
-        .update_read_page(&id, page)
+        .update_read_page(&id, page, num_pages)
         .map_err(|error| error.to_string())
 }
 
@@ -416,6 +417,49 @@ fn remove_new_managed_files(paths: &[String]) {
 pub fn drive_connect() -> Result<(), String> {
     let store = crate::drive_auth::KeychainTokenStore::new();
     crate::drive_api::drive_connect(&store)
+}
+
+#[tauri::command]
+pub fn save_google_drive_credentials(client_id: String, client_secret: String) -> Result<(), String> {
+    let entry_id = keyring::Entry::new("com.library.desktop.google_drive", "client_id")
+        .map_err(|e| e.to_string())?;
+    entry_id.set_password(&client_id).map_err(|e| e.to_string())?;
+
+    let entry_secret = keyring::Entry::new("com.library.desktop.google_drive", "client_secret")
+        .map_err(|e| e.to_string())?;
+    entry_secret.set_password(&client_secret).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn load_google_drive_credentials() -> Result<Option<std::collections::HashMap<String, String>>, String> {
+    let entry_id = keyring::Entry::new("com.library.desktop.google_drive", "client_id")
+        .map_err(|e| e.to_string())?;
+    let entry_secret = keyring::Entry::new("com.library.desktop.google_drive", "client_secret")
+        .map_err(|e| e.to_string())?;
+    
+    match (entry_id.get_password(), entry_secret.get_password()) {
+        (Ok(id), Ok(secret)) => {
+            let mut map = std::collections::HashMap::new();
+            map.insert("clientId".to_owned(), id);
+            map.insert("clientSecret".to_owned(), secret);
+            Ok(Some(map))
+        }
+        (Err(keyring::Error::NoEntry), _) | (_, Err(keyring::Error::NoEntry)) => Ok(None),
+        (Err(e), _) | (_, Err(e)) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn clear_google_drive_credentials() -> Result<(), String> {
+    let entry_id = keyring::Entry::new("com.library.desktop.google_drive", "client_id")
+        .map_err(|e| e.to_string())?;
+    let _ = entry_id.delete_password();
+
+    let entry_secret = keyring::Entry::new("com.library.desktop.google_drive", "client_secret")
+        .map_err(|e| e.to_string())?;
+    let _ = entry_secret.delete_password();
+    Ok(())
 }
 
 #[tauri::command]

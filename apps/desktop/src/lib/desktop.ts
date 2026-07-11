@@ -37,9 +37,10 @@ export function getDocument(
 export function saveReadPage(
   id: string,
   page: number,
+  numPages?: number,
   call: Invoke = invoke as Invoke,
 ): Promise<LibraryDocument> {
-  return call<LibraryDocument>("save_read_page", { id, page });
+  return call<LibraryDocument>("save_read_page", { id, page, numPages });
 }
 
 export function listPageTags(
@@ -116,4 +117,24 @@ export function renameDocument(
   call: Invoke = invoke as Invoke,
 ): Promise<LibraryDocument> {
   return call<LibraryDocument>("rename_document", { id, title });
+}
+
+export function saveGoogleDriveCredentials(
+  clientId: string,
+  clientSecret: string,
+  call: Invoke = invoke as Invoke,
+): Promise<void> {
+  return call("save_google_drive_credentials", { clientId, clientSecret });
+}
+
+export function loadGoogleDriveCredentials(
+  call: Invoke = invoke as Invoke,
+): Promise<{ clientId: string; clientSecret: string } | null> {
+  return call<{ clientId: string; clientSecret: string } | null>("load_google_drive_credentials");
+}
+
+export function clearGoogleDriveCredentials(
+  call: Invoke = invoke as Invoke,
+): Promise<void> {
+  return call("clear_google_drive_credentials");
 }

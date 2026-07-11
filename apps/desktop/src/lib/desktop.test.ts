@@ -19,11 +19,11 @@ test("passes typed arguments to native library commands", async () => {
 
   await importLocalDocuments(["/tmp/book.pdf"], invoke);
   await searchDocuments("Ada", invoke);
-  await saveReadPage("document-1", 12, invoke);
+  await saveReadPage("document-1", 12, undefined, invoke);
 
   expect(invoke.mock.calls).toEqual([
     ["import_local_documents", { paths: ["/tmp/book.pdf"] }],
     ["search_documents", { query: "Ada" }],
-    ["save_read_page", { id: "document-1", page: 12 }],
+    ["save_read_page", { id: "document-1", page: 12, numPages: undefined }],
   ]);
 });
