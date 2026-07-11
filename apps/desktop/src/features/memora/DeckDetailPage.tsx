@@ -64,11 +64,13 @@ export function DeckDetailPage({
           </div>
           <button
             className="deck-detail-page__study-btn"
-            disabled={!stats || stats.dueCards === 0}
+            disabled={!stats || (stats.newCards === 0 && stats.dueCards === 0)}
             onClick={() => onStudyDeck(deck.id)}
             type="button"
           >
-            {stats && stats.dueCards > 0 ? `Study Now (${stats.dueCards})` : "Nothing due"}
+            {stats && stats.newCards + stats.dueCards > 0
+              ? `Study Now (${stats.newCards + stats.dueCards})`
+              : "Nothing due"}
           </button>
         </div>
         {stats ? (

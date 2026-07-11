@@ -234,10 +234,10 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
   const handleStudyDeck = useCallback(async (deckId: string) => {
     try {
-      const cards = await learning.listDueCards();
-      const deckCards = cards.filter((c) => c.deckId === deckId);
-      const pairs = await Promise.all(deckCards.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
-      setRoute({ name: "review", cards: deckCards, previews: Object.fromEntries(pairs) });
+      const deckCards = await learning.listDeckCards(deckId);
+      const toStudy = deckCards.filter((c) => c.state !== "suspended");
+      const pairs = await Promise.all(toStudy.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
+      setRoute({ name: "review", cards: toStudy, previews: Object.fromEntries(pairs) });
     } catch (reviewError) { setError(errorMessage(reviewError)); }
   }, [learning]);
   const load = useCallback(async () => {
