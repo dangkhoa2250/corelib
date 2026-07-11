@@ -92,6 +92,16 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
 
   const elapsed = Math.max(0, now - startedAt);
 
+  const goToPrev = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIndex((current) => Math.max(0, current - 1));
+  };
+
+  const goToNext = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIndex((current) => Math.min(cards.length - 1, current + 1));
+  };
+
   if (!card) {
     if (isPractice) {
       const totalRated = Object.values(ratingCounts).reduce((a, b) => a + b, 0);
@@ -169,6 +179,26 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
           />
         </div>
         <p className="review-page__count">{index + 1} / {cards.length}</p>
+        <div className="review-page__nav">
+          <button
+            type="button"
+            className="review-page__nav-btn"
+            onClick={goToPrev}
+            disabled={index === 0}
+            aria-label="Previous card"
+          >
+            ◀
+          </button>
+          <button
+            type="button"
+            className="review-page__nav-btn"
+            onClick={goToNext}
+            disabled={index >= cards.length - 1}
+            aria-label="Next card"
+          >
+            ▶
+          </button>
+        </div>
       </header>
 
       <section

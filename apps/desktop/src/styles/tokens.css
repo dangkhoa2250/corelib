@@ -2872,6 +2872,32 @@ select {
   text-align: right;
 }
 
+.review-page__nav {
+  display: flex;
+  gap: 2px;
+}
+
+.review-page__nav-btn {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #8e8e93;
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.review-page__nav-btn:not(:disabled):hover {
+  background: #e5e5ea;
+  color: #3a3a3c;
+}
+
+.review-page__nav-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
 .review-page__card {
   flex: 1;
   perspective: 1200px;
