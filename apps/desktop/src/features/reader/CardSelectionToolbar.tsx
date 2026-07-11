@@ -63,6 +63,7 @@ export function CardSelectionToolbar({
         </button>
         <button
           aria-label="Create flashcard"
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => onCreate()}
           style={{
             border: 0,

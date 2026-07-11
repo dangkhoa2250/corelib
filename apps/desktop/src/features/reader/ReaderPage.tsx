@@ -7,8 +7,11 @@ import type { LibraryDocument } from "../../domain/document";
 import type { CardSource, SelectionRect } from "../../domain/learning";
 import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
+import { CardComposer, type CardSaveInput, type CardComposerDeck } from "../cards/CardComposer";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
+
+let lastSelectionRange: Range | null = null;
 
 const MIN_ZOOM_SCALE = 0.5;
 const MAX_ZOOM_SCALE = 3;
@@ -198,6 +201,7 @@ const PdfPage = React.memo(
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
       const range = selection.getRangeAt(0);
+      lastSelectionRange = range;
       const pageElement = containerRef.current;
       if (!pageElement) return;
       if (!selectionIsWithinPage(selection, pageElement)) return;
@@ -551,9 +555,25 @@ interface ReaderPageProps {
   getDocumentFileUrl: (id: string) => Promise<string>;
   onPageChange: (id: string, page: number) => Promise<void>;
   onCreateCard?: (draft: CardSource) => void;
+  composerSource?: CardSource | null;
+  composerDecks?: CardComposerDeck[];
+  composerError?: string | null;
+  onSaveCard?: (input: CardSaveInput) => Promise<void>;
+  onCloseComposer?: () => void;
 }
 
-export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange, onCreateCard }: ReaderPageProps) {
+export function ReaderPage({
+  document,
+  onBack,
+  getDocumentFileUrl,
+  onPageChange,
+  onCreateCard,
+  composerSource,
+  composerDecks,
+  composerError,
+  onSaveCard,
+  onCloseComposer,
+}: ReaderPageProps) {
   const [pdfDoc, setPdfDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(document.lastReadPage ?? 1);
   const [renderScale, setRenderScale] = useState(1);
@@ -956,7 +976,8 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
       </aside>
 
       {/* Main View Area */}
-      <section style={{ flex: 1, display: "flex", flexDirection: "column", background: "#f5f5f7" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "#f5f5f7" }}>
+      <section style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {/* Toolbar */}
         <header
           className="reader-toolbar"
@@ -1146,12 +1167,32 @@ export function ReaderPage({ document, onBack, getDocumentFileUrl, onPageChange,
               onCreate={() => {
                 onCreateCard(selection);
                 setSelection(null);
-                window.getSelection()?.removeAllRanges();
+                const savedRange = lastSelectionRange;
+                if (savedRange) {
+                  requestAnimationFrame(() => {
+                    const sel = window.getSelection();
+                    if (sel) {
+                      sel.removeAllRanges();
+                      sel.addRange(savedRange);
+                    }
+                  });
+                }
               }}
             />
           </div>
         ) : null}
       </section>
+      {composerSource && onSaveCard && onCloseComposer ? (
+        <CardComposer
+          draft={composerSource}
+          decks={composerDecks ?? []}
+          onCancel={onCloseComposer}
+          onSave={onSaveCard}
+          variant="panel"
+          externalError={composerError}
+        />
+      ) : null}
+      </div>
     </main>
   );
 }

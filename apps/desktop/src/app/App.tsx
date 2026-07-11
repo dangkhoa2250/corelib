@@ -20,7 +20,7 @@ import { ReaderPage } from "../features/reader/ReaderPage";
 import { CommandPalette, type CommandPaletteHandle } from "../features/search/CommandPalette";
 import { DrivePicker } from "../features/drive/DrivePicker";
 import { ReviewPage } from "../features/review/ReviewPage";
-import { CardComposer, type CardSaveInput } from "../features/cards/CardComposer";
+import type { CardSaveInput } from "../features/cards/CardComposer";
 import { MemoraPage } from "../features/memora/MemoraPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
@@ -143,7 +143,6 @@ type AppRoute =
   | { name: "library" }
   | { name: "memora" }
   | { name: "reader"; document: LibraryDocument }
-  | { name: "composer"; document: LibraryDocument; source: CardSource }
   | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> }
   | { name: "cardBrowser"; deckId: string }
   | { name: "trash" };
@@ -176,6 +175,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [composerSource, setComposerSource] = useState<CardSource | null>(null);
   const [composerDecks, setComposerDecks] = useState<Deck[]>([]);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [drivePickerOpen, setDrivePickerOpen] = useState(false);
@@ -284,7 +284,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       return;
     }
     setComposerError(null);
-    setRoute({ name: "composer", document: readerDocument, source });
+    setComposerSource(source);
     void learning.listDecks()
       .then((decks) => setComposerDecks(decks))
       .catch((loadError) => setComposerError(errorMessage(loadError)));
@@ -292,13 +292,12 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
   const handleSaveCard = useCallback(async (input: CardSaveInput) => {
     await learning.createCard(input);
-    const sourceDocument = documents?.find((candidate) => candidate.id === input.source?.documentId);
-    if (!sourceDocument) {
-      throw new Error("This source document is no longer available.");
-    }
-    const readerDocument = { ...sourceDocument, lastReadPage: input.source!.page };
-    setRoute({ name: "reader", document: readerDocument });
-  }, [documents, learning]);
+    setComposerSource(null);
+  }, [learning]);
+
+  const handleCloseComposer = useCallback(() => {
+    setComposerSource(null);
+  }, []);
 
 
 
@@ -463,22 +462,13 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
           getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
           onPageChange={handlePageChange}
           onCreateCard={handleCreateCard}
+          composerSource={composerSource}
+          composerDecks={composerDecks}
+          composerError={composerError}
+          onSaveCard={handleSaveCard}
+          onCloseComposer={handleCloseComposer}
         />
         {palette}
-      </>
-    );
-  }
-
-  if (route.name === "composer") {
-    return (
-      <>
-        {composerError ? <div role="alert">{composerError}</div> : null}
-        <CardComposer
-          draft={route.source}
-          decks={composerDecks}
-          onCancel={() => setRoute({ name: "reader", document: { ...route.document, lastReadPage: route.source.page } })}
-          onSave={handleSaveCard}
-        />
       </>
     );
   }

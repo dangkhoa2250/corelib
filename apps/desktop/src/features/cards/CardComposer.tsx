@@ -40,6 +40,8 @@ export interface CardComposerProps {
    */
   onSave: (input: CardSaveInput) => Promise<void>;
   onCancel: () => void;
+  variant?: "modal" | "panel";
+  externalError?: string | null;
 }
 
 function errorMessage(error: unknown): string {
@@ -59,6 +61,8 @@ export function CardComposer({
   decks,
   onSave,
   onCancel,
+  variant = "modal",
+  externalError,
 }: CardComposerProps) {
   const activeDecks = decks.filter((deck) => !deck.archived);
   const [front, setFront] = useState(draft.quote);
@@ -77,7 +81,7 @@ export function CardComposer({
   const sourceIsAvailable = hasRequiredDocumentId(draft);
   const usingNewDeck = deckValue === NEW_DECK_VALUE;
   const selectedDeck = activeDecks.find((deck) => deck.id === deckValue);
-  const visibleError = sourceIsAvailable ? error : SOURCE_UNAVAILABLE_MESSAGE;
+  const visibleError = externalError || (sourceIsAvailable ? error : SOURCE_UNAVAILABLE_MESSAGE);
 
   useEffect(() => {
     if (!deckSelectionTouchedRef.current && deckValue === NEW_DECK_VALUE && activeDecks.length > 0) {
@@ -86,15 +90,19 @@ export function CardComposer({
   }, [activeDecks, deckValue]);
 
   useEffect(() => {
-    previousFocusRef.current = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    frontRef.current?.focus();
+    if (variant === "modal") {
+      previousFocusRef.current = document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+      frontRef.current?.focus();
+    }
 
     return () => {
-      previousFocusRef.current?.focus();
+      if (variant === "modal") {
+        previousFocusRef.current?.focus();
+      }
     };
-  }, []);
+  }, [variant]);
 
   useEffect(() => {
     if (closed) {
@@ -181,6 +189,158 @@ export function CardComposer({
     return null;
   }
 
+  const form = (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void handleSave();
+      }}
+    >
+      <div style={{ display: "grid", gap: "16px" }}>
+        <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+          Deck
+          <select
+            aria-label="Deck"
+            disabled={saving}
+            onChange={(event) => {
+              deckSelectionTouchedRef.current = true;
+              setDeckValue(event.target.value);
+            }}
+            value={deckValue}
+          >
+            {activeDecks.map((deck) => (
+              <option key={deck.id} value={deck.id}>
+                {deck.name}
+              </option>
+            ))}
+            <option value={NEW_DECK_VALUE}>New deck…</option>
+          </select>
+        </label>
+
+        {usingNewDeck ? (
+          <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+            New deck name
+            <input
+              aria-label="New deck name"
+              disabled={saving}
+              onChange={(event) => setNewDeckName(event.target.value)}
+              placeholder="e.g. English vocabulary"
+              type="text"
+              value={newDeckName}
+            />
+          </label>
+        ) : null}
+
+        <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+          Front
+          <textarea
+            aria-label="Front"
+            disabled={saving}
+            onChange={(event) => setFront(event.target.value)}
+            ref={frontRef}
+            rows={5}
+            value={front}
+          />
+        </label>
+
+        <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+          Back
+          <textarea
+            aria-label="Back"
+            disabled={saving}
+            onChange={(event) => setBack(event.target.value)}
+            rows={5}
+            value={back}
+          />
+        </label>
+
+        <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+          Tags
+          <input
+            aria-label="Tags"
+            disabled={saving}
+            onChange={(event) => setTags(event.target.value)}
+            placeholder="e.g. algebra, definitions"
+            type="text"
+            value={tags}
+          />
+        </label>
+
+        <section
+          aria-label="Source preview"
+          style={{ padding: "12px", borderRadius: "12px", background: "#f2f2f7" }}
+        >
+          <strong style={{ display: "block", marginBottom: "4px", fontSize: "13px" }}>Source</strong>
+          <span style={{ color: "#48484a", fontSize: "13px" }}>
+            Document {draft.documentId ?? "Unavailable"} · Page {draft.page}
+          </span>
+        </section>
+
+        {visibleError ? (
+          <div
+            role="alert"
+            style={{ padding: "10px 12px", borderRadius: "10px", color: "#9a3412", background: "#fff7ed" }}
+          >
+            {visibleError}
+          </div>
+        ) : null}
+
+        <footer style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "4px" }}>
+          <button disabled={saving} onClick={close} type="button">
+            Cancel
+          </button>
+          <button disabled={saving || !sourceIsAvailable} type="submit">
+            {saving ? "Saving…" : "Save"}
+          </button>
+        </footer>
+      </div>
+    </form>
+  );
+
+  if (variant === "panel") {
+    return (
+      <section
+        aria-labelledby="card-composer-title"
+        onKeyDown={handleDialogKeyDown}
+        ref={dialogRef}
+        role="dialog"
+        style={{
+          width: "360px",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          overflowY: "auto",
+          padding: "20px",
+          borderLeft: "1px solid rgb(0 0 0 / 9%)",
+          background: "#fff",
+        }}
+      >
+        <header style={{ marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h2 id="card-composer-title" style={{ margin: 0, fontSize: "18px", letterSpacing: "-0.02em" }}>
+            Create flashcard
+          </h2>
+          <button
+            type="button"
+            onClick={onCancel}
+            aria-label="Close composer"
+            style={{
+              background: "transparent",
+              border: "none",
+              fontSize: "20px",
+              color: "#8e8e93",
+              cursor: "pointer",
+              padding: "4px",
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </header>
+        {form}
+      </section>
+    );
+  }
+
   return (
     <div
       style={{
@@ -219,112 +379,7 @@ export function CardComposer({
             Your selected text is ready to edit on the front of the card.
           </p>
         </header>
-
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            void handleSave();
-          }}
-        >
-          <div style={{ display: "grid", gap: "16px" }}>
-            <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
-              Deck
-              <select
-                aria-label="Deck"
-                disabled={saving}
-                onChange={(event) => {
-                  deckSelectionTouchedRef.current = true;
-                  setDeckValue(event.target.value);
-                }}
-                value={deckValue}
-              >
-                {activeDecks.map((deck) => (
-                  <option key={deck.id} value={deck.id}>
-                    {deck.name}
-                  </option>
-                ))}
-                <option value={NEW_DECK_VALUE}>New deck…</option>
-              </select>
-            </label>
-
-            {usingNewDeck ? (
-              <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
-                New deck name
-                <input
-                  aria-label="New deck name"
-                  disabled={saving}
-                  onChange={(event) => setNewDeckName(event.target.value)}
-                  placeholder="e.g. English vocabulary"
-                  type="text"
-                  value={newDeckName}
-                />
-              </label>
-            ) : null}
-
-            <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
-              Front
-              <textarea
-                aria-label="Front"
-                disabled={saving}
-                onChange={(event) => setFront(event.target.value)}
-                ref={frontRef}
-                rows={5}
-                value={front}
-              />
-            </label>
-
-            <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
-              Back
-              <textarea
-                aria-label="Back"
-                disabled={saving}
-                onChange={(event) => setBack(event.target.value)}
-                rows={5}
-                value={back}
-              />
-            </label>
-
-            <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
-              Tags
-              <input
-                aria-label="Tags"
-                disabled={saving}
-                onChange={(event) => setTags(event.target.value)}
-                placeholder="e.g. algebra, definitions"
-                type="text"
-                value={tags}
-              />
-            </label>
-
-            <section
-              aria-label="Source preview"
-              style={{ padding: "12px", borderRadius: "12px", background: "#f2f2f7" }}
-            >
-              <strong style={{ display: "block", marginBottom: "4px", fontSize: "13px" }}>Source</strong>
-              <span style={{ color: "#48484a", fontSize: "13px" }}>
-                Document {draft.documentId ?? "Unavailable"} · Page {draft.page}
-              </span>
-            </section>
-
-            {visibleError ? (
-              <div
-                role="alert"
-                style={{ padding: "10px 12px", borderRadius: "10px", color: "#9a3412", background: "#fff7ed" }}
-              >
-                {visibleError}
-              </div>
-            ) : null}
-
-            <footer style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "4px" }}>
-              <button disabled={saving} onClick={close} type="button">
-                Cancel
-              </button>
-              <button disabled={saving || !sourceIsAvailable} type="submit">
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </footer>
-          </div>
-        </form>
+        {form}
       </section>
     </div>
   );
