@@ -26,6 +26,9 @@ import { DeckDetailPage } from "../features/memora/DeckDetailPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
+import { SettingsPage, readAiPreference } from "../features/settings/SettingsPage";
+import { clearAiApiKey, hasAiApiKey, listAiModels, saveAiApiKey, translateWithAi } from "../lib/ai";
+import type { AiModel, AiProviderId } from "../domain/ai";
 import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
 import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, DeckStatistics, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
@@ -140,6 +143,7 @@ const nativeLearningApi: LearningApi = {
 interface AppProps {
   libraryApi?: LibraryApi;
   learningApi?: LearningApi;
+  aiApi?: AiApi;
 }
 
 type AppRoute =
@@ -149,9 +153,26 @@ type AppRoute =
   | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview>; sourceDeck?: Deck; mode?: "study" | "practice" }
   | { name: "cardBrowser"; deckId: string }
   | { name: "deckDetail"; deck: Deck }
-  | { name: "trash" };
+  | { name: "trash" }
+  | { name: "settings" };
 
-export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi }: AppProps) {
+interface AiApi {
+  hasApiKey: (provider: AiProviderId) => Promise<boolean>;
+  saveApiKey: (provider: AiProviderId, apiKey: string) => Promise<void>;
+  clearApiKey: (provider: AiProviderId) => Promise<void>;
+  listModels: (provider: AiProviderId) => Promise<AiModel[]>;
+  translate: (provider: AiProviderId, model: string, text: string, targetLanguage: string) => Promise<{ translation: string }>;
+}
+
+const nativeAiApi: AiApi = {
+  hasApiKey: hasAiApiKey,
+  saveApiKey: saveAiApiKey,
+  clearApiKey: clearAiApiKey,
+  listModels: listAiModels,
+  translate: translateWithAi,
+};
+
+export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi, aiApi = nativeAiApi }: AppProps) {
   const learning = useMemo(() => ({
     listDecks: learningApi.listDecks,
     createCard: learningApi.createCard,
@@ -194,6 +215,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
   const [isBrowserDirty, setIsBrowserDirty] = useState(false);
   const [sourceHighlight, setSourceHighlight] = useState<CardSource | null>(null);
+  const [aiPreference, setAiPreference] = useState(readAiPreference);
 
   const reloadDecks = useCallback(async () => {
     try {
@@ -325,6 +347,24 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
   const handleCloseComposer = useCallback(() => {
     setComposerSource(null);
+  }, []);
+
+  const handleTranslate = useCallback(async (text: string) => {
+    if (!aiPreference.provider || !aiPreference.model) {
+      throw new Error("Configure a default AI provider and model in Settings first.");
+    }
+    const result = await aiApi.translate(
+      aiPreference.provider,
+      aiPreference.model,
+      text,
+      aiPreference.targetLanguage,
+    );
+    return result.translation;
+  }, [aiApi, aiPreference]);
+
+  const handleAiDefaultChange = useCallback((provider: AiProviderId | null, model: string) => {
+    const preference = readAiPreference();
+    setAiPreference({ provider, model, targetLanguage: preference.targetLanguage });
   }, []);
 
 
@@ -483,6 +523,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
           composerDecks={composerDecks}
           composerError={composerError}
           onSaveCard={handleSaveCard}
+          onTranslate={handleTranslate}
           onCloseComposer={handleCloseComposer}
           sourceHighlight={sourceHighlight}
         />
@@ -498,6 +539,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       ? "memora"
       : route.name === "trash"
       ? "trash"
+      : route.name === "settings"
+      ? "settings"
       : "library";
 
   return (
@@ -518,9 +561,18 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
           );
         }}
         onSearchClick={() => paletteRef.current?.open()}
+        onSettingsClick={() => setRoute({ name: "settings" })}
       />
       <div className="app-shell__content">
-        {route.name === "memora" ? (
+        {route.name === "settings" ? (
+          <SettingsPage
+            hasApiKey={aiApi.hasApiKey}
+            saveApiKey={aiApi.saveApiKey}
+            clearApiKey={aiApi.clearApiKey}
+            listModels={aiApi.listModels}
+            onDefaultChange={handleAiDefaultChange}
+          />
+        ) : route.name === "memora" ? (
           <MemoraPage
             listDecks={learning.listDecks}
             listDueCards={learning.listDueCards}
