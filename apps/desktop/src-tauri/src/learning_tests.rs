@@ -1,6 +1,7 @@
+use rusqlite::params;
 use tempfile::TempDir;
 
-use crate::learning::{AppliedReview, NewCard, NewCardSource};
+use crate::learning::{AppliedReview, CardBrowserQuery, CardSort, NewCard, NewCardSource};
 use crate::library_db::LibraryDatabase;
 
 fn db() -> (TempDir, LibraryDatabase) {
@@ -251,7 +252,9 @@ fn rejects_nonfinite_review_parameters_and_nonobject_memory() {
 fn renames_a_deck() {
     let (_dir, mut db) = db();
     let created = db.create_deck("Chemistry").expect("create");
-    let renamed = db.rename_deck(&created.id, "Organic Chemistry").expect("rename");
+    let renamed = db
+        .rename_deck(&created.id, "Organic Chemistry")
+        .expect("rename");
     assert_eq!(renamed.name, "Organic Chemistry");
     let decks = db.list_decks().expect("list");
     assert!(decks.iter().any(|d| d.name == "Organic Chemistry"));
@@ -306,7 +309,9 @@ fn counts_cards_in_an_empty_deck_as_zero() {
 fn lists_cards_in_a_deck_in_creation_order() {
     let (_dir, mut db) = db();
     let first = db.create_card(card("What is ATP?")).expect("create");
-    let second = db.create_card(card("What is a mitochondrion?")).expect("create");
+    let second = db
+        .create_card(card("What is a mitochondrion?"))
+        .expect("create");
 
     let mut other_deck_card = card("What is a neuron?");
     other_deck_card.deck_name = "Neuroscience".into();
@@ -318,14 +323,20 @@ fn lists_cards_in_a_deck_in_creation_order() {
 
     // Only Biology's own two cards, in creation order — proves the deck_id
     // filter actually scopes the query instead of returning every card.
-    assert_eq!(cards.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), vec![first.id.as_str(), second.id.as_str()]);
+    assert_eq!(
+        cards.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(),
+        vec![first.id.as_str(), second.id.as_str()]
+    );
 }
 
 #[test]
 fn lists_no_cards_for_an_empty_deck() {
     let (_dir, mut db) = db();
     let created = db.create_deck("Chemistry").expect("create");
-    assert!(db.cards_in_deck(&created.id).expect("list cards").is_empty());
+    assert!(db
+        .cards_in_deck(&created.id)
+        .expect("list cards")
+        .is_empty());
 }
 
 #[test]
@@ -340,4 +351,384 @@ fn deletes_a_card() {
 fn rejects_deleting_a_missing_card() {
     let (_dir, mut db) = db();
     assert!(db.delete_card("missing-id").is_err());
+}
+
+#[test]
+fn card_browser() {
+    let (_dir, mut db) = db();
+
+    let deck_bio = db.create_deck("Biology").expect("deck");
+    let _deck_chem = db.create_deck("Chemistry").expect("deck");
+
+    let mut card1 = card("ATP energy");
+    card1.tags = vec!["Biology".into(), "Cell".into()];
+    let c1 = db.create_card(card1).expect("c1");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='review', updated_at='2026-07-10T10:00:00Z' WHERE id=?1",
+            params![c1.id],
+        )
+        .expect("update");
+
+    let mut card2 = card("Mitochondria ATP");
+    card2.tags = vec!["biology".into(), "Organelle".into()];
+    let c2 = db.create_card(card2).expect("c2");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='review', updated_at='2026-07-10T09:00:00Z' WHERE id=?1",
+            params![c2.id],
+        )
+        .expect("update");
+
+    let mut card3 = card("ATP synthesis");
+    card3.tags = vec!["Biology".into()];
+    let c3 = db.create_card(card3).expect("c3");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='new', updated_at='2026-07-10T08:00:00Z' WHERE id=?1",
+            params![c3.id],
+        )
+        .expect("update");
+
+    let mut card_trashed = card("ATP trashed");
+    card_trashed.tags = vec!["Biology".into()];
+    let c_trashed = db.create_card(card_trashed).expect("c_trashed");
+    db.connection
+        .execute(
+            "UPDATE cards SET deleted_at='2026-07-10T11:00:00Z' WHERE id=?1",
+            params![c_trashed.id],
+        )
+        .expect("update");
+
+    let mut card_chem = card("Reaction chemistry");
+    card_chem.deck_name = "Chemistry".into();
+    card_chem.tags = vec!["Chemistry".into()];
+    let _c_chem = db.create_card(card_chem).expect("c_chem");
+
+    let page = db
+        .query_deck_cards(CardBrowserQuery {
+            deck_id: deck_bio.id.clone(),
+            query: "ATP".into(),
+            states: vec!["review".into()],
+            tags: vec!["Biology".into()],
+            sort: CardSort::UpdatedDesc,
+            cursor: None,
+            limit: 2,
+        })
+        .expect("query");
+
+    assert_eq!(page.rows.len(), 2);
+    assert_eq!(page.rows[0].id, c1.id);
+    assert_eq!(page.rows[1].id, c2.id);
+    assert_eq!(page.total, 2);
+    assert!(page.next_cursor.is_none());
+
+    let page2 = db
+        .query_deck_cards(CardBrowserQuery {
+            deck_id: deck_bio.id.clone(),
+            query: "ATP".into(),
+            states: vec!["new".into(), "review".into()],
+            tags: vec!["Biology".into()],
+            sort: CardSort::UpdatedDesc,
+            cursor: None,
+            limit: 2,
+        })
+        .expect("query");
+    assert_eq!(page2.total, 3);
+    assert_eq!(page2.rows.len(), 2);
+    assert!(page2.next_cursor.is_some());
+
+    let page3 = db
+        .query_deck_cards(CardBrowserQuery {
+            deck_id: deck_bio.id.clone(),
+            query: "ATP".into(),
+            states: vec!["new".into(), "review".into()],
+            tags: vec!["Biology".into()],
+            sort: CardSort::UpdatedDesc,
+            cursor: page2.next_cursor,
+            limit: 2,
+        })
+        .expect("query cursor");
+    assert_eq!(page3.rows.len(), 1);
+    assert_eq!(page3.rows[0].id, c3.id);
+    assert_eq!(page3.total, 3);
+
+    let page4 = db
+        .query_deck_cards(CardBrowserQuery {
+            deck_id: deck_bio.id.clone(),
+            query: "".into(),
+            states: vec![],
+            tags: vec!["biology".into(), "cell".into()],
+            sort: CardSort::UpdatedDesc,
+            cursor: None,
+            limit: 10,
+        })
+        .expect("query tags");
+    assert_eq!(page4.total, 1);
+    assert_eq!(page4.rows[0].id, c1.id);
+}
+
+#[test]
+fn lifecycle_active() {
+    let (_dir, mut db) = db();
+
+    let deck_bio = db.create_deck("Biology").expect("deck");
+    let deck_chem = db.create_deck("Chemistry").expect("deck");
+
+    let mut card1 = card("ATP energy");
+    card1.tags = vec!["Biology".into()];
+    let c1 = db.create_card(card1).expect("c1");
+
+    db.connection.execute(
+        "UPDATE cards SET state='review', stability=4.5, difficulty=2.1, reps=5, lapses=2, due_at='2026-07-10T12:00:00Z', memory_state_json='{\"fsrs\":1}' WHERE id=?1",
+        params![c1.id]
+    ).expect("update");
+
+    use crate::learning::UpdateCard;
+    let updated = db
+        .update_card(UpdateCard {
+            card_id: c1.id.clone(),
+            front: "ATP energy updated".into(),
+            back: "Adenosine triphosphate".into(),
+            tags: vec!["biology".into(), "Cell".into()],
+        })
+        .expect("update_card");
+
+    assert_eq!(updated.front, "ATP energy updated");
+    assert_eq!(updated.back, "Adenosine triphosphate");
+    assert_eq!(updated.tags, vec!["Biology", "Cell"]);
+
+    let preserved: (String, Option<f64>, Option<f64>, i64, i64, String, Option<String>) = db.connection.query_row(
+        "SELECT state, stability, difficulty, reps, lapses, due_at, memory_state_json FROM cards WHERE id=?1",
+        params![c1.id],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?))
+    ).expect("query");
+    assert_eq!(preserved.0, "review");
+    assert_eq!(preserved.1, Some(4.5));
+    assert_eq!(preserved.2, Some(2.1));
+    assert_eq!(preserved.3, 5);
+    assert_eq!(preserved.4, 2);
+    assert_eq!(preserved.5, "2026-07-10T12:00:00Z");
+    assert_eq!(preserved.6.as_deref(), Some("{\"fsrs\":1}"));
+
+    let c2 = db.create_card(card("card 2")).expect("c2");
+
+    let move_res = db
+        .move_cards(&[c1.id.clone(), c2.id.clone()], &deck_chem.id)
+        .expect("move");
+    assert_eq!(move_res.affected_count, 2);
+    assert!(move_res.affected_ids.contains(&c1.id));
+    assert!(move_res.affected_ids.contains(&c2.id));
+
+    let deck_id_c1: String = db
+        .connection
+        .query_row(
+            "SELECT deck_id FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+    assert_eq!(deck_id_c1, deck_chem.id);
+
+    let rollback_move = db.move_cards(&[c1.id.clone(), "invalid-id".into()], &deck_bio.id);
+    assert!(rollback_move.is_err());
+    let deck_id_c1_post: String = db
+        .connection
+        .query_row(
+            "SELECT deck_id FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+    assert_eq!(deck_id_c1_post, deck_chem.id);
+
+    let rollback_deck = db.move_cards(std::slice::from_ref(&c1.id), "missing-deck-id");
+    assert!(rollback_deck.is_err());
+    let deck_id_c1_post2: String = db
+        .connection
+        .query_row(
+            "SELECT deck_id FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+    assert_eq!(deck_id_c1_post2, deck_chem.id);
+
+    let suspend_res = db
+        .set_cards_suspended(&[c1.id.clone(), c2.id.clone()], true)
+        .expect("suspend");
+    assert_eq!(suspend_res.affected_count, 2);
+
+    let c1_state: (String, Option<String>) = db
+        .connection
+        .query_row(
+            "SELECT state, suspended_from_state FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("query");
+    assert_eq!(c1_state.0, "suspended");
+    assert_eq!(c1_state.1.as_deref(), Some("review"));
+
+    let rollback_suspend = db.set_cards_suspended(std::slice::from_ref(&c1.id), true);
+    assert!(rollback_suspend.is_err());
+
+    let unsuspend_res = db
+        .set_cards_suspended(&[c1.id.clone(), c2.id.clone()], false)
+        .expect("unsuspend");
+    assert_eq!(unsuspend_res.affected_count, 2);
+
+    let c1_state_post: (String, Option<String>) = db
+        .connection
+        .query_row(
+            "SELECT state, suspended_from_state FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .expect("query");
+    assert_eq!(c1_state_post.0, "review");
+    assert_eq!(c1_state_post.1, None);
+
+    let rollback_unsuspend = db.set_cards_suspended(std::slice::from_ref(&c1.id), false);
+    assert!(rollback_unsuspend.is_err());
+}
+
+#[test]
+fn trash_and_isolation() {
+    let (_dir, mut db) = db();
+
+    let deck_bio = db.create_deck("Biology").expect("deck");
+    let deck_chem = db.create_deck("Chemistry").expect("deck");
+
+    let c1 = db.create_card(card("ATP energy")).expect("c1");
+    let c2 = db.create_card(card("Mitochondria")).expect("c2");
+
+    let trash_res = db.trash_cards(std::slice::from_ref(&c1.id)).expect("trash");
+    assert_eq!(trash_res.affected_count, 1);
+    assert_eq!(trash_res.affected_ids, vec![c1.id.clone()]);
+
+    let active_cards = db.cards_in_deck(&deck_bio.id).expect("active");
+    assert_eq!(active_cards.len(), 1);
+    assert_eq!(active_cards[0].id, c2.id);
+
+    let count = db.count_cards_in_deck(&deck_bio.id).expect("count");
+    assert_eq!(count, 1);
+
+    use crate::learning::{TrashQuery, TrashSort};
+    let trashed_page = db
+        .list_trashed_cards(TrashQuery {
+            query: "".into(),
+            sort: TrashSort::DeletedDesc,
+            cursor: None,
+            limit: 10,
+        })
+        .expect("trash page");
+    assert_eq!(trashed_page.total, 1);
+    assert_eq!(trashed_page.rows[0].id, c1.id);
+    assert_eq!(trashed_page.rows[0].deck_name, "Biology");
+
+    let review_err = db.apply_review_atomic(AppliedReview {
+        card_id: c1.id.clone(),
+        rating: "good".into(),
+        prior_state: "new".into(),
+        next_state: "review".into(),
+        prior_due_at: "2026-07-10T00:00:00Z".into(),
+        next_due_at: "2026-07-11T00:00:00Z".into(),
+        interval_seconds: 86400,
+        elapsed_ms: 1000,
+        stability: None,
+        difficulty: None,
+        memory_state_json: None,
+        scheduler_version: "fsrs-v1".into(),
+    });
+    assert!(review_err.is_err());
+    let err_msg = review_err.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("card is in Trash"),
+        "error message is: {}",
+        err_msg
+    );
+
+    let restore_res = db
+        .restore_cards(std::slice::from_ref(&c1.id), None)
+        .expect("restore");
+    assert_eq!(restore_res.affected_count, 1);
+
+    let active_cards_post = db.cards_in_deck(&deck_bio.id).expect("active post");
+    assert_eq!(active_cards_post.len(), 2);
+
+    db.delete_deck(&deck_bio.id).expect("delete deck");
+
+    let deck_exists = db
+        .connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM decks WHERE id = ?1)",
+            params![deck_bio.id],
+            |r| r.get::<_, bool>(0),
+        )
+        .expect("query");
+    assert!(!deck_exists);
+
+    let c2_deleted: (Option<String>, Option<String>, Option<String>) = db
+        .connection
+        .query_row(
+            "SELECT deck_id, deleted_at, deleted_from_deck_name FROM cards WHERE id = ?1",
+            params![c2.id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .expect("query");
+    assert_eq!(c2_deleted.0, None);
+    assert!(c2_deleted.1.is_some());
+    assert_eq!(c2_deleted.2.as_deref(), Some("Biology"));
+
+    assert!(db
+        .restore_cards(std::slice::from_ref(&c2.id), None)
+        .is_err());
+
+    let restore_c2 = db
+        .restore_cards(std::slice::from_ref(&c2.id), Some(&deck_chem.id))
+        .expect("restore with dest");
+    assert_eq!(restore_c2.affected_count, 1);
+
+    let c2_deck_id: String = db
+        .connection
+        .query_row(
+            "SELECT deck_id FROM cards WHERE id=?1",
+            params![c2.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+    assert_eq!(c2_deck_id, deck_chem.id);
+
+    let trash_c2 = db.trash_cards(std::slice::from_ref(&c2.id)).expect("trash");
+    assert_eq!(trash_c2.affected_count, 1);
+
+    let perm_del = db
+        .delete_cards_permanently(std::slice::from_ref(&c2.id))
+        .expect("perm delete");
+    assert_eq!(perm_del.affected_count, 1);
+
+    let c2_exists: bool = db
+        .connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM cards WHERE id=?1)",
+            params![c2.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+    assert!(!c2_exists);
+
+    // c1 is already trashed because of delete_deck. So we can just empty trash directly.
+    let empty_res = db.empty_trash().expect("empty");
+    assert_eq!(empty_res.affected_count, 1);
+
+    let c1_exists: bool = db
+        .connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM cards WHERE id=?1)",
+            params![c1.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+    assert!(!c1_exists);
 }

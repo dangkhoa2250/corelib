@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Invoke } from "./desktop";
-import type { Deck, LearningCard, NewCardSource, ReviewPreview, ReviewRating, CardSource } from "../domain/learning";
+import type { Deck, LearningCard, NewCardSource, ReviewPreview, ReviewRating, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, BulkResult } from "../domain/learning";
 import type { LibraryDocument } from "../domain/document";
 
 export type SearchResult = { kind: "document" | "card"; id: string; title: string; subtitle: string | null };
@@ -21,3 +21,14 @@ export function getCard(id: string, call: Invoke = invoke as Invoke): Promise<Le
 export function getCardSource(id: string, call: Invoke = invoke as Invoke): Promise<CardSource | null> { return call("get_card_source", { id }); }
 export function searchEverything(query: string, call: Invoke = invoke as Invoke): Promise<SearchResult[]> { return call("search_everything", { query }); }
 export function getDocument(id: string, call: Invoke = invoke as Invoke): Promise<LibraryDocument> { return call("get_document", { id }); }
+
+export function queryDeckCards(payload: CardBrowserQuery, call: Invoke = invoke as Invoke): Promise<CardPage> { return call("query_deck_cards", { payload }); }
+export function updateCard(payload: UpdateCardInput, call: Invoke = invoke as Invoke): Promise<LearningCard> { return call("update_card", { payload }); }
+export function moveCards(cardIds: string[], destinationDeckId: string, call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("move_cards", { cardIds, destinationDeckId }); }
+export function setCardsSuspended(cardIds: string[], suspended: boolean, call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("set_cards_suspended", { cardIds, suspended }); }
+export function trashCards(cardIds: string[], call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("trash_cards", { cardIds }); }
+export function listTrashedCards(query: string, sort: string, cursor: string | null, limit: number, call: Invoke = invoke as Invoke): Promise<CardPage> { return call("list_trashed_cards", { query, sort, cursor, limit }); }
+export function restoreCards(cardIds: string[], destinationDeckId: string | null, call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("restore_cards", { cardIds, destinationDeckId }); }
+export function deleteCardsPermanently(cardIds: string[], call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("delete_cards_permanently", { cardIds }); }
+export function emptyTrash(call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("empty_trash"); }
+export function listActiveTags(deckId: string, call: Invoke = invoke as Invoke): Promise<string[]> { return call("list_active_tags", { deckId }); }

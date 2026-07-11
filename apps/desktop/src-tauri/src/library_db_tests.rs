@@ -576,3 +576,199 @@ fn batch_insert_rolls_back_when_a_later_document_cannot_be_recorded() {
     assert!(result.is_err());
     assert!(database.list().expect("list documents").is_empty());
 }
+
+#[test]
+fn upgrading_0005_adds_card_lifecycle_without_data_loss() {
+    let directory = tempdir().expect("create temporary directory");
+    let database_path = directory.path().join("library.sqlite3");
+    let connection = Connection::open(&database_path).expect("open legacy database");
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys = ON;
+             CREATE TABLE schema_migrations (id TEXT PRIMARY KEY NOT NULL);",
+        )
+        .expect("create migration table");
+
+    for (migration_id, migration) in [
+        (
+            "0001_library",
+            include_str!("../migrations/0001_library.sql"),
+        ),
+        (
+            "0002_index_claims",
+            include_str!("../migrations/0002_index_claims.sql"),
+        ),
+        (
+            "0003_drive_source",
+            include_str!("../migrations/0003_drive_source.sql"),
+        ),
+        (
+            "0004_learning",
+            include_str!("../migrations/0004_learning.sql"),
+        ),
+        (
+            "0005_learning_source_integrity",
+            include_str!("../migrations/0005_learning_source_integrity.sql"),
+        ),
+    ] {
+        connection
+            .execute_batch(migration)
+            .expect("apply legacy migration");
+        connection
+            .execute(
+                "INSERT INTO schema_migrations (id) VALUES (?1)",
+                params![migration_id],
+            )
+            .expect("record legacy migration");
+    }
+
+    let timestamp = "2026-07-10T00:00:00Z";
+    connection
+        .execute(
+            "INSERT INTO documents (
+               id, source, content_hash, title, managed_path, status, index_state, created_at, updated_at
+             ) VALUES (?1, 'local_managed', ?2, ?3, ?4, 'ready', 'ready', ?5, ?5)",
+            params![
+                "document-1",
+                "document-content",
+                "Source document",
+                "/managed/source.pdf",
+                timestamp,
+            ],
+        )
+        .expect("insert source document");
+    connection
+        .execute(
+            "INSERT INTO decks (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            params!["deck-1", "Biology", timestamp],
+        )
+        .expect("insert deck");
+    connection
+        .execute(
+            "INSERT INTO cards (
+               id, deck_id, front, back, state, due_at, reps, lapses, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, 'review', ?5, 4, 1, ?6, ?6)",
+            params![
+                "card-1",
+                "deck-1",
+                "What is ATP?",
+                "Energy storage",
+                timestamp,
+                timestamp
+            ],
+        )
+        .expect("insert review card");
+    connection
+        .execute(
+            "INSERT INTO card_sources (card_id, document_id, page, quote, rects_json)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                "card-1",
+                "document-1",
+                7,
+                "ATP stores energy.",
+                "[{\"x\":1}]"
+            ],
+        )
+        .expect("insert card source");
+    connection
+        .execute(
+            "INSERT INTO tags (id, name) VALUES ('tag-1', 'biology')",
+            [],
+        )
+        .expect("insert tag");
+    connection
+        .execute(
+            "INSERT INTO card_tags (card_id, tag_id) VALUES ('card-1', 'tag-1')",
+            [],
+        )
+        .expect("insert card tag");
+    connection
+        .execute(
+            "INSERT INTO review_logs (
+               id, card_id, reviewed_at, rating, prior_state, next_state,
+               prior_due_at, next_due_at, interval_seconds, elapsed_ms, scheduler_version
+             ) VALUES ('review-1', 'card-1', ?1, 'good', 'review', 'review', ?1, ?1, 86400, 2000, 'fsrs-v1')",
+            params![timestamp],
+        )
+        .expect("insert review log");
+
+    drop(connection);
+
+    let db = LibraryDatabase::open(directory.path()).expect("upgrade database");
+    drop(db);
+
+    let connection = Connection::open(&database_path).expect("open database connection");
+
+    let migration: Option<String> = connection
+        .query_row(
+            "SELECT id FROM schema_migrations WHERE id = ?1",
+            params!["0006_card_lifecycle"],
+            |row| row.get(0),
+        )
+        .optional()
+        .expect("query migration table");
+    assert_eq!(migration.as_deref(), Some("0006_card_lifecycle"));
+
+    let mut table_info = connection
+        .prepare("PRAGMA table_info(cards);")
+        .expect("prepare table_info");
+    let mut deck_id_not_null = None;
+    let mut rows = table_info.query([]).expect("query table_info");
+    while let Some(row) = rows.next().expect("next row") {
+        let name: String = row.get(1).expect("get name");
+        if name == "deck_id" {
+            deck_id_not_null = Some(row.get::<_, i32>(3).expect("get notnull"));
+        }
+    }
+    assert_eq!(deck_id_not_null, Some(0));
+
+    let card: (Option<String>, Option<String>, Option<String>, Option<String>, String, i32) = connection
+        .query_row(
+            "SELECT deck_id, deleted_at, deleted_from_deck_name, suspended_from_state, state, reps FROM cards WHERE id = 'card-1'",
+            [],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .expect("query upgraded card");
+
+    assert_eq!(card.0.as_deref(), Some("deck-1"));
+    assert_eq!(card.1, None);
+    assert_eq!(card.2, None);
+    assert_eq!(card.3, None);
+    assert_eq!(card.4, "review");
+    assert_eq!(card.5, 4);
+
+    let fk_check: Option<String> = connection
+        .query_row("PRAGMA foreign_key_check;", [], |row| row.get(0))
+        .optional()
+        .expect("run pragma foreign_key_check");
+    assert!(
+        fk_check.is_none(),
+        "foreign key check failed: {:?}",
+        fk_check
+    );
+
+    let sources_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM card_sources", [], |row| row.get(0))
+        .expect("count sources");
+    assert_eq!(sources_count, 1);
+
+    let tags_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM card_tags", [], |row| row.get(0))
+        .expect("count tags");
+    assert_eq!(tags_count, 1);
+
+    let logs_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM review_logs", [], |row| row.get(0))
+        .expect("count logs");
+    assert_eq!(logs_count, 1);
+}

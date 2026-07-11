@@ -1,5 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import type { LibraryDocument } from "../domain/document";
 import {
@@ -22,11 +22,12 @@ import { DrivePicker } from "../features/drive/DrivePicker";
 import { ReviewPage } from "../features/review/ReviewPage";
 import { CardComposer, type CardSaveInput } from "../features/cards/CardComposer";
 import { MemoraPage } from "../features/memora/MemoraPage";
-import { DeckCardsPage } from "../features/memora/DeckCardsPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource } from "../lib/learning";
-import type { CardSource, Deck, LearningCard, ReviewPreview, ReviewRating } from "../domain/learning";
-import type { SearchResult } from "../lib/learning";
+import { CardBrowser } from "../features/cards/CardBrowser";
+import { TrashPage } from "../features/cards/TrashPage";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended } from "../lib/learning";
+import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput } from "../domain/learning";
+import type { CreateCardInput, SearchResult } from "../lib/learning";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -87,34 +88,29 @@ function mergeDocuments(
   return [...documents.values()];
 }
 
-interface AppProps {
-  libraryApi?: LibraryApi;
-  learningApi?: {
-    listDecks: () => Promise<Deck[]>;
-    createCard: (input: CardSaveInput) => Promise<LearningCard>;
-    createDeck?: (name: string) => Promise<Deck>;
-    renameDeck?: (id: string, name: string) => Promise<Deck>;
-    deleteDeck?: (id: string) => Promise<void>;
-    countDeckCards?: (id: string) => Promise<number>;
-    listDeckCards?: (deckId: string) => Promise<LearningCard[]>;
-    deleteCard?: (id: string) => Promise<void>;
-    listDueCards?: (limit?: number) => Promise<LearningCard[]>;
-    previewCardReview?: (id: string) => Promise<ReviewPreview>;
-    rateCard?: (id: string, rating: ReviewRating, elapsedMs: number) => Promise<LearningCard>;
-    getCard?: (id: string) => Promise<LearningCard>;
-    getCardSource?: (id: string) => Promise<CardSource | null>;
-  };
+interface LearningApi {
+  listDecks: () => Promise<Deck[]>;
+  createCard: (input: CreateCardInput) => Promise<LearningCard>;
+  createDeck?: (name: string) => Promise<Deck>;
+  renameDeck?: (id: string, name: string) => Promise<Deck>;
+  deleteDeck?: (id: string) => Promise<void>;
+  countDeckCards?: (id: string) => Promise<number>;
+  listDeckCards?: (deckId: string) => Promise<LearningCard[]>;
+  deleteCard?: (id: string) => Promise<void>;
+  listDueCards?: (limit?: number) => Promise<LearningCard[]>;
+  previewCardReview?: (id: string) => Promise<ReviewPreview>;
+  rateCard?: (id: string, rating: ReviewRating, elapsedMs: number) => Promise<LearningCard>;
+  getCard?: (id: string) => Promise<LearningCard>;
+  getCardSource?: (id: string) => Promise<CardSource | null>;
+  listActiveTags?: (deckId: string) => Promise<string[]>;
+  queryDeckCards?: (payload: CardBrowserQuery) => Promise<CardPage>;
+  updateCard?: (payload: UpdateCardInput) => Promise<LearningCard>;
+  moveCards?: (cardIds: string[], destinationDeckId: string) => Promise<BulkResult>;
+  setCardsSuspended?: (cardIds: string[], suspended: boolean) => Promise<BulkResult>;
+  trashCards?: (cardIds: string[]) => Promise<BulkResult>;
 }
 
-type AppRoute =
-  | { name: "library" }
-  | { name: "memora" }
-  | { name: "deckCards"; deck: Deck }
-  | { name: "reader"; document: LibraryDocument }
-  | { name: "composer"; document: LibraryDocument; source: CardSource }
-  | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> };
-
-export function App({ libraryApi = nativeLibraryApi, learningApi = {
+const nativeLearningApi: LearningApi = {
   listDecks: nativeListDecks,
   createCard: nativeCreateCard,
   createDeck: nativeCreateDeck,
@@ -128,8 +124,30 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
   rateCard: nativeRateCard,
   getCard: nativeGetCard,
   getCardSource: nativeGetCardSource,
-} }: AppProps) {
-  const learning = {
+  listActiveTags: nativeListActiveTags,
+  queryDeckCards: nativeQueryDeckCards,
+  updateCard: nativeUpdateCard,
+  moveCards: nativeMoveCards,
+  setCardsSuspended: nativeSetCardsSuspended,
+  trashCards: nativeTrashCards,
+};
+
+interface AppProps {
+  libraryApi?: LibraryApi;
+  learningApi?: LearningApi;
+}
+
+type AppRoute =
+  | { name: "library" }
+  | { name: "memora" }
+  | { name: "reader"; document: LibraryDocument }
+  | { name: "composer"; document: LibraryDocument; source: CardSource }
+  | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> }
+  | { name: "cardBrowser"; deckId?: string | null }
+  | { name: "trash" };
+
+export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi }: AppProps) {
+  const learning = useMemo(() => ({
     listDecks: learningApi.listDecks,
     createCard: learningApi.createCard,
     createDeck: learningApi.createDeck ?? nativeCreateDeck,
@@ -143,7 +161,13 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     rateCard: learningApi.rateCard ?? nativeRateCard,
     getCard: learningApi.getCard ?? nativeGetCard,
     getCardSource: learningApi.getCardSource ?? nativeGetCardSource,
-  };
+    listActiveTags: learningApi.listActiveTags ?? nativeListActiveTags,
+    queryDeckCards: learningApi.queryDeckCards ?? nativeQueryDeckCards,
+    updateCard: learningApi.updateCard ?? nativeUpdateCard,
+    moveCards: learningApi.moveCards ?? nativeMoveCards,
+    setCardsSuspended: learningApi.setCardsSuspended ?? nativeSetCardsSuspended,
+    trashCards: learningApi.trashCards ?? nativeTrashCards,
+  }), [learningApi]);
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
   const [route, setRoute] = useState<AppRoute>({ name: "library" });
   const [loading, setLoading] = useState(true);
@@ -157,7 +181,47 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
   const [driveCurrentFolderId, setDriveCurrentFolderId] = useState<string | undefined>();
   const requestId = useRef(0);
   const paletteRef = useRef<CommandPaletteHandle>(null);
+  const [decks, setDecks] = useState<Deck[]>([]);
+  const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
+  const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
+  const [isBrowserDirty, setIsBrowserDirty] = useState(false);
 
+  const reloadDecks = useCallback(async () => {
+    try {
+      const d = await learning.listDecks();
+      setDecks(d);
+    } catch (_) {}
+  }, [learning]);
+
+  useEffect(() => {
+    if (route.name === "cardBrowser" || route.name === "trash") {
+      void reloadDecks();
+    }
+  }, [route.name, reloadDecks]);
+  const handleCreateDeck = useCallback(async (name: string) => {
+    const res = await learning.createDeck(name);
+    void reloadDecks();
+    return res;
+  }, [learning, reloadDecks]);
+
+  const handleRenameDeck = useCallback(async (id: string, name: string) => {
+    const res = await learning.renameDeck(id, name);
+    void reloadDecks();
+    return res;
+  }, [learning, reloadDecks]);
+
+  const handleDeleteDeck = useCallback(async (id: string) => {
+    await learning.deleteDeck(id);
+    void reloadDecks();
+  }, [learning, reloadDecks]);
+
+  const handleOpenDeck = useCallback((deck: Deck) => {
+    if (isBrowserDirty) {
+      if (!window.confirm("You have unsaved changes. Discard changes?")) return;
+    }
+    setIsBrowserDirty(false);
+    setRoute({ name: "cardBrowser", deckId: deck.id });
+  }, [isBrowserDirty]);
   const load = useCallback(async () => {
     const currentRequestId = ++requestId.current;
     setLoading(true);
@@ -233,13 +297,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     setRoute({ name: "reader", document: readerDocument });
   }, [documents, learning]);
 
-  const handleCreateCardInDeck = useCallback((deckName: string, front: string, back: string, tags: string[]) => {
-    return learning.createCard({ deckName, front, back, tags });
-  }, [learning]);
 
-  const handleDeleteCard = useCallback((id: string) => {
-    return learning.deleteCard(id);
-  }, [learning]);
 
   const search = useCallback(
     async (query: string) => {
@@ -422,36 +480,79 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
     );
   }
 
-  const activeSection: AppSection = route.name === "memora" || route.name === "deckCards" ? "memora" : "library";
+  const activeSection: AppSection =
+    route.name === "memora"
+      ? "memora"
+      : route.name === "cardBrowser"
+      ? "cardBrowser"
+      : route.name === "trash"
+      ? "trash"
+      : "library";
 
   return (
     <div className="app-shell">
       <AppSidebar
         active={activeSection}
-        onNavigate={(section) => setRoute(section === "memora" ? { name: "memora" } : { name: "library" })}
+        onNavigate={(section) => {
+          if (isBrowserDirty) {
+            if (!window.confirm("You have unsaved changes. Discard changes?")) return;
+          }
+          setIsBrowserDirty(false);
+          setRoute(
+            section === "memora"
+              ? { name: "memora" }
+              : section === "cardBrowser"
+              ? { name: "cardBrowser", deckId: "all" }
+              : section === "trash"
+              ? { name: "trash" }
+              : { name: "library" }
+          );
+        }}
         onSearchClick={() => paletteRef.current?.open()}
       />
       <div className="app-shell__content">
-        {route.name === "deckCards" ? (
-          <DeckCardsPage
-            deck={route.deck}
-            listCards={() => learning.listDeckCards(route.deck.id)}
-            onBack={() => setRoute({ name: "memora" })}
-            onCreateCard={(front, back, tags) => handleCreateCardInDeck(route.deck.name, front, back, tags)}
-            onDeleteCard={(id) => handleDeleteCard(id)}
-            previewCardReview={(id) => learning.previewCardReview(id)}
-            onRateCard={(card, rating, elapsedMs) => learning.rateCard(card.id, rating, elapsedMs).then(() => {})}
-          />
-        ) : route.name === "memora" ? (
+        {route.name === "memora" ? (
           <MemoraPage
             listDecks={learning.listDecks}
-            listDueCards={() => learning.listDueCards()}
-            onReviewToday={() => void handleReviewToday()}
-            createDeck={learning.createDeck}
-            renameDeck={learning.renameDeck}
-            deleteDeck={learning.deleteDeck}
+            listDueCards={learning.listDueCards}
+            onReviewToday={handleReviewToday}
+            createDeck={handleCreateDeck}
+            renameDeck={handleRenameDeck}
+            deleteDeck={handleDeleteDeck}
             countDeckCards={learning.countDeckCards}
-            onOpenDeck={(deck) => setRoute({ name: "deckCards", deck })}
+            onOpenDeck={handleOpenDeck}
+          />
+        ) : route.name === "cardBrowser" ? (
+          <CardBrowser
+            decks={decks}
+            initialDeckId={route.deckId}
+            selectedIds={selectedCardIds}
+            setSelectedIds={setSelectedCardIds}
+            refreshTrigger={browserRefreshTrigger}
+            onBack={() => {
+              if (isBrowserDirty) {
+                if (!window.confirm("You have unsaved changes. Discard changes?")) return;
+              }
+              setIsBrowserDirty(false);
+              setRoute({ name: "memora" });
+            }}
+            onDirtyStateChange={setIsBrowserDirty}
+            queryDeckCards={learning.queryDeckCards}
+            trashCards={learning.trashCards}
+            listActiveTags={learning.listActiveTags}
+            createCard={learning.createCard}
+            updateCard={learning.updateCard}
+            moveCards={learning.moveCards}
+            setCardsSuspended={learning.setCardsSuspended}
+          />
+        ) : route.name === "trash" ? (
+          <TrashPage
+            decks={decks}
+            refreshTrigger={browserRefreshTrigger}
+            onRefreshNeeded={() => {
+              setBrowserRefreshTrigger(prev => prev + 1);
+              void reloadDecks();
+            }}
           />
         ) : (
           <>

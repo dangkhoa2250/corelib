@@ -543,7 +543,12 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
     tags: ["biology"],
   };
   const createCard = vi.fn().mockResolvedValue(newCard);
-  const listDeckCards = vi.fn().mockResolvedValue([]);
+  const queryDeckCards = vi.fn().mockResolvedValue({
+    rows: [],
+    total: 0,
+    nextCursor: null,
+  });
+  const listActiveTags = vi.fn().mockResolvedValue([]);
 
   render(
     <App
@@ -555,7 +560,8 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "Biology", description: null, color: "#ff9500", archived: false }]),
         createCard,
-        listDeckCards,
+        queryDeckCards,
+        listActiveTags,
         listDueCards: vi.fn().mockResolvedValue([]),
       }}
     />,
@@ -564,14 +570,36 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
   await user.click(screen.getByRole("button", { name: "Memora" }));
   await user.click(await screen.findByRole("button", { name: "Biology" }));
 
-  expect(listDeckCards).toHaveBeenCalledWith("deck-1");
-  await screen.findByText("This deck has no cards yet.");
+  expect(queryDeckCards).toHaveBeenCalledWith({
+    deckId: "deck-1",
+    query: "",
+    states: [],
+    tags: [],
+    sort: "updated_desc",
+    cursor: null,
+    limit: 50,
+  });
+  await screen.findByText("No cards found matching current filters.");
 
+  // Click Add Card to open side panel
   await user.click(screen.getByRole("button", { name: "Add Card" }));
-  await user.type(screen.getByRole("textbox", { name: "Front" }), "What is a mitochondrion?");
+
+  // Inside side panel, enter details
+  const frontInput = await screen.findByRole("textbox", { name: "Front" });
+  await user.type(frontInput, "What is a mitochondrion?");
   await user.type(screen.getByRole("textbox", { name: "Back" }), "The powerhouse of the cell");
   await user.type(screen.getByRole("textbox", { name: "Tags" }), "biology");
-  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  // Mock returning the new card on next query
+  queryDeckCards.mockResolvedValue({
+    rows: [newCard],
+    total: 1,
+    nextCursor: null,
+  });
+
+  // Click Save/Add Card button in form
+  const panel = screen.getByRole("dialog", { name: "Add Card" });
+  await user.click(within(panel).getByRole("button", { name: "Add Card" }));
 
   expect(createCard).toHaveBeenCalledWith({
     deckName: "Biology",
@@ -579,14 +607,13 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
     back: "The powerhouse of the cell",
     tags: ["biology"],
   });
+
+  // Verify it is listed in Card Browser table
   await screen.findByText("What is a mitochondrion?");
-  expect(screen.queryByText("The powerhouse of the cell")).not.toBeInTheDocument();
-  expect(screen.getByText("Tap to reveal")).toBeInTheDocument();
+  await screen.findByText("The powerhouse of the cell");
 
-  await user.click(screen.getByText("What is a mitochondrion?"));
-  expect(await screen.findByText("The powerhouse of the cell")).toBeInTheDocument();
-
-  await user.click(screen.getByRole("button", { name: "‹ Memora" }));
+  // Go back to Memora
+  await user.click(screen.getByRole("button", { name: "← Back" }));
   expect(await screen.findByRole("heading", { level: 1, name: "Memora" })).toBeInTheDocument();
 });
 
@@ -595,6 +622,7 @@ test("deletes a card from a deck's card list", async () => {
   const existingCard = {
     id: "card-1",
     deckId: "deck-1",
+    deckName: "Biology",
     front: "What is ATP?",
     back: "Adenosine triphosphate",
     state: "new" as const,
@@ -606,8 +634,27 @@ test("deletes a card from a deck's card list", async () => {
     lastReviewAt: null,
     source: null,
     tags: [],
+    createdAt: "2026-07-10T00:00:00.000Z",
+    updatedAt: "2026-07-10T00:00:00.000Z",
+    deletedAt: null,
+    deletedFromDeckName: null,
   };
-  const deleteCard = vi.fn().mockResolvedValue(undefined);
+  const trashCardsMock = vi.fn().mockResolvedValue({ successCount: 1, failedCount: 0, errors: [] });
+  const queryDeckCards = vi.fn()
+    .mockResolvedValueOnce({
+      rows: [existingCard],
+      total: 1,
+      nextCursor: null,
+    })
+    .mockResolvedValue({
+      rows: [],
+      total: 0,
+      nextCursor: null,
+    });
+  const listActiveTags = vi.fn().mockResolvedValue([]);
+
+  // Mock window.confirm to approve
+  const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
   render(
     <App
@@ -619,8 +666,9 @@ test("deletes a card from a deck's card list", async () => {
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "Biology", description: null, color: "#ff9500", archived: false }]),
         createCard: vi.fn(),
-        listDeckCards: vi.fn().mockResolvedValue([existingCard]),
-        deleteCard,
+        queryDeckCards,
+        trashCards: trashCardsMock,
+        listActiveTags,
         listDueCards: vi.fn().mockResolvedValue([]),
       }}
     />,
@@ -630,11 +678,28 @@ test("deletes a card from a deck's card list", async () => {
   await user.click(await screen.findByRole("button", { name: "Biology" }));
   await screen.findByText("What is ATP?");
 
-  await user.click(screen.getByRole("button", { name: "Delete card" }));
-  await user.click(screen.getByRole("button", { name: "Delete" }));
+  // Click the checkbox for this card (in the row select column)
+  const checkboxes = screen.getAllByRole("checkbox");
+  // The first checkbox is the 'select all' header checkbox. The second checkbox is for the card row!
+  await user.click(checkboxes[1]);
 
-  expect(deleteCard).toHaveBeenCalledWith("card-1");
-  await screen.findByText("This deck has no cards yet.");
+  // Click bulk Trash button
+  const bulkBanner = screen.getByText(/cards selected/).closest<HTMLElement>(".card-browser__bulk-banner");
+  if (!bulkBanner) throw new Error("bulk action banner not found");
+  await user.click(within(bulkBanner).getByRole("button", { name: "Trash" }));
+
+  expect(confirmSpy).toHaveBeenCalledWith("Are you sure you want to move these 1 cards to Trash?");
+  expect(trashCardsMock).toHaveBeenCalledWith(["card-1"]);
+
+
+
+  // Simulate refresh reload trigger
+  await waitFor(() => {
+    expect(screen.queryByText("What is ATP?")).not.toBeInTheDocument();
+  });
+  await screen.findByText("No cards found matching current filters.");
+
+  confirmSpy.mockRestore();
 });
 
 test("renames a deck from Memora", async () => {

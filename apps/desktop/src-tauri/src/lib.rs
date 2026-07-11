@@ -73,6 +73,16 @@ pub fn run() {
             commands::search_everything,
             commands::get_document,
             commands::rename_document,
+            commands::query_deck_cards,
+            commands::list_active_tags,
+            commands::update_card,
+            commands::move_cards,
+            commands::set_cards_suspended,
+            commands::trash_cards,
+            commands::list_trashed_cards,
+            commands::restore_cards,
+            commands::delete_cards_permanently,
+            commands::empty_trash,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

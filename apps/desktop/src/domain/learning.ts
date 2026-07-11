@@ -61,3 +61,55 @@ export function isSchedulableCard(card: LearningCard): boolean {
     card.back.trim().length > 0
   );
 }
+
+export type CardLifecycleState = "new" | "learning" | "review" | "relearning" | "suspended";
+export type CardSort = "updated_desc" | "created_desc" | "due_asc" | "front_asc";
+export type TrashSort = "deleted_desc" | "front_asc";
+
+export interface CardBrowserQuery {
+  deckId: string;
+  query: string;
+  states: CardLifecycleState[];
+  tags: string[];
+  sort: CardSort;
+  cursor: string | null;
+  limit: number;
+}
+
+export interface CardBrowserRow extends Omit<LearningCard, "deckId"> {
+  deckId: string | null;
+  deckName: string;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt: string | null;
+  deletedFromDeckName: string | null;
+}
+
+export interface CardPage {
+  rows: CardBrowserRow[];
+  total: number;
+  nextCursor: string | null;
+}
+
+export interface TrashQuery {
+  query: string;
+  sort: TrashSort;
+  cursor: string | null;
+  limit: number;
+}
+
+export interface BulkCardsInput {
+  cardIds: string[];
+}
+
+export interface BulkResult {
+  affectedIds: string[];
+  affectedCount: number;
+}
+
+export interface UpdateCardInput {
+  cardId: string;
+  front: string;
+  back: string;
+  tags: string[];
+}

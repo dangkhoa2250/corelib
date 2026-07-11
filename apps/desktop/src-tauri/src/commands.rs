@@ -634,7 +634,11 @@ pub fn create_deck(name: String, state: State<'_, LibraryStore>) -> Result<DeckS
 }
 
 #[tauri::command]
-pub fn rename_deck(id: String, name: String, state: State<'_, LibraryStore>) -> Result<DeckSummary, String> {
+pub fn rename_deck(
+    id: String,
+    name: String,
+    state: State<'_, LibraryStore>,
+) -> Result<DeckSummary, String> {
     learning_lock(&state)?
         .rename_deck(&id, &name)
         .map_err(|e| e.to_string())
@@ -677,7 +681,10 @@ pub fn get_card(id: String, state: State<'_, LibraryStore>) -> Result<LearningCa
 }
 
 #[tauri::command]
-pub fn list_deck_cards(deck_id: String, state: State<'_, LibraryStore>) -> Result<Vec<LearningCardSummary>, String> {
+pub fn list_deck_cards(
+    deck_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<LearningCardSummary>, String> {
     learning_lock(&state)?
         .cards_in_deck(&deck_id)
         .map_err(|e| e.to_string())
@@ -838,6 +845,158 @@ pub fn search_everything(
     });
     output.truncate(30);
     Ok(output)
+}
+
+#[tauri::command]
+pub fn query_deck_cards(
+    payload: crate::model::CardBrowserQueryPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::model::CardPagePayload, String> {
+    use crate::learning::{CardBrowserQuery, CardSort};
+    let sort = CardSort::parse(&payload.sort).map_err(|e| e.to_string())?;
+    learning_lock(&state)?
+        .query_deck_cards(CardBrowserQuery {
+            deck_id: payload.deck_id,
+            query: payload.query,
+            states: payload.states,
+            tags: payload.tags,
+            sort,
+            cursor: payload.cursor,
+            limit: payload.limit,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_active_tags(
+    deck_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<String>, String> {
+    learning_lock(&state)?
+        .list_active_tags(&deck_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_card(
+    payload: crate::model::UpdateCardPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<LearningCardSummary, String> {
+    use crate::learning::UpdateCard;
+    learning_lock(&state)?
+        .update_card(UpdateCard {
+            card_id: payload.card_id,
+            front: payload.front,
+            back: payload.back,
+            tags: payload.tags,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn move_cards(
+    card_ids: Vec<String>,
+    destination_deck_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::model::BulkResultPayload, String> {
+    let res = learning_lock(&state)?
+        .move_cards(&card_ids, &destination_deck_id)
+        .map_err(|e| e.to_string())?;
+    Ok(crate::model::BulkResultPayload {
+        affected_ids: res.affected_ids,
+        affected_count: res.affected_count,
+    })
+}
+
+#[tauri::command]
+pub fn set_cards_suspended(
+    card_ids: Vec<String>,
+    suspended: bool,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::model::BulkResultPayload, String> {
+    let res = learning_lock(&state)?
+        .set_cards_suspended(&card_ids, suspended)
+        .map_err(|e| e.to_string())?;
+    Ok(crate::model::BulkResultPayload {
+        affected_ids: res.affected_ids,
+        affected_count: res.affected_count,
+    })
+}
+
+#[tauri::command]
+pub fn trash_cards(
+    card_ids: Vec<String>,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::model::BulkResultPayload, String> {
+    let res = learning_lock(&state)?
+        .trash_cards(&card_ids)
+        .map_err(|e| e.to_string())?;
+    Ok(crate::model::BulkResultPayload {
+        affected_ids: res.affected_ids,
+        affected_count: res.affected_count,
+    })
+}
+
+#[tauri::command]
+pub fn list_trashed_cards(
+    query: String,
+    sort: String,
+    cursor: Option<String>,
+    limit: usize,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::model::CardPagePayload, String> {
+    use crate::learning::{TrashQuery, TrashSort};
+    let sort_parsed = TrashSort::parse(&sort).map_err(|e| e.to_string())?;
+    learning_lock(&state)?
+        .list_trashed_cards(TrashQuery {
+            query,
+            sort: sort_parsed,
+            cursor,
+            limit,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn restore_cards(
+    card_ids: Vec<String>,
+    destination_deck_id: Option<String>,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::model::BulkResultPayload, String> {
+    let res = learning_lock(&state)?
+        .restore_cards(&card_ids, destination_deck_id.as_deref())
+        .map_err(|e| e.to_string())?;
+    Ok(crate::model::BulkResultPayload {
+        affected_ids: res.affected_ids,
+        affected_count: res.affected_count,
+    })
+}
+
+#[tauri::command]
+pub fn delete_cards_permanently(
+    card_ids: Vec<String>,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::model::BulkResultPayload, String> {
+    let res = learning_lock(&state)?
+        .delete_cards_permanently(&card_ids)
+        .map_err(|e| e.to_string())?;
+    Ok(crate::model::BulkResultPayload {
+        affected_ids: res.affected_ids,
+        affected_count: res.affected_count,
+    })
+}
+
+#[tauri::command]
+pub fn empty_trash(
+    state: State<'_, LibraryStore>,
+) -> Result<crate::model::BulkResultPayload, String> {
+    let res = learning_lock(&state)?
+        .empty_trash()
+        .map_err(|e| e.to_string())?;
+    Ok(crate::model::BulkResultPayload {
+        affected_ids: res.affected_ids,
+        affected_count: res.affected_count,
+    })
 }
 
 #[cfg(test)]

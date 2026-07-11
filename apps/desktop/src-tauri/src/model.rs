@@ -84,13 +84,109 @@ pub struct SearchResultPayload {
     pub subtitle: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardBrowserQueryPayload {
+    pub deck_id: String,
+    pub query: String,
+    pub states: Vec<String>,
+    pub tags: Vec<String>,
+    pub sort: String,
+    pub cursor: Option<String>,
+    pub limit: usize,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCardPayload {
+    pub card_id: String,
+    pub front: String,
+    pub back: String,
+    pub tags: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MoveCardsPayload {
+    pub card_ids: Vec<String>,
+    pub destination_deck_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetCardsSuspendedPayload {
+    pub card_ids: Vec<String>,
+    pub suspended: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreCardsPayload {
+    pub card_ids: Vec<String>,
+    pub destination_deck_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrashQueryPayload {
+    pub query: String,
+    pub sort: String,
+    pub cursor: Option<String>,
+    pub limit: usize,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkCardsPayload {
+    pub card_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkResultPayload {
+    pub affected_ids: Vec<String>,
+    pub affected_count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardBrowserRowPayload {
+    pub id: String,
+    pub deck_id: Option<String>,
+    pub deck_name: String,
+    pub front: String,
+    pub back: String,
+    pub state: String,
+    pub due_at: String,
+    pub reps: i64,
+    pub lapses: i64,
+    pub stability: Option<f64>,
+    pub difficulty: Option<f64>,
+    pub last_review_at: Option<String>,
+    pub source: Option<CardSourcePayload>,
+    pub tags: Vec<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub deleted_at: Option<String>,
+    pub deleted_from_deck_name: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CardPagePayload {
+    pub rows: Vec<CardBrowserRowPayload>,
+    pub total: usize,
+    pub next_cursor: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
 
     use super::{
-        CardSourcePayload, DeckSummary, LearningCardSummary, ReviewIntervalPayload,
-        ReviewPreviewPayload, SearchResultPayload, SelectionRect,
+        BulkResultPayload, CardBrowserRowPayload, CardPagePayload, CardSourcePayload, DeckSummary,
+        LearningCardSummary, ReviewIntervalPayload, ReviewPreviewPayload, SearchResultPayload,
+        SelectionRect,
     };
 
     #[test]
@@ -220,5 +316,53 @@ mod tests {
                 "rects": [],
             })
         );
+    }
+
+    #[test]
+    fn card_browser_payloads_use_frontend_contract() {
+        let row = CardBrowserRowPayload {
+            id: "card-1".into(),
+            deck_id: Some("deck-1".into()),
+            deck_name: "Biology".into(),
+            front: "What is ATP?".into(),
+            back: "Energy storage".into(),
+            state: "review".into(),
+            due_at: "2026-07-10T09:00:00Z".into(),
+            reps: 4,
+            lapses: 1,
+            stability: Some(3.5),
+            difficulty: Some(6.2),
+            last_review_at: Some("2026-07-09T09:00:00Z".into()),
+            source: None,
+            tags: vec!["biology".into()],
+            created_at: "2026-07-08T09:00:00Z".into(),
+            updated_at: "2026-07-09T09:00:00Z".into(),
+            deleted_at: Some("2026-07-10T10:00:00Z".into()),
+            deleted_from_deck_name: Some("Biology".into()),
+        };
+        let page = CardPagePayload {
+            rows: vec![row],
+            total: 1,
+            next_cursor: Some("opaque-cursor-value".into()),
+        };
+        let bulk_result = BulkResultPayload {
+            affected_ids: vec!["card-1".into()],
+            affected_count: 1,
+        };
+
+        let page_json = serde_json::to_value(page).expect("serialize page");
+        let row_json = &page_json["rows"][0];
+
+        assert!(row_json.get("deckId").is_some());
+        assert!(row_json.get("deckName").is_some());
+        assert!(row_json.get("createdAt").is_some());
+        assert!(row_json.get("updatedAt").is_some());
+        assert!(row_json.get("deletedAt").is_some());
+        assert!(row_json.get("deletedFromDeckName").is_some());
+        assert!(page_json.get("nextCursor").is_some());
+
+        let bulk_json = serde_json::to_value(bulk_result).expect("serialize bulk result");
+        assert!(bulk_json.get("affectedIds").is_some());
+        assert!(bulk_json.get("affectedCount").is_some());
     }
 }

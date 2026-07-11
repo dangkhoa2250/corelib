@@ -1,8 +1,8 @@
 import type { ComponentType } from "react";
 
-import { IconLibrary, IconMemora, IconSearch } from "./icons";
+import { IconLibrary, IconMemora, IconSearch, IconCardBrowser, IconTrash } from "./icons";
 
-export type AppSection = "library" | "memora";
+export type AppSection = "library" | "memora" | "cardBrowser" | "trash";
 
 interface AppSidebarProps {
   active: AppSection;
@@ -13,6 +13,8 @@ interface AppSidebarProps {
 const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] = [
   { section: "library", label: "Library", icon: IconLibrary },
   { section: "memora", label: "Memora", icon: IconMemora },
+  { section: "cardBrowser", label: "Card Browser", icon: IconCardBrowser },
+  { section: "trash", label: "Trash", icon: IconTrash },
 ];
 
 export function AppSidebar({ active, onNavigate, onSearchClick }: AppSidebarProps) {
