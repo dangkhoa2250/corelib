@@ -63,6 +63,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showProviderEditor, setShowProviderEditor] = useState(true);
   const [connected, setConnected] = useState<Record<AiProviderId, boolean>>({
     "google-ai-studio": false,
     nvidia: false,
@@ -78,14 +79,17 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [searchQuery, setSearchQuery] = useState("");
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
+  const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
 
   useEffect(() => {
     let cancelled = false;
-    void hasApiKey(provider).then((value) => {
-      if (!cancelled) setConnected((current) => ({ ...current, [provider]: value }));
-    }).catch(() => undefined);
+    void Promise.all(AI_PROVIDERS.map(async (item) => [item.id, await hasApiKey(item.id)] as const))
+      .then((entries) => {
+        if (!cancelled) setConnected(Object.fromEntries(entries) as Record<AiProviderId, boolean>);
+      })
+      .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [hasApiKey, provider]);
+  }, [hasApiKey]);
 
   const loadModels = async (providerToLoad = provider) => {
     setLoading(true);
@@ -130,6 +134,8 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
       setConnected((current) => ({ ...current, [provider]: false }));
       setModels([]);
       setSelectedModel("");
+      setApiKey("");
+      setShowApiKey(false);
       if (defaultProvider === provider) {
         setDefaultProvider(null);
         removePreference(DEFAULT_PROVIDER_KEY);
@@ -141,6 +147,25 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAddProvider = () => {
+    const nextProvider = AI_PROVIDERS.find((item) => !connected[item.id])?.id ?? AI_PROVIDERS[0].id;
+    setProvider(nextProvider);
+    setApiKey("");
+    setShowApiKey(false);
+    setModels([]);
+    setError(null);
+    setShowProviderEditor(true);
+  };
+
+  const handleManageProvider = (providerId: AiProviderId) => {
+    setProvider(providerId);
+    setApiKey("");
+    setShowApiKey(false);
+    setModels([]);
+    setError(null);
+    setShowProviderEditor(true);
   };
 
   const handleDefaultChange = (checked: boolean) => {
@@ -188,9 +213,25 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
               <h2 id="providers-heading">Providers</h2>
               <p>Add multiple providers and manage their API keys.</p>
             </div>
-            {defaultProvider ? <span className="settings-page__default-badge">Default: {providerDefinition(defaultProvider).name}</span> : null}
+            <button className="settings-page__add-button" onClick={handleAddProvider} type="button">+ Add provider</button>
           </div>
 
+          <div className="settings-page__provider-list" aria-label="Connected providers">
+            {connectedProviders.length > 0 ? connectedProviders.map((item) => (
+              <div className={`settings-page__provider-row ${item.id === provider ? "is-selected" : ""}`} key={item.id}>
+                <div>
+                  <strong>{item.name}</strong>
+                  <span>{item.description}</span>
+                </div>
+                <div className="settings-page__provider-row-actions">
+                  {defaultProvider === item.id ? <span className="settings-page__default-badge">Default</span> : null}
+                  <button onClick={() => handleManageProvider(item.id)} type="button">Manage</button>
+                </div>
+              </div>
+            )) : <p className="settings-page__provider-empty">No providers connected yet.</p>}
+          </div>
+
+        {showProviderEditor ? <div className="settings-page__provider-editor">
         <label className="settings-page__field">
           <span>Provider</span>
           <select aria-label="AI provider" value={provider} onChange={(event) => {
@@ -237,6 +278,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           </button>
           {connected[provider] ? <button className="settings-page__secondary-button" disabled={loading} onClick={() => void handleClear()} type="button">Remove key</button> : null}
         </div>
+        </div> : null}
 
         </section>
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -116,4 +116,22 @@ test("keeps the saved key available to reveal during the current settings sessio
   await user.click(screen.getByRole("button", { name: "Show API key" }));
   expect(input).toHaveAttribute("type", "text");
   expect(input).toHaveValue("secret-key");
+});
+
+test("renders connected providers as a list", async () => {
+  const hasApiKey = vi.fn((provider: string) => Promise.resolve(provider === "nvidia" || provider === "openrouter"));
+  render(
+    <SettingsPage
+      hasApiKey={hasApiKey}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn()}
+    />,
+  );
+
+  const list = await screen.findByLabelText("Connected providers");
+  expect(list).toHaveTextContent("NVIDIA NIM");
+  expect(list).toHaveTextContent("OpenRouter");
+  expect(within(list).getAllByRole("button", { name: "Manage" })).toHaveLength(2);
+  expect(screen.getByRole("button", { name: "+ Add provider" })).toBeInTheDocument();
 });
