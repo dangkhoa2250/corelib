@@ -1,9 +1,8 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 
 import type { SearchResult } from "../../lib/learning";
 
 interface CommandPaletteProps {
-  search: (query: string) => Promise<SearchResult[]>;
   onOpen: (result: SearchResult) => void;
 }
 
@@ -11,30 +10,40 @@ export interface CommandPaletteHandle {
   open: () => void;
 }
 
-const SEARCH_DEBOUNCE_MS = 150;
+const NAV_ITEMS: SearchResult[] = [
+  { kind: "nav", id: "library", title: "Library", subtitle: null },
+  { kind: "nav", id: "memora", title: "Memora", subtitle: null },
+  { kind: "nav", id: "trash", title: "Trash", subtitle: null },
+];
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+function fuzzyMatch(text: string, query: string): boolean {
+  const lower = text.toLowerCase();
+  const q = query.toLowerCase();
+  let qi = 0;
+  for (let i = 0; i < lower.length && qi < q.length; i++) {
+    if (lower[i] === q[qi]) qi++;
+  }
+  return qi === q.length;
 }
 
-export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(function CommandPalette({ search, onOpen }, ref) {
+export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPaletteProps>(function CommandPalette({ onOpen }, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [error, setError] = useState<string | null>(null);
   const searchboxRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const shouldRestoreFocus = useRef(false);
-  const sequence = useRef(0);
+
+  const results = useMemo(() => {
+    const trimmed = query.trim();
+    if (!trimmed) return NAV_ITEMS;
+    return NAV_ITEMS.filter((item) => fuzzyMatch(item.title, trimmed));
+  }, [query]);
 
   const close = useCallback(() => {
-    sequence.current += 1;
     setQuery("");
-    setResults([]);
     setSelectedIndex(0);
-    setError(null);
     shouldRestoreFocus.current = true;
     setIsOpen(false);
   }, []);
@@ -62,46 +71,13 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
   useEffect(() => {
     if (isOpen) {
       searchboxRef.current?.focus();
+      setSelectedIndex(0);
     } else if (shouldRestoreFocus.current) {
       previousFocusRef.current?.focus();
       previousFocusRef.current = null;
       shouldRestoreFocus.current = false;
     }
   }, [isOpen]);
-
-  const runSearch = useCallback(() => {
-    const trimmedQuery = query.trim();
-    const request = ++sequence.current;
-    if (!trimmedQuery) {
-      setResults([]);
-      setError(null);
-      return;
-    }
-
-    setError(null);
-    void search(trimmedQuery).then(
-      (searchResults) => {
-        if (request === sequence.current) {
-          setResults(searchResults);
-          setSelectedIndex(0);
-        }
-      },
-      (searchError) => {
-        if (request === sequence.current) {
-          setResults([]);
-          setError(errorMessage(searchError));
-        }
-      },
-    );
-  }, [query, search]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-    const timer = window.setTimeout(runSearch, SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [isOpen, query, runSearch]);
 
   const openSelected = useCallback(() => {
     const result = results[selectedIndex];
@@ -118,7 +94,7 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
   return (
     <div className="command-palette__backdrop" onMouseDown={close}>
       <section
-        aria-label="Search your library"
+        aria-label="Navigate to a section"
         aria-modal="true"
         className="command-palette"
         onKeyDown={(event) => {
@@ -150,11 +126,11 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
         role="dialog"
       >
         <input
-          aria-label="Search your library"
+          aria-label="Navigate to a section"
           className="command-palette__input"
           onChange={(event) => {
-            sequence.current += 1;
             setQuery(event.target.value);
+            setSelectedIndex(0);
           }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" && results.length > 0) {
@@ -168,24 +144,18 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
               openSelected();
             }
           }}
-          placeholder="Search your library"
+          placeholder="Go to section…"
           ref={searchboxRef}
           role="searchbox"
           type="search"
           value={query}
         />
-        {error ? (
-          <div className="command-palette__error" role="alert">
-            <p>{error}</p>
-            <button type="button" onClick={runSearch}>Try again</button>
-          </div>
-        ) : null}
         {results.length > 0 ? (
-          <ul aria-label="Search results" className="command-palette__results">
+          <ul aria-label="Sections" className="command-palette__results">
             {results.map((result, index) => (
-              <li key={`${result.kind}-${result.id}`}>
+              <li key={result.id}>
                 <button
-                  aria-label={`Open ${result.title}`}
+                  aria-label={`Go to ${result.title}`}
                   aria-selected={index === selectedIndex}
                   className={index === selectedIndex ? "is-selected" : undefined}
                   onClick={() => {
@@ -195,7 +165,6 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
                   type="button"
                 >
                   <span>{result.title}</span>
-                  <small>{result.kind === "card" ? "Flashcard" : result.subtitle}</small>
                 </button>
               </li>
             ))}

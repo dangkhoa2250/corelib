@@ -26,7 +26,7 @@ import { DeckDetailPage } from "../features/memora/DeckDetailPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
 import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, DeckStatistics, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
 
@@ -34,7 +34,7 @@ export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
   pick: () => Promise<string[] | null>;
   importDocuments: (paths: string[]) => Promise<LibraryDocument[]>;
-  search?: (query: string) => Promise<SearchResult[]>;
+
   getDocumentFileUrl?: (id: string) => Promise<string>;
   saveReadPage?: (id: string, page: number) => Promise<LibraryDocument>;
   deleteDocument?: (id: string) => Promise<void>;
@@ -63,7 +63,6 @@ const nativeLibraryApi: LibraryApi = {
   list: listDocuments,
   pick: pickLocalPdfs,
   importDocuments: importLocalDocuments,
-  search: nativeSearchEverything,
   getDocumentFileUrl: nativeGetDocumentFileUrl,
   saveReadPage: nativeSaveReadPage,
   deleteDocument: nativeDeleteDocument,
@@ -329,33 +328,15 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
 
 
-  const search = useCallback(
-    async (query: string) => {
-      return (libraryApi.search ?? nativeSearchEverything)(query);
-    },
-    [libraryApi],
-  );
-
-  const handleOpenSearchResult = useCallback(async (result: SearchResult) => {
-    if ("source" in (result as object)) {
-      handleOpen(result as unknown as LibraryDocument);
-      return;
+  const handleOpenSearchResult = useCallback((result: SearchResult) => {
+    if (result.kind === "nav") {
+      setRoute(
+        result.id === "memora" ? { name: "memora" }
+        : result.id === "trash" ? { name: "trash" }
+        : { name: "library" },
+      );
     }
-    if (result.kind === "card") {
-      try {
-        const card = await learning.getCard(result.id);
-        const preview = await learning.previewCardReview(card.id);
-        setRoute({ name: "review", cards: [card], previews: { [card.id]: preview } });
-      } catch (openError) { setError(errorMessage(openError)); }
-      return;
-    }
-    try {
-      const document = documents?.find((candidate) => candidate.id === result.id)
-        ?? await (libraryApi.getDocument ?? nativeGetDocument)(result.id);
-      setDocuments((current) => mergeDocuments(current, [document]));
-      handleOpen(document);
-    } catch (openError) { setError(errorMessage(openError)); }
-  }, [documents, handleOpen, learning, libraryApi]);
+  }, []);
 
   const handleReviewToday = useCallback(async () => {
     try {
@@ -461,7 +442,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     } catch (_) {}
   }, [libraryApi]);
 
-  const palette = <CommandPalette ref={paletteRef} search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
+  const palette = <CommandPalette ref={paletteRef} onOpen={(result) => void handleOpenSearchResult(result)} />;
 
   if (route.name === "review") {
     return <><ReviewPage cards={route.cards} previews={route.previews} mode={route.mode} onRate={handleRate} onBack={() => setRoute(route.sourceDeck ? { name: "deckDetail", deck: route.sourceDeck } : { name: "memora" })} />{palette}</>;

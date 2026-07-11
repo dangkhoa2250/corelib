@@ -243,34 +243,7 @@ test("opens a reader placeholder and returns to the library", async () => {
   expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
 });
 
-test("opens a search result in the reader from either application state", async () => {
-  const user = userEvent.setup();
-  const list = vi.fn().mockResolvedValue([document]);
-  const search = vi.fn().mockResolvedValue([document]);
 
-  render(
-    <App
-      libraryApi={{
-        list,
-        pick: vi.fn(),
-        importDocuments: vi.fn(),
-        search,
-        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
-        deleteDocument: vi.fn().mockResolvedValue(undefined),
-      }}
-    />,
-  );
-
-  await screen.findByRole("button", { name: "Open Linear Algebra" });
-  await user.keyboard("{Control>}k{/Control}");
-  await user.type(screen.getByRole("searchbox"), "linear");
-  await waitFor(() => expect(search).toHaveBeenCalledWith("linear"));
-  await user.keyboard("{Enter}");
-  expect(await screen.findByText("Page 1 of 5")).toBeInTheDocument();
-
-  await user.keyboard("{Meta>}k{/Meta}");
-  expect(screen.getByRole("searchbox", { name: "Search your library" })).toBeInTheDocument();
-});
 
 test("keeps imported documents when an older initial load resolves last", async () => {
   const user = userEvent.setup();
@@ -336,37 +309,7 @@ test("preserves the Drive parent stack for an empty nested folder", async () => 
   expect(listDrive.mock.calls.map(([folderId]) => folderId)).toEqual([undefined, "folder-a", undefined]);
 });
 
-test("opens the selected search result when an older library load resolves afterwards", async () => {
-  const user = userEvent.setup();
-  const initialList = deferred<typeof document[]>();
-  const searchResult = { ...document, id: "search-result", title: "Search Result" };
-  const search = vi.fn().mockResolvedValue([searchResult]);
 
-  render(
-    <App
-      libraryApi={{
-        list: vi.fn().mockReturnValue(initialList.promise),
-        pick: vi.fn(),
-        importDocuments: vi.fn(),
-        search,
-        getDocumentFileUrl: vi.fn().mockResolvedValue("/mocked/path.pdf"),
-        deleteDocument: vi.fn().mockResolvedValue(undefined),
-      }}
-    />,
-  );
-
-  await user.keyboard("{Control>}k{/Control}");
-  await user.type(screen.getByRole("searchbox"), "search");
-  const palette = screen.getByRole("dialog");
-  expect(await within(palette).findByRole("button", { name: "Open Search Result" })).toBeInTheDocument();
-  await act(async () => {
-    initialList.resolve([document]);
-    await initialList.promise;
-  });
-
-  await user.keyboard("{Enter}");
-  expect(screen.getByRole("heading", { name: "Search Result" })).toBeInTheDocument();
-});
 
 test("opens the card composer with the live source document and editable front/back", async () => {
   const user = userEvent.setup();
@@ -826,5 +769,5 @@ test("opens the search palette from the sidebar search field", async () => {
 
   await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
-  expect(screen.getByRole("searchbox", { name: "Search your library" })).toHaveFocus();
+  expect(screen.getByRole("searchbox", { name: "Navigate to a section" })).toHaveFocus();
 });
