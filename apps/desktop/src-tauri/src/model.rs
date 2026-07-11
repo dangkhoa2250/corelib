@@ -12,6 +12,8 @@ pub struct DocumentSummary {
     pub status: String,
     #[serde(rename = "lastReadPage")]
     pub last_read_page: Option<i64>,
+    #[serde(rename = "numPages")]
+    pub num_pages: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

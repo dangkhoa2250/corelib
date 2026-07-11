@@ -10,7 +10,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 use crate::model::DocumentSummary;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATIONS: [(&str, &str); 7] = [
+const MIGRATIONS: [(&str, &str); 8] = [
     (
         "0001_library",
         include_str!("../migrations/0001_library.sql"),
@@ -39,9 +39,13 @@ const MIGRATIONS: [(&str, &str); 7] = [
         "0007_youglish_clickable",
         include_str!("../migrations/0007_youglish_clickable.sql"),
     ),
+    (
+        "0008_page_count",
+        include_str!("../migrations/0008_page_count.sql"),
+    ),
 ];
 const SUMMARY_COLUMNS: &str =
-    "id, title, author, source, cover_path, index_state, status, last_read_page";
+    "id, title, author, source, cover_path, index_state, status, last_read_page, num_pages";
 
 pub type Result<T> = std::result::Result<T, LibraryDbError>;
 
@@ -272,14 +276,16 @@ impl LibraryDatabase {
         id: &str,
         text: &str,
         cover_path: Option<&str>,
+        num_pages: i64,
     ) -> Result<()> {
         let transaction = self.connection.transaction()?;
         let updated = transaction.execute(
             "UPDATE documents
              SET status = 'ready', index_state = 'ready',
-                 cover_path = COALESCE(?1, cover_path), index_claimed_at = NULL, updated_at = ?2
-             WHERE id = ?3",
-            params![cover_path, portable_timestamp(), id],
+                 cover_path = COALESCE(?1, cover_path), num_pages = ?2,
+                 index_claimed_at = NULL, updated_at = ?3
+             WHERE id = ?4",
+            params![cover_path, num_pages, portable_timestamp(), id],
         )?;
         if updated == 0 {
             return Err(LibraryDbError::DocumentNotFound);
@@ -529,5 +535,6 @@ fn summary_from_row(row: &Row<'_>) -> rusqlite::Result<DocumentSummary> {
         indexed: index_state == "ready",
         status: row.get(6)?,
         last_read_page: row.get(7)?,
+        num_pages: row.get(8)?,
     })
 }

@@ -87,6 +87,7 @@ fn completing_an_index_writes_searchable_text_and_marks_document_ready() {
             "searchable",
             "Fourier transforms reveal hidden frequencies",
             None,
+            0,
         )
         .expect("store extracted text");
 
