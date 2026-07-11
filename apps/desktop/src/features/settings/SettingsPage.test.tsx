@@ -91,3 +91,29 @@ test("shows a masked saved-key state after the key is stored", async () => {
   });
   expect(screen.queryByRole("button", { name: "Show API key" })).not.toBeInTheDocument();
 });
+
+test("keeps the saved key available to reveal during the current settings session", async () => {
+  const user = userEvent.setup();
+  const saveApiKey = vi.fn().mockResolvedValue(undefined);
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn().mockResolvedValue(false)}
+      saveApiKey={saveApiKey}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([])}
+    />,
+  );
+
+  const input = screen.getByLabelText("API key");
+  await user.type(input, "secret-key");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+
+  await waitFor(() => expect(saveApiKey).toHaveBeenCalledWith("google-ai-studio", "secret-key"));
+  expect(input).toHaveValue("secret-key");
+  expect(input).toHaveAttribute("type", "password");
+  expect(screen.getByRole("button", { name: "Show API key" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Show API key" }));
+  expect(input).toHaveAttribute("type", "text");
+  expect(input).toHaveValue("secret-key");
+});

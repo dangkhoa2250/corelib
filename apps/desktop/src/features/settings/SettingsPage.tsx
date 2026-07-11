@@ -109,8 +109,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     try {
       if (apiKey.trim()) {
         await saveApiKey(provider, apiKey.trim());
-        setApiKey("");
-        setShowApiKey(false);
       }
       setConnected((current) => ({ ...current, [provider]: true }));
       await loadModels(provider);
@@ -177,6 +175,8 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           <span>Provider</span>
           <select aria-label="AI provider" value={provider} onChange={(event) => {
             setProvider(event.target.value as AiProviderId);
+            setApiKey("");
+            setShowApiKey(false);
             setModels([]);
             setError(null);
           }}>
