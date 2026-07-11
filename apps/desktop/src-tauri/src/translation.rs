@@ -170,6 +170,106 @@ fn translate_with_google(text: &str, target_language: &str) -> Result<Translatio
     parse_google_translation(&value)
 }
 
+#[cfg(target_os = "macos")]
+pub mod apple {
+    use super::{target_language_code, TranslationResult};
+    use std::collections::HashMap;
+    use std::ffi::{CStr, CString};
+    use std::os::raw::c_char;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{mpsc, Mutex, OnceLock};
+    use std::time::Duration;
+
+    type AppleResult = Result<TranslationResult, String>;
+    type PendingRequests = Mutex<HashMap<u64, mpsc::Sender<AppleResult>>>;
+
+    static NEXT_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
+    static PENDING_REQUESTS: OnceLock<PendingRequests> = OnceLock::new();
+
+    extern "C" {
+        fn library_apple_translation_available() -> bool;
+        fn library_apple_translate(
+            request_id: u64,
+            source: *const c_char,
+            target: *const c_char,
+            callback: extern "C" fn(u64, *const c_char, *const c_char),
+        );
+    }
+
+    fn pending_requests() -> &'static PendingRequests {
+        PENDING_REQUESTS.get_or_init(|| Mutex::new(HashMap::new()))
+    }
+
+    extern "C" fn handle_translation(
+        request_id: u64,
+        translation: *const c_char,
+        error: *const c_char,
+    ) {
+        let result = std::panic::catch_unwind(|| {
+            if !error.is_null() {
+                let message = unsafe { CStr::from_ptr(error) }.to_string_lossy().into_owned();
+                return Err(message);
+            }
+            if translation.is_null() {
+                return Err("engine_unavailable: Apple Translation returned no result.".to_owned());
+            }
+            let translation = unsafe { CStr::from_ptr(translation) }
+                .to_string_lossy()
+                .trim()
+                .to_owned();
+            if translation.is_empty() {
+                return Err("malformed_response: Apple Translation returned empty text.".to_owned());
+            }
+            Ok(TranslationResult { translation })
+        })
+        .unwrap_or_else(|_| Err("engine_unavailable: Apple Translation callback failed.".to_owned()));
+
+        if let Ok(mut pending) = pending_requests().lock() {
+            if let Some(sender) = pending.remove(&request_id) {
+                let _ = sender.send(result);
+            }
+        }
+    }
+
+    pub fn available() -> bool {
+        unsafe { library_apple_translation_available() }
+    }
+
+    pub fn translate(text: &str, target_language: &str) -> AppleResult {
+        let target = target_language_code(target_language)
+            .ok_or_else(|| format!("unsupported_language_pair: Unsupported target language: {target_language}"))?;
+        let source = CString::new(text)
+            .map_err(|_| "malformed_response: Text contains an unsupported null character.".to_owned())?;
+        let target = CString::new(target).expect("static language codes never contain null bytes");
+        let request_id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+        let (sender, receiver) = mpsc::channel();
+        pending_requests()
+            .lock()
+            .map_err(|_| "engine_unavailable: Apple Translation request registry is unavailable.".to_owned())?
+            .insert(request_id, sender);
+
+        unsafe {
+            library_apple_translate(
+                request_id,
+                source.as_ptr(),
+                target.as_ptr(),
+                handle_translation,
+            );
+        }
+
+        match receiver.recv_timeout(Duration::from_secs(90)) {
+            Ok(result) => result,
+            Err(_) => {
+                if let Ok(mut pending) = pending_requests().lock() {
+                    pending.remove(&request_id);
+                }
+                Err("engine_unavailable: Apple Translation timed out.".to_owned())
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
 pub mod apple {
     use super::TranslationResult;
 
@@ -178,7 +278,7 @@ pub mod apple {
     }
 
     pub fn translate(_text: &str, _target_language: &str) -> Result<TranslationResult, String> {
-        Err("engine_unavailable: Apple Translation bridge is not installed.".to_owned())
+        Err("engine_unavailable: Apple Translation is only available on macOS.".to_owned())
     }
 }
 
@@ -202,12 +302,14 @@ pub fn translate(
 }
 
 #[tauri::command]
-pub fn translate_text(
+pub async fn translate_text(
     engine_id: String,
     text: String,
     target_language: String,
 ) -> Result<TranslationResult, String> {
-    translate(&engine_id, &text, &target_language)
+    tauri::async_runtime::spawn_blocking(move || translate(&engine_id, &text, &target_language))
+        .await
+        .map_err(|error| format!("engine_unavailable: Translation task failed: {error}"))?
 }
 
 #[tauri::command]
@@ -246,5 +348,11 @@ mod tests {
     fn rejects_unknown_engine_ids() {
         assert!(parse_ai_engine_id("google-translation").is_err());
         assert!(parse_ai_engine_id("ai:unknown:model").is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn links_apple_translation_on_supported_macos() {
+        assert!(apple::available());
     }
 }
