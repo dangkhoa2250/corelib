@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Invoke } from "./desktop";
-import type { Deck, LearningCard, NewCardSource, ReviewPreview, ReviewRating, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult } from "../domain/learning";
+import type { Deck, DeckStatistics, LearningCard, NewCardSource, ReviewPreview, ReviewRating, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult } from "../domain/learning";
 import type { LibraryDocument } from "../domain/document";
 
 export type SearchResult = { kind: "document" | "card"; id: string; title: string; subtitle: string | null };
@@ -33,3 +33,7 @@ export function restoreCards(cardIds: string[], destinationDeckId: string | null
 export function deleteCardsPermanently(cardIds: string[], call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("delete_cards_permanently", { cardIds }); }
 export function emptyTrash(call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("empty_trash"); }
 export function listActiveTags(deckId: string, call: Invoke = invoke as Invoke): Promise<string[]> { return call("list_active_tags", { deckId }); }
+
+export function getDeckStatistics(deckId: string): Promise<DeckStatistics> {
+  return invoke("get_deck_statistics", { deckId });
+}
