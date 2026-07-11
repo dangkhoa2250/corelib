@@ -38,10 +38,12 @@ test("renders a button with accessible name Play pronunciation", () => {
   expect(screen.getByRole("button", { name: "Play pronunciation" })).toBeInTheDocument();
 });
 
-test("does nothing when text is empty", () => {
+test("does nothing when text is empty", async () => {
+  const user = userEvent.setup();
   const speak = vi.fn();
   window.speechSynthesis.speak = speak;
   render(<PronunciationButton text="" />);
+  await user.click(screen.getByRole("button", { name: "Play pronunciation" }));
   expect(speak).not.toHaveBeenCalled();
 });
 

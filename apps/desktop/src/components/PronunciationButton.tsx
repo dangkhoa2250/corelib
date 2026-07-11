@@ -1,4 +1,4 @@
-import { IconSpeaker } from "../app/icons";
+import { IconSpeaker, IconStop } from "../app/icons";
 import { detectLanguage } from "../lib/language";
 import { usePronunciation } from "../lib/pronunciation";
 
@@ -66,11 +66,7 @@ export function PronunciationButton({ text, lang }: PronunciationButtonProps) {
       }}
       type="button"
     >
-      {isPlaying ? (
-        <span style={{ fontSize: "14px", lineHeight: 1, fontWeight: 700 }}>■</span>
-      ) : (
-        <IconSpeaker size={14} />
-      )}
+      {isPlaying ? <IconStop size={14} /> : <IconSpeaker size={14} />}
     </button>
   );
 }

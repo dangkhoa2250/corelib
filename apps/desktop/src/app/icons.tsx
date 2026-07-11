@@ -110,3 +110,11 @@ export function IconSpeaker({ size = 16 }: IconProps) {
     </svg>
   );
 }
+
+export function IconStop({ size = 14 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </svg>
+  );
+}
