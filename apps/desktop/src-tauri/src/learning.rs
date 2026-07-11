@@ -197,7 +197,20 @@ impl LibraryDatabase {
             )
             .map_err(Into::into)
     }
+}
 
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct DeckStatistics {
+    pub total_cards: i64,
+    pub new_cards: i64,
+    pub learning_cards: i64,
+    pub review_cards: i64,
+    pub relearning_cards: i64,
+    pub suspended_cards: i64,
+    pub due_cards: i64,
+}
+
+impl LibraryDatabase {
     pub fn count_cards_in_deck(&self, id: &str) -> Result<i64> {
         self.connection
             .query_row(
