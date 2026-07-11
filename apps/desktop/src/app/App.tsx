@@ -146,7 +146,7 @@ type AppRoute =
   | { name: "library" }
   | { name: "memora" }
   | { name: "reader"; document: LibraryDocument }
-  | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> }
+  | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview>; sourceDeck?: Deck; mode?: "study" | "practice" }
   | { name: "cardBrowser"; deckId: string }
   | { name: "deckDetail"; deck: Deck }
   | { name: "trash" };
@@ -234,20 +234,24 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
   const handleStudyDeck = useCallback(async (deckId: string) => {
     try {
+      const deck = decks.find(d => d.id === deckId);
+      if (!deck) return;
       const deckCards = await learning.listDeckCards(deckId);
       const toStudy = deckCards.filter((c) => c.state !== "suspended");
       const pairs = await Promise.all(toStudy.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
-      setRoute({ name: "review", cards: toStudy, previews: Object.fromEntries(pairs) });
+      setRoute({ name: "review", cards: toStudy, previews: Object.fromEntries(pairs), sourceDeck: deck, mode: "study" });
     } catch (reviewError) { setError(errorMessage(reviewError)); }
-  }, [learning]);
+  }, [learning, decks]);
 
   const handlePracticeAll = useCallback(async (deckId: string) => {
     try {
+      const deck = decks.find(d => d.id === deckId);
+      if (!deck) return;
       const deckCards = await learning.listDeckCards(deckId);
       const pairs = await Promise.all(deckCards.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
-      setRoute({ name: "review", cards: deckCards, previews: Object.fromEntries(pairs) });
+      setRoute({ name: "review", cards: deckCards, previews: Object.fromEntries(pairs), sourceDeck: deck, mode: "practice" });
     } catch (reviewError) { setError(errorMessage(reviewError)); }
-  }, [learning]);
+  }, [learning, decks]);
   const load = useCallback(async () => {
     const currentRequestId = ++requestId.current;
     setLoading(true);
@@ -365,21 +369,6 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     await learning.rateCard(card.id, rating, elapsedMs);
   }, [learning]);
 
-  const handleShowSource = useCallback(async (card: LearningCard) => {
-    const source = card.source ?? await learning.getCardSource(card.id);
-    if (!source?.documentId) throw new Error("Source is unavailable.");
-    let document: LibraryDocument;
-    try {
-      document = documents?.find((candidate) => candidate.id === source.documentId)
-        ?? await (libraryApi.getDocument ?? nativeGetDocument)(source.documentId);
-    } catch (sourceError) {
-      throw new Error(errorMessage(sourceError));
-    }
-    setSourceHighlight(source);
-    setRoute({ name: "reader", document: { ...document, lastReadPage: source.page } });
-    return true;
-  }, [documents, learning, libraryApi]);
-
   const loadDriveFolder = useCallback(async (folderId?: string) => {
     const list = libraryApi.listDrive ?? listDrive;
     const connect = libraryApi.connectDrive ?? connectDrive;
@@ -475,7 +464,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   const palette = <CommandPalette ref={paletteRef} search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
 
   if (route.name === "review") {
-    return <><ReviewPage cards={route.cards} previews={route.previews} onRate={handleRate} onShowSource={handleShowSource} onBack={() => setRoute({ name: "memora" })} />{palette}</>;
+    return <><ReviewPage cards={route.cards} previews={route.previews} mode={route.mode} onRate={handleRate} onBack={() => setRoute(route.sourceDeck ? { name: "deckDetail", deck: route.sourceDeck } : { name: "memora" })} />{palette}</>;
   }
 
   if (route.name === "reader") {

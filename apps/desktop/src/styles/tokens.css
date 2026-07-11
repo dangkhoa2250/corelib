@@ -370,6 +370,26 @@ select {
   height: 100%;
 }
 
+.deck-detail-page__split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+  padding-right: 16px;
+}
+
+.deck-detail-page__body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.deck-detail-page__split > .source-viewer {
+  margin: 16px 0;
+}
+
 .deck-detail-page__stats {
   padding: 20px 24px;
   border-bottom: 1px solid rgb(0 0 0 / 6%);
@@ -1819,8 +1839,8 @@ select {
 
 /* Source Viewer Panel */
 .source-viewer {
-  width: 360px;
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-width: 420px;
   display: flex;
   flex-direction: column;
   background: #fff;
@@ -2076,6 +2096,38 @@ select {
 .review-page__done-content p {
   color: #8e8e93;
   margin: 0 0 20px;
+}
+
+.review-page__summary-stats {
+  margin-bottom: 24px !important;
+}
+
+.review-page__summary-grid {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.review-page__summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--rating-color) 10%, transparent);
+}
+
+.review-page__summary-count {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--rating-color);
+}
+
+.review-page__summary-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--rating-color);
 }
 
 .review-page__header {

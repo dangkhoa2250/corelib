@@ -4,8 +4,8 @@ import type { LearningCard, ReviewPreview, ReviewRating } from "../../domain/lea
 export interface ReviewPageProps {
   cards: LearningCard[];
   previews: Record<string, ReviewPreview>;
+  mode?: "study" | "practice";
   onRate: (card: LearningCard, rating: ReviewRating, elapsedMs: number) => Promise<void>;
-  onShowSource: (card: LearningCard) => boolean | void | Promise<boolean | void>;
   onBack?: () => void;
 }
 
@@ -27,19 +27,24 @@ function formatTime(seconds: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-export function ReviewPage({ cards, previews, onRate, onBack }: ReviewPageProps) {
+type RatingCounts = Record<ReviewRating, number>;
+
+export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: ReviewPageProps) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
+  const [ratingCounts, setRatingCounts] = useState<RatingCounts>({ again: 0, hard: 0, good: 0, easy: 0 });
+  const isPractice = mode === "practice";
   const card = cards[index];
   const preview = card ? previews[card.id] : undefined;
 
   useEffect(() => {
+    if (isPractice) return;
     setIndex((current) => Math.min(current, Math.max(cards.length - 1, 0)));
-  }, [cards.length]);
+  }, [cards.length, isPractice]);
 
   useEffect(() => {
     if (!card) return;
@@ -55,6 +60,32 @@ export function ReviewPage({ cards, previews, onRate, onBack }: ReviewPageProps)
   const elapsed = Math.max(0, now - startedAt);
 
   if (!card) {
+    if (isPractice) {
+      const totalRated = Object.values(ratingCounts).reduce((a, b) => a + b, 0);
+      return (
+        <main className="review-page review-page--done">
+          <div className="review-page__done-content">
+            <h1>Practice Complete</h1>
+            <p className="review-page__summary-stats">
+              Reviewed {totalRated} cards in {formatTime(Math.floor(elapsed / 1000))}
+            </p>
+            <div className="review-page__summary-grid">
+              {ratings.map((r) => (
+                <div key={r} className="review-page__summary-item" style={{ "--rating-color": ratingColors[r] } as React.CSSProperties}>
+                  <span className="review-page__summary-count">{ratingCounts[r]}</span>
+                  <span className="review-page__summary-label">{r === "good" ? "Good" : r.charAt(0).toUpperCase() + r.slice(1)}</span>
+                </div>
+              ))}
+            </div>
+            {onBack ? (
+              <button type="button" onClick={onBack} className="review-page__back-btn" style={{ marginTop: "24px" }}>
+                Back to Deck
+              </button>
+            ) : null}
+          </div>
+        </main>
+      );
+    }
     return (
       <main className="review-page review-page--done">
         <div className="review-page__done-content">
@@ -69,6 +100,24 @@ export function ReviewPage({ cards, previews, onRate, onBack }: ReviewPageProps)
       </main>
     );
   }
+
+  const handleRateCard = async (rating: ReviewRating) => {
+    if (isPractice) {
+      setRatingCounts((prev) => ({ ...prev, [rating]: prev[rating] + 1 }));
+      setIndex((current) => current + 1);
+    } else {
+      setSaving(true);
+      setError(null);
+      try {
+        await onRate(card, rating, Date.now() - startedAt);
+        setIndex((current) => current + 1);
+      } catch (rateError) {
+        setError(errorMessage(rateError));
+      } finally {
+        setSaving(false);
+      }
+    }
+  };
 
   return (
     <main className="review-page" aria-labelledby="review-title">
@@ -127,7 +176,7 @@ export function ReviewPage({ cards, previews, onRate, onBack }: ReviewPageProps)
         {revealed ? (
           <div className="review-page__ratings" role="group" aria-label="Rate card">
             {ratings.map((rating) => {
-              const interval = preview?.[rating]?.intervalLabel ?? "";
+              const interval = !isPractice ? preview?.[rating]?.intervalLabel ?? "" : "";
               return (
                 <button
                   key={rating}
@@ -135,18 +184,9 @@ export function ReviewPage({ cards, previews, onRate, onBack }: ReviewPageProps)
                   disabled={saving}
                   style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
                   type="button"
-                  onClick={async (e) => {
+                  onClick={(e) => {
                     e.stopPropagation();
-                    setSaving(true);
-                    setError(null);
-                    try {
-                      await onRate(card, rating, Date.now() - startedAt);
-                      setIndex((current) => current + 1);
-                    } catch (rateError) {
-                      setError(errorMessage(rateError));
-                    } finally {
-                      setSaving(false);
-                    }
+                    void handleRateCard(rating);
                   }}
                 >
                   <span className="review-page__rating-label">{rating === "good" ? "Good" : rating.charAt(0).toUpperCase() + rating.slice(1)}</span>
