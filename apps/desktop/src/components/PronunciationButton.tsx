@@ -36,7 +36,8 @@ export function PronunciationButton({ text, lang }: PronunciationButtonProps) {
     );
   }
 
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const trimmed = text.trim();
     if (!trimmed) return;
     if (isPlaying) {
