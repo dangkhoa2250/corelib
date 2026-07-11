@@ -10,6 +10,7 @@ export interface DeckDetailPageProps {
   selectedIds: Set<string>;
   setSelectedIds: (ids: Set<string>) => void;
   refreshTrigger?: number;
+  initialSearch?: string;
   onBack: () => void;
   onStudyDeck: (deckId: string) => void;
   onPracticeAll: (deckId: string) => void;
@@ -32,6 +33,7 @@ export function DeckDetailPage({
   onPracticeAll,
   onDirtyStateChange,
   getDocumentFileUrl,
+  initialSearch,
 }: DeckDetailPageProps) {
   const [stats, setStats] = useState<DeckStatistics | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +113,7 @@ export function DeckDetailPage({
             <CardBrowser
               decks={decks}
               initialDeckId={deck.id}
+              initialSearch={initialSearch}
               selectedIds={selectedIds}
               setSelectedIds={setSelectedIds}
               refreshTrigger={refreshTrigger}

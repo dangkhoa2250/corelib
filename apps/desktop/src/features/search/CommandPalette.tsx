@@ -11,7 +11,7 @@ export interface CommandPaletteHandle {
   open: () => void;
 }
 
-const SEARCH_DEBOUNCE_MS = 150;
+const SEARCH_DEBOUNCE_MS = 50;
 
 const NAV_ITEMS: SearchResult[] = [
   { kind: "nav", id: "library", title: "Library", subtitle: null },

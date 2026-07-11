@@ -77,6 +77,15 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function fuzzyMatch(text: string, query: string): boolean {
+  const lower = text.toLowerCase();
+  let qi = 0;
+  for (let i = 0; i < lower.length && qi < query.length; i++) {
+    if (lower[i] === query[qi]) qi++;
+  }
+  return qi === query.length;
+}
+
 function mergeDocuments(
   current: LibraryDocument[] | null,
   imported: LibraryDocument[],
@@ -147,7 +156,7 @@ type AppRoute =
   | { name: "reader"; document: LibraryDocument }
   | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview>; sourceDeck?: Deck; mode?: "study" | "practice" }
   | { name: "cardBrowser"; deckId: string }
-  | { name: "deckDetail"; deck: Deck }
+  | { name: "deckDetail"; deck: Deck; searchQuery?: string }
   | { name: "trash" };
 
 export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi }: AppProps) {
@@ -330,32 +339,32 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
   const search = useCallback(
     async (query: string) => {
-      const docCards: SearchResult[] = await (async () => {
-        try { const r = await nativeSearchEverything(query); return r ?? []; } catch { return []; }
-      })();
-      const decks: Deck[] = await (async () => {
-        try { const r = await nativeListDecks(); return r ?? []; } catch { return []; }
-      })();
-      const trashPage: CardPage = await (async () => {
-        try { const r = await nativeListTrashedCards(query, "deletedAt", null, 10); return r ?? { rows: [], total: 0, nextCursor: null }; } catch { return { rows: [], total: 0, nextCursor: null }; }
-      })();
+      const q = query.toLowerCase();
       const navResults: SearchResult[] = [
         { kind: "nav", id: "library", title: "Library", subtitle: null },
         { kind: "nav", id: "memora", title: "Memora", subtitle: null },
         { kind: "nav", id: "trash", title: "Trash", subtitle: null },
       ];
+      const docResults: SearchResult[] = (documents ?? [])
+        .filter((d) => fuzzyMatch(d.title, q))
+        .map((d) => ({ kind: "document" as const, id: d.id, title: d.title, subtitle: d.author }));
       const deckResults: SearchResult[] = decks
-        .filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
+        .filter((d) => fuzzyMatch(d.name, q))
         .map((d) => ({ kind: "deck" as const, id: d.id, title: d.name, subtitle: null }));
+      const [backendCards, trashPage] = await Promise.all([
+        nativeSearchEverything(query).catch(() => [] as SearchResult[]),
+        nativeListTrashedCards(query, "deletedAt", null, 10).catch(() => ({ rows: [], total: 0, nextCursor: null } as CardPage)),
+      ]);
+      const cardResults = backendCards.filter((r) => r.kind === "card");
       const trashResults: SearchResult[] = trashPage.rows.map((card) => ({
         kind: "trash" as const,
         id: card.id,
         title: card.front,
         subtitle: card.deckName,
       }));
-      return [...navResults, ...docCards, ...deckResults, ...trashResults];
+      return [...navResults, ...docResults, ...deckResults, ...cardResults, ...trashResults];
     },
-    [],
+    [documents, decks],
   );
 
   const handleOpenSearchResult = useCallback(async (result: SearchResult) => {
@@ -380,8 +389,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     if (result.kind === "card") {
       try {
         const card = await learning.getCard(result.id);
-        const preview = await learning.previewCardReview(card.id);
-        setRoute({ name: "review", cards: [card], previews: { [card.id]: preview } });
+        const deck = decks.find((d) => d.id === card.deckId);
+        if (deck) setRoute({ name: "deckDetail", deck, searchQuery: result.title });
       } catch (e) { setError(errorMessage(e)); }
       return;
     }
@@ -582,6 +591,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
             onPracticeAll={handlePracticeAll}
             onDirtyStateChange={setIsBrowserDirty}
             getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
+            initialSearch={route.searchQuery}
           />
         ) : route.name === "cardBrowser" ? (
           <CardBrowser

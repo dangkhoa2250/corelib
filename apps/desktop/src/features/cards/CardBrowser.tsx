@@ -7,6 +7,7 @@ import { SourceViewer } from "./SourceViewer";
 export interface CardBrowserProps {
   decks: Deck[];
   initialDeckId: string;
+  initialSearch?: string;
   onDoubleClilckRow?: (row: CardBrowserRow) => void;
   selectedIds: Set<string>;
   setSelectedIds: (ids: Set<string>) => void;
@@ -32,6 +33,7 @@ const PAGE_SIZE = 50;
 export function CardBrowser({
   decks,
   initialDeckId,
+  initialSearch,
   onDoubleClilckRow,
   selectedIds,
   setSelectedIds,
@@ -55,8 +57,8 @@ export function CardBrowser({
   const [internalSourceView, setInternalSourceView] = useState<CardSource | null>(null);
   const sourceView = onSourceViewChange ? controlledSourceView ?? null : internalSourceView;
   const setSourceView = onSourceViewChange ?? setInternalSourceView;
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState(initialSearch ?? "");
+  const [debouncedQuery, setDebouncedQuery] = useState(initialSearch ?? "");
   const [states, setStates] = useState<CardLifecycleState[]>([]);
   const [sort, setSort] = useState<CardSort>("updated_desc");
 
