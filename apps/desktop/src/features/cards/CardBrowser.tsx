@@ -13,6 +13,7 @@ export interface CardBrowserProps {
   refreshTrigger?: number;
   onBack?: () => void;
   onDirtyStateChange?: (dirty: boolean) => void;
+  onCardChange?: () => void;
   queryDeckCards?: typeof queryDeckCards;
   moveCards?: typeof moveCards;
   setCardsSuspended?: typeof setCardsSuspended;
@@ -34,6 +35,7 @@ export function CardBrowser({
   refreshTrigger = 0,
   onBack,
   onDirtyStateChange,
+  onCardChange,
   queryDeckCards: customQuery = queryDeckCards,
   moveCards: customMove = moveCards,
   setCardsSuspended: customSuspend = setCardsSuspended,
@@ -90,6 +92,7 @@ export function CardBrowser({
       await customMove(Array.from(selectedIds), bulkDeckId);
       setSelectedIds(new Set());
       await loadData();
+      onCardChange?.();
     } catch (e) {
       setBulkError(e instanceof Error ? e.message : String(e));
     }
@@ -102,6 +105,7 @@ export function CardBrowser({
       await customSuspend(Array.from(selectedIds), suspended);
       setSelectedIds(new Set());
       await loadData();
+      onCardChange?.();
     } catch (e) {
       setBulkError(e instanceof Error ? e.message : String(e));
     }
@@ -117,6 +121,7 @@ export function CardBrowser({
       await customTrash(Array.from(selectedIds));
       setSelectedIds(new Set());
       await loadData();
+      onCardChange?.();
     } catch (e) {
       setBulkError(e instanceof Error ? e.message : String(e));
     }
@@ -594,6 +599,7 @@ export function CardBrowser({
         onSaveSuccess={() => {
           setEditingCard(null);
           void loadData();
+          onCardChange?.();
         }}
         onDirtyStateChange={handleDirtyStateChange}
         createCard={customCreate}

@@ -30,6 +30,7 @@ export function DeckDetailPage({
 }: DeckDetailPageProps) {
   const [stats, setStats] = useState<DeckStatistics | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cardChangeCount, setCardChangeCount] = useState(0);
 
   useEffect(() => {
     getDeckStatistics(deck.id)
@@ -38,7 +39,7 @@ export function DeckDetailPage({
         setError(errorMessage(e));
         setStats(null);
       });
-  }, [deck.id]);
+  }, [deck.id, cardChangeCount]);
 
   return (
     <main className="deck-detail-page">
@@ -87,6 +88,7 @@ export function DeckDetailPage({
           setSelectedIds={setSelectedIds}
           refreshTrigger={refreshTrigger}
           onBack={onBack}
+          onCardChange={() => setCardChangeCount((c) => c + 1)}
           onDirtyStateChange={onDirtyStateChange}
         />
       </div>
