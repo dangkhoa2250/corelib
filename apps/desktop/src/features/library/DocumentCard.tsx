@@ -161,6 +161,19 @@ export function DocumentCard({
         {statusLabel ? (
           <span className="document-card__status">{statusLabel}</span>
         ) : null}
+        {document.lastReadPage && document.numPages && document.numPages > 0 ? (
+          <span className="document-card__progress">
+            <span className="document-card__progress-track">
+              <span
+                className="document-card__progress-fill"
+                style={{ width: `${Math.round((document.lastReadPage / document.numPages) * 100)}%` }}
+              />
+            </span>
+            <span className="document-card__progress-label">
+              {Math.round((document.lastReadPage / document.numPages) * 100)}%
+            </span>
+          </span>
+        ) : null}
       </button>
       {(onDelete || onRename) && (
         <div style={{ position: "absolute", top: "8px", right: "8px", zIndex: 10 }}>

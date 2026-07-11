@@ -88,6 +88,7 @@ const document: LibraryDocument = {
   indexed: true,
   status: "ready" as const,
   lastReadPage: 1,
+  numPages: null,
 };
 
 it("keeps the document point under the pointer while zooming", () => {

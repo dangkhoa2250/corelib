@@ -14,6 +14,7 @@ test("labels processing documents as Preparing", () => {
     indexed: false,
     status: "processing",
     lastReadPage: null,
+    numPages: null,
   };
 
   expect(documentStatusLabel(document)).toBe("Preparing");

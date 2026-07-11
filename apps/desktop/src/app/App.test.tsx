@@ -85,6 +85,7 @@ const document = {
   indexed: true,
   status: "ready" as const,
   lastReadPage: null,
+  numPages: null,
 };
 
 const emptyDeckStatistics = {

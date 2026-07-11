@@ -1607,6 +1607,36 @@ textarea::placeholder {
   color: var(--warning);
 }
 
+.document-card__progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.document-card__progress-track {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--interactive-hover);
+  overflow: hidden;
+}
+
+.document-card__progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent, #007aff);
+  transition: width 0.3s ease;
+}
+
+.document-card__progress-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
 .document-card--placeholder {
   min-width: 0;
 }

@@ -15,6 +15,7 @@ export interface LibraryDocument {
   indexed: boolean;
   status: DocumentStatus;
   lastReadPage: number | null;
+  numPages: number | null;
 }
 
 export function documentStatusLabel(document: LibraryDocument): string {

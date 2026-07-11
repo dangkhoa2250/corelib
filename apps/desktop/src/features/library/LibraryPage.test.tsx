@@ -13,6 +13,7 @@ const document: LibraryDocument = {
   indexed: true,
   status: "ready",
   lastReadPage: null,
+  numPages: null,
 };
 
 test("renders ready local documents with import and open actions", () => {

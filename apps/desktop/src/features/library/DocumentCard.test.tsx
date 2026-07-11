@@ -14,6 +14,7 @@ const document: LibraryDocument = {
   indexed: true,
   status: "ready",
   lastReadPage: null,
+  numPages: null,
 };
 
 test("opens a document when its cover card is clicked", async () => {

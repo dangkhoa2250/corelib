@@ -14,6 +14,7 @@ const document: LibraryDocument = {
   indexed: true,
   status: "ready",
   lastReadPage: null,
+  numPages: null,
 };
 
 test("maps card opens to document ids", async () => {
