@@ -77,9 +77,12 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [modelSearch, setModelSearch] = useState("");
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
   const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
+  const translateProviderOptions = connectedProviders.length > 0 ? connectedProviders : AI_PROVIDERS;
+  const filteredModels = models.filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(modelSearch.trim().toLowerCase()));
 
   useEffect(() => {
     let cancelled = false;
@@ -239,6 +242,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             setApiKey("");
             setShowApiKey(false);
             setModels([]);
+            setModelSearch("");
             setError(null);
           }}>
             {AI_PROVIDERS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -290,6 +294,27 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             </div>
           </div>
 
+          <label className="settings-page__field">
+          <span>Provider</span>
+          <select aria-label="Translate provider" value={provider} onChange={(event) => {
+            const nextProvider = event.target.value as AiProviderId;
+            setProvider(nextProvider);
+            setApiKey("");
+            setShowApiKey(false);
+            setModels([]);
+            setModelSearch("");
+            setError(null);
+            if (connected[nextProvider]) void loadModels(nextProvider);
+          }}>
+            {translateProviderOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </label>
+
+        <label className="settings-page__field">
+          <span>Search models</span>
+          <input aria-label="Search models" onChange={(event) => setModelSearch(event.target.value)} placeholder="Search by model name…" type="search" value={modelSearch} />
+        </label>
+
         <label className="settings-page__field">
           <span>Model</span>
           <select aria-label="AI model" disabled={loading || models.length === 0} value={selectedModel} onChange={(event) => {
@@ -300,8 +325,8 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
               onDefaultChange?.(provider, nextModel);
             }
           }}>
-            <option value="">{models.length ? "Choose a model" : "Connect to load models"}</option>
-            {models.map((model) => <option key={model.id} value={model.id}>{modelLabel(model)}</option>)}
+            <option value="">{models.length ? (filteredModels.length ? "Choose a model" : "No matching models") : "Connect to load models"}</option>
+            {filteredModels.map((model) => <option key={model.id} value={model.id}>{modelLabel(model)}</option>)}
           </select>
         </label>
 
