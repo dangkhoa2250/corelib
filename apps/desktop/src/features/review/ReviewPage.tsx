@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import type { LearningCard, ReviewPreview, ReviewRating } from "../../domain/learning";
+import { PronunciationButton } from "../../components/PronunciationButton";
+import { detectLanguage } from "../../lib/language";
 
 export interface ReviewPageProps {
   cards: LearningCard[];
@@ -155,14 +157,20 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
           <div className="review-page__card-face review-page__card-face--front">
             <div className="review-page__card-face-scroll">
               <p className="review-page__label">Front</p>
-              <div className="review-page__content">{card.front}</div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                <div className="review-page__content">{card.front}</div>
+                <PronunciationButton text={card.front} lang={detectLanguage(card.front)} />
+              </div>
             </div>
             <div className="review-page__flip-hint">Tap to flip</div>
           </div>
           <div className="review-page__card-face review-page__card-face--back">
             <div className="review-page__card-face-scroll">
               <p className="review-page__label">Front</p>
-              <div className="review-page__content review-page__content--small">{card.front}</div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                <div className="review-page__content review-page__content--small">{card.front}</div>
+                <PronunciationButton text={card.front} lang={detectLanguage(card.front)} />
+              </div>
               <hr className="review-page__divider" />
               <p className="review-page__label">Back</p>
               <div className="review-page__content">{card.back}</div>
