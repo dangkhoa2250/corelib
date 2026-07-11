@@ -29,6 +29,7 @@ fn provider_base_url(provider: &str) -> Result<&'static str, String> {
         "openrouter" => Ok("https://openrouter.ai/api/v1"),
         "cerebras" => Ok("https://api.cerebras.ai/v1"),
         "google-ai-studio" => Ok("https://generativelanguage.googleapis.com/v1beta"),
+        "google-translation" => Ok("https://translation.googleapis.com/language/translate/v2"),
         _ => Err(format!("Unsupported AI provider: {provider}")),
     }
 }
@@ -123,7 +124,7 @@ pub fn has_api_key(provider: &str) -> Result<bool, String> {
     Ok(keys.get(provider).map_or(false, |v| !v.is_empty()))
 }
 
-fn load_api_key(provider: &str) -> Result<String, String> {
+pub(crate) fn load_api_key(provider: &str) -> Result<String, String> {
     provider_base_url(provider)?;
     let keys = load_keys();
     keys.get(provider)
@@ -185,6 +186,9 @@ fn parse_google_models(value: &Value) -> Vec<AiModel> {
 }
 
 pub fn list_models(provider: &str) -> Result<Vec<AiModel>, String> {
+    if provider == "google-translation" {
+        return crate::translation::list_google_translation_models();
+    }
     let api_key = load_api_key(provider)?;
     let http = client()?;
     let value = if provider == "google-ai-studio" {

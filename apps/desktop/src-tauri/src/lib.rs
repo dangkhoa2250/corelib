@@ -11,6 +11,7 @@ pub mod library_db;
 pub mod library_store;
 pub mod model;
 pub mod scheduler;
+pub mod translation;
 
 #[cfg(test)]
 mod drive_tests;
@@ -92,6 +93,8 @@ pub fn run() {
             ai::has_ai_api_key,
             ai::list_ai_models,
             ai::translate_with_ai,
+            translation::translate_text,
+            translation::apple_translation_available,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
