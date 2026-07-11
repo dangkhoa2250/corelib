@@ -10,11 +10,24 @@ export interface ReviewPageProps {
 }
 
 const ratings: ReviewRating[] = ["again", "hard", "good", "easy"];
-const labels: Record<ReviewRating, string> = { again: "Again", hard: "Hard", good: "Good", easy: "Easy" };
+const ratingColors: Record<ReviewRating, string> = {
+  again: "#ff3b30",
+  hard: "#ff9500",
+  good: "#34c759",
+  easy: "#0071e3",
+};
 
-function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
-export function ReviewPage({ cards, previews, onRate, onShowSource, onBack }: ReviewPageProps) {
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+export function ReviewPage({ cards, previews, onRate, onBack }: ReviewPageProps) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -23,45 +36,128 @@ export function ReviewPage({ cards, previews, onRate, onShowSource, onBack }: Re
   const [now, setNow] = useState(() => Date.now());
   const card = cards[index];
   const preview = card ? previews[card.id] : undefined;
+
   useEffect(() => {
     setIndex((current) => Math.min(current, Math.max(cards.length - 1, 0)));
   }, [cards.length]);
+
   useEffect(() => {
     if (!card) return;
     const start = Date.now();
-    setStartedAt(start); setNow(start); setRevealed(false); setError(null);
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    setStartedAt(start);
+    setNow(start);
+    setRevealed(false);
+    setError(null);
+    const timer = window.setInterval(() => setNow(Date.now()), 100);
     return () => window.clearInterval(timer);
   }, [card?.id]);
+
   const elapsed = Math.max(0, now - startedAt);
-  if (!card) return <main><h1>Review today</h1>{onBack ? <button type="button" onClick={onBack}>Back to Library</button> : null}<p>Nothing due today</p></main>;
+
+  if (!card) {
+    return (
+      <main className="review-page review-page--done">
+        <div className="review-page__done-content">
+          <h1>Review today</h1>
+          <p>Nothing due today</p>
+          {onBack ? (
+            <button type="button" onClick={onBack} className="review-page__back-btn">
+              Back to Library
+            </button>
+          ) : null}
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main aria-labelledby="review-title" className="review-page">
-      <header><h1 id="review-title">Review today</h1>{onBack ? <button type="button" onClick={onBack}>Back to Library</button> : null}<p>{index + 1} of {cards.length}</p></header>
-      <section aria-label="Flashcard" className="review-page__card">
-        <p className="review-page__label">Front</p><div>{card.front}</div>
-        {revealed ? <><p className="review-page__label">Back</p><div>{card.back}</div></> : null}
-        <p aria-live="polite">Elapsed {Math.floor(elapsed / 1000)}s</p>
-        {!revealed ? <button type="button" onClick={() => setRevealed(true)}>Show answer</button> : null}
-        <button type="button" onClick={async () => {
-          try {
-            const resolved = await onShowSource(card);
-            if (!card.source?.documentId && resolved !== true) setError("Source is unavailable.");
-          } catch (sourceError) { setError(errorMessage(sourceError)); }
-        }}>Show source</button>
-        {error ? <div role="alert">{error}</div> : null}
-        {revealed ? <div role="group" aria-label="Rate card">
-          {ratings.map((rating) => {
-            const interval = preview?.[rating]?.intervalLabel ?? "";
-            return <button key={rating} disabled={saving} type="button" onClick={async () => {
-              setSaving(true); setError(null);
-              try { await onRate(card, rating, Date.now() - startedAt); setIndex((current) => current + 1); }
-              catch (rateError) { setError(errorMessage(rateError)); }
-              finally { setSaving(false); }
-            }}>{labels[rating]}{interval ? ` ${interval}` : ""}</button>;
-          })}
-        </div> : null}
+    <main className="review-page" aria-labelledby="review-title">
+      <header className="review-page__header">
+        <div className="review-page__header-left">
+          {onBack ? (
+            <button type="button" onClick={onBack} className="review-page__back-btn">
+              &larr; Back
+            </button>
+          ) : null}
+        </div>
+        <div className="review-page__progress">
+          <div
+            className="review-page__progress-bar"
+            style={{ width: `${((index + 1) / cards.length) * 100}%` }}
+          />
+        </div>
+        <p className="review-page__count">{index + 1} / {cards.length}</p>
+      </header>
+
+      <section
+        aria-label="Flashcard"
+        className={`review-page__card ${revealed ? "review-page__card--flipped" : ""}`}
+        onClick={() => !revealed && setRevealed(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !revealed) {
+            e.preventDefault();
+            setRevealed(true);
+          }
+        }}
+      >
+        <div className="review-page__card-inner">
+          <div className="review-page__card-face review-page__card-face--front">
+            <div className="review-page__card-face-scroll">
+              <p className="review-page__label">Front</p>
+              <div className="review-page__content">{card.front}</div>
+            </div>
+            <div className="review-page__flip-hint">Tap to flip</div>
+          </div>
+          <div className="review-page__card-face review-page__card-face--back">
+            <div className="review-page__card-face-scroll">
+              <p className="review-page__label">Front</p>
+              <div className="review-page__content review-page__content--small">{card.front}</div>
+              <hr className="review-page__divider" />
+              <p className="review-page__label">Back</p>
+              <div className="review-page__content">{card.back}</div>
+            </div>
+          </div>
+        </div>
       </section>
+
+      <footer className="review-page__footer">
+        <p className="review-page__elapsed" aria-live="polite">{formatTime(Math.floor(elapsed / 1000))}</p>
+        {revealed ? (
+          <div className="review-page__ratings" role="group" aria-label="Rate card">
+            {ratings.map((rating) => {
+              const interval = preview?.[rating]?.intervalLabel ?? "";
+              return (
+                <button
+                  key={rating}
+                  className="review-page__rating-btn"
+                  disabled={saving}
+                  style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
+                  type="button"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    setSaving(true);
+                    setError(null);
+                    try {
+                      await onRate(card, rating, Date.now() - startedAt);
+                      setIndex((current) => current + 1);
+                    } catch (rateError) {
+                      setError(errorMessage(rateError));
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  <span className="review-page__rating-label">{rating === "good" ? "Good" : rating.charAt(0).toUpperCase() + rating.slice(1)}</span>
+                  {interval ? <span className="review-page__rating-interval">{interval}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        {error ? <p className="review-page__error" role="alert">{error}</p> : null}
+      </footer>
     </main>
   );
 }
