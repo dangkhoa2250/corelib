@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { listAiModels, saveAiApiKey, translateWithAi } from "./ai";
+import {
+  appleTranslationAvailable,
+  listAiModels,
+  saveAiApiKey,
+  translateText,
+  translateWithAi,
+} from "./ai";
 
 describe("AI bridge", () => {
   it("stores a provider API key through the native command", async () => {
@@ -24,5 +30,21 @@ describe("AI bridge", () => {
       text: "Hello",
       targetLanguage: "Vietnamese",
     });
+  });
+
+  it("translates using a unified engine ID", async () => {
+    const call = vi.fn().mockResolvedValue({ translation: "Xin chào" });
+    await translateText("apple-translation", "Hello", "Vietnamese", call);
+    expect(call).toHaveBeenCalledWith("translate_text", {
+      engineId: "apple-translation",
+      text: "Hello",
+      targetLanguage: "Vietnamese",
+    });
+  });
+
+  it("checks Apple Translation availability through Tauri", async () => {
+    const call = vi.fn().mockResolvedValue(true);
+    await expect(appleTranslationAvailable(call)).resolves.toBe(true);
+    expect(call).toHaveBeenCalledWith("apple_translation_available");
   });
 });

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type { AiModel, AiProviderId, TranslationResult } from "../domain/ai";
+import type { TranslationEngineId } from "../domain/translation";
 
 type Invoke = <T>(command: string, args?: Record<string, unknown>) => Promise<T>;
 
@@ -28,4 +29,17 @@ export function translateWithAi(
   call: Invoke = invoke,
 ): Promise<TranslationResult> {
   return call("translate_with_ai", { provider, model, text, targetLanguage });
+}
+
+export function translateText(
+  engineId: TranslationEngineId,
+  text: string,
+  targetLanguage: string,
+  call: Invoke = invoke,
+): Promise<TranslationResult> {
+  return call("translate_text", { engineId, text, targetLanguage });
+}
+
+export function appleTranslationAvailable(call: Invoke = invoke): Promise<boolean> {
+  return call("apple_translation_available");
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   AI_PROVIDERS,
@@ -6,11 +6,20 @@ import {
   type AiModel,
   type AiProviderId,
 } from "../../domain/ai";
+import {
+  aiEngineId,
+  builtinTranslationEngines,
+  parseAiEngineId,
+  readTranslationSelection,
+  TRANSLATION_ENGINE_KEY,
+  type TranslationEngineId,
+} from "../../domain/translation";
 import { IconEye, IconEyeOff } from "../../app/icons";
 import { IconArrowLeft, IconMemora, IconSearch } from "../../app/icons";
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
+const defaultAppleTranslationAvailable = async () => true;
 
 function storage(): Storage | null {
   const candidate = typeof window !== "undefined" ? window.localStorage : null;
@@ -34,7 +43,8 @@ export interface SettingsPageProps {
   saveApiKey: (provider: AiProviderId, apiKey: string) => Promise<void>;
   clearApiKey: (provider: AiProviderId) => Promise<void>;
   listModels: (provider: AiProviderId) => Promise<AiModel[]>;
-  onDefaultChange?: (provider: AiProviderId | null, model: string) => void;
+  appleTranslationAvailable?: () => Promise<boolean>;
+  onDefaultChange?: (engineId: TranslationEngineId | null) => void;
   onBack?: () => void;
 }
 
@@ -45,20 +55,15 @@ function readProvider(): AiProviderId {
     : "google-ai-studio";
 }
 
-function readDefaultProvider(): AiProviderId | null {
-  const value = getPreference(DEFAULT_PROVIDER_KEY);
-  return AI_PROVIDERS.some((provider) => provider.id === value) ? value as AiProviderId : null;
-}
-
-export function readAiPreference(): { provider: AiProviderId | null; model: string; targetLanguage: string } {
+export function readTranslationPreference(): { engineId: TranslationEngineId | null; targetLanguage: string } {
+  const candidate = storage();
   return {
-    provider: readDefaultProvider(),
-    model: getPreference(`${DEFAULT_PROVIDER_KEY}.model`) ?? "",
+    engineId: candidate ? readTranslationSelection(candidate, true) : "apple-translation",
     targetLanguage: getPreference(TARGET_LANGUAGE_KEY) ?? "Vietnamese",
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, onDefaultChange, onBack }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack }: SettingsPageProps) {
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -71,26 +76,79 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     cerebras: false,
   });
   const [modelsByProvider, setModelsByProvider] = useState<Partial<Record<AiProviderId, AiModel[]>>>({});
-  const [selectedModel, setSelectedModel] = useState(readAiPreference().model);
-  const [defaultProvider, setDefaultProvider] = useState<AiProviderId | null>(readAiPreference().provider);
-  const [targetLanguage, setTargetLanguage] = useState(readAiPreference().targetLanguage);
+  const initialPreference = readTranslationPreference();
+  const [selectedEngineId, setSelectedEngineId] = useState<TranslationEngineId | null>(initialPreference.engineId);
+  const selectedEngineIdRef = useRef(selectedEngineId);
+  selectedEngineIdRef.current = selectedEngineId;
+  const [appleAvailable, setAppleAvailable] = useState(true);
+  const [targetLanguage, setTargetLanguage] = useState(initialPreference.targetLanguage);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-  const [modelSearch, setModelSearch] = useState("");
+  const [modelSearch, setModelSearch] = useState(
+    initialPreference.engineId === "apple-translation"
+      ? "Apple Translation"
+      : initialPreference.engineId === "google-translation"
+        ? "Google Cloud Translation"
+        : "",
+  );
   const [deferredModelSearch, setDeferredModelSearch] = useState("");
-  const [modelSelectionMade, setModelSelectionMade] = useState(false);
+  const [modelSelectionMade, setModelSelectionMade] = useState(
+    initialPreference.engineId === "apple-translation" || initialPreference.engineId === "google-translation",
+  );
   const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
   const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
-  const searchableModels = connectedProviders.flatMap((item) => (modelsByProvider[item.id] ?? []).map((model) => ({ ...model, provider: item.id })));
-  const filteredModels = searchableModels.filter((model) => `${model.name} ${providerDefinition(model.provider).name}`.toLowerCase().includes(deferredModelSearch.trim().toLowerCase()));
+  const searchableModels = [
+    ...builtinTranslationEngines(appleAvailable, connected["google-translation"])
+      .filter((engine) => engine.available)
+      .map((engine) => ({
+        engineId: engine.id,
+        id: engine.model ?? engine.id,
+        name: engine.name,
+        provider: engine.provider,
+        description: engine.description,
+      })),
+    ...connectedProviders
+      .filter((item) => item.id !== "google-translation")
+      .flatMap((item) => (modelsByProvider[item.id] ?? []).map((model) => ({
+        ...model,
+        engineId: aiEngineId(item.id, model.id),
+        provider: item.id as AiProviderId | null,
+        description: providerDefinition(item.id).name,
+      }))),
+  ];
+  const filteredModels = searchableModels.filter((model) => `${model.name} ${model.description}`.toLowerCase().includes(deferredModelSearch.trim().toLowerCase()));
+  const keyboardModels = searchableModels.filter((model) => `${model.name} ${model.description}`.toLowerCase().includes(modelSearch.trim().toLowerCase()));
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDeferredModelSearch(modelSearch), 250);
     return () => window.clearTimeout(timeoutId);
   }, [modelSearch]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const disableAppleTranslation = () => {
+      setAppleAvailable(false);
+      if (selectedEngineIdRef.current !== "apple-translation") return;
+      selectedEngineIdRef.current = null;
+      setSelectedEngineId(null);
+      setModelSearch("");
+      removePreference(TRANSLATION_ENGINE_KEY);
+      onDefaultChange?.(null);
+    };
+    void appleTranslationAvailable()
+      .then((available) => {
+        if (cancelled) return;
+        if (available) setAppleAvailable(true);
+        else disableAppleTranslation();
+      })
+      .catch(() => {
+        if (!cancelled) disableAppleTranslation();
+      });
+    return () => { cancelled = true; };
+  }, [appleTranslationAvailable]);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,10 +168,15 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     try {
       const result = await listModels(providerToLoad);
       setModelsByProvider((current) => ({ ...current, [providerToLoad]: result }));
-      const savedModel = providerToLoad === defaultProvider ? readAiPreference().model : "";
+      const savedEngine = readTranslationPreference().engineId;
+      const savedAi = savedEngine ? parseAiEngineId(savedEngine) : null;
+      const savedModel = savedAi?.provider === providerToLoad
+        ? savedAi.model
+        : savedEngine === "google-translation" && providerToLoad === "google-translation"
+          ? "nmt"
+          : "";
       const savedModelDefinition = result.find((model) => model.id === savedModel);
       if (savedModelDefinition) {
-        setSelectedModel(savedModelDefinition.id);
         setModelSearch(savedModelDefinition.name);
         setModelSelectionMade(true);
         setHighlightedModelIndex(-1);
@@ -148,14 +211,17 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
       await clearApiKey(provider);
       setConnected((current) => ({ ...current, [provider]: false }));
       setModelsByProvider((current) => ({ ...current, [provider]: [] }));
-      setSelectedModel("");
       setApiKey("");
       setShowApiKey(false);
-      if (defaultProvider === provider) {
-        setDefaultProvider(null);
+      const selectedAi = selectedEngineId ? parseAiEngineId(selectedEngineId) : null;
+      if (selectedEngineId === "google-translation" && provider === "google-translation"
+        || selectedAi?.provider === provider) {
+        setSelectedEngineId(null);
         removePreference(DEFAULT_PROVIDER_KEY);
         removePreference(`${DEFAULT_PROVIDER_KEY}.model`);
-        onDefaultChange?.(null, "");
+        removePreference(TRANSLATION_ENGINE_KEY);
+        setModelSearch("");
+        onDefaultChange?.(null);
       }
     } catch (clearError) {
       setError(clearError instanceof Error ? clearError.message : String(clearError));
@@ -182,11 +248,17 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   };
 
   const selectModel = (model: (typeof filteredModels)[number]) => {
-    setSelectedModel(model.id);
-    setDefaultProvider(model.provider);
-    setPreference(DEFAULT_PROVIDER_KEY, model.provider);
-    setPreference(`${DEFAULT_PROVIDER_KEY}.model`, model.id);
-    onDefaultChange?.(model.provider, model.id);
+    setSelectedEngineId(model.engineId);
+    setPreference(TRANSLATION_ENGINE_KEY, model.engineId);
+    const aiSelection = parseAiEngineId(model.engineId);
+    if (aiSelection) {
+      setPreference(DEFAULT_PROVIDER_KEY, aiSelection.provider);
+      setPreference(`${DEFAULT_PROVIDER_KEY}.model`, aiSelection.model);
+    } else {
+      removePreference(DEFAULT_PROVIDER_KEY);
+      removePreference(`${DEFAULT_PROVIDER_KEY}.model`);
+    }
+    onDefaultChange?.(model.engineId);
     setModelSearch(model.name);
     setModelSelectionMade(true);
     setHighlightedModelIndex(-1);
@@ -320,17 +392,23 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
               setHighlightedModelIndex(-1);
             }}
             onKeyDown={(event) => {
-              if (!filteredModels.length) return;
+              if (!keyboardModels.length) return;
               if (event.key === "ArrowDown") {
                 event.preventDefault();
-                setHighlightedModelIndex((current) => Math.min(current + 1, filteredModels.length - 1));
+                setHighlightedModelIndex((current) => Math.min(current + 1, keyboardModels.length - 1));
               } else if (event.key === "ArrowUp") {
                 event.preventDefault();
                 setHighlightedModelIndex((current) => Math.max(current - 1, 0));
               } else if (event.key === "Enter") {
-                event.preventDefault();
-                selectModel(filteredModels[highlightedModelIndex]);
+                const highlightedModel = keyboardModels[highlightedModelIndex];
+                if (highlightedModel) {
+                  event.preventDefault();
+                  selectModel(highlightedModel);
+                }
               }
+            }}
+            onFocus={(event) => {
+              if (modelSelectionMade) event.currentTarget.select();
             }}
             placeholder="Search by model name…"
             spellCheck={false}
@@ -343,14 +421,14 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           <div aria-label="Model results" className="settings-page__model-results">
             {filteredModels.map((model) => (
               <button
-                aria-pressed={selectedModel === model.id}
-                className={`settings-page__model-result ${selectedModel === model.id ? "is-selected" : ""} ${filteredModels[highlightedModelIndex] === model ? "is-highlighted" : ""}`}
-                key={`${model.provider}-${model.id}`}
+                aria-pressed={selectedEngineId === model.engineId}
+                className={`settings-page__model-result ${selectedEngineId === model.engineId ? "is-selected" : ""} ${filteredModels[highlightedModelIndex] === model ? "is-highlighted" : ""}`}
+                key={model.engineId}
                 onClick={() => selectModel(model)}
                 type="button"
               >
                 <span>{model.name}</span>
-                <small>{providerDefinition(model.provider).name}</small>
+                <small>{model.description}</small>
               </button>
             ))}
           </div>
@@ -361,11 +439,12 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           <input aria-label="Target language" onChange={(event) => {
             setTargetLanguage(event.target.value);
             setPreference(TARGET_LANGUAGE_KEY, event.target.value);
+            onDefaultChange?.(selectedEngineId);
           }} type="text" value={targetLanguage} />
         </label>
 
         {error ? <p className="settings-page__error" role="alert">{error}</p> : null}
-        <p className="settings-page__privacy">API keys are stored in the device keychain and are never saved in cards.</p>
+        <p className="settings-page__privacy">API keys are stored in the app configuration and are never saved in cards.</p>
       </section>
         </> : <p className="settings-page__empty">No settings match “{searchQuery}”.</p>}
       </section>

@@ -26,9 +26,10 @@ import { DeckDetailPage } from "../features/memora/DeckDetailPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
-import { SettingsPage, readAiPreference } from "../features/settings/SettingsPage";
-import { clearAiApiKey, hasAiApiKey, listAiModels, saveAiApiKey, translateWithAi } from "../lib/ai";
+import { SettingsPage, readTranslationPreference } from "../features/settings/SettingsPage";
+import { appleTranslationAvailable, clearAiApiKey, hasAiApiKey, listAiModels, saveAiApiKey, translateText } from "../lib/ai";
 import type { AiModel, AiProviderId } from "../domain/ai";
+import type { TranslationEngineId } from "../domain/translation";
 import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
 import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, DeckStatistics, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
@@ -169,7 +170,8 @@ interface AiApi {
   saveApiKey: (provider: AiProviderId, apiKey: string) => Promise<void>;
   clearApiKey: (provider: AiProviderId) => Promise<void>;
   listModels: (provider: AiProviderId) => Promise<AiModel[]>;
-  translate: (provider: AiProviderId, model: string, text: string, targetLanguage: string) => Promise<{ translation: string }>;
+  appleTranslationAvailable: () => Promise<boolean>;
+  translate: (engineId: TranslationEngineId, text: string, targetLanguage: string) => Promise<{ translation: string }>;
 }
 
 const nativeAiApi: AiApi = {
@@ -177,7 +179,8 @@ const nativeAiApi: AiApi = {
   saveApiKey: saveAiApiKey,
   clearApiKey: clearAiApiKey,
   listModels: listAiModels,
-  translate: translateWithAi,
+  appleTranslationAvailable,
+  translate: translateText,
 };
 
 export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi, aiApi = nativeAiApi }: AppProps) {
@@ -223,7 +226,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
   const [isBrowserDirty, setIsBrowserDirty] = useState(false);
   const [sourceHighlight, setSourceHighlight] = useState<CardSource | null>(null);
-  const [aiPreference, setAiPreference] = useState(readAiPreference);
+  const [translationPreference, setTranslationPreference] = useState(readTranslationPreference);
 
   const reloadDecks = useCallback(async () => {
     try {
@@ -359,21 +362,19 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   }, []);
 
   const handleTranslate = useCallback(async (text: string) => {
-    if (!aiPreference.provider || !aiPreference.model) {
-      throw new Error("Configure a default AI provider and model in Settings first.");
+    if (!translationPreference.engineId) {
+      throw new Error("Choose a translation engine in Settings first.");
     }
     const result = await aiApi.translate(
-      aiPreference.provider,
-      aiPreference.model,
+      translationPreference.engineId,
       text,
-      aiPreference.targetLanguage,
+      translationPreference.targetLanguage,
     );
     return result.translation;
-  }, [aiApi, aiPreference]);
+  }, [aiApi, translationPreference]);
 
-  const handleAiDefaultChange = useCallback((provider: AiProviderId | null, model: string) => {
-    const preference = readAiPreference();
-    setAiPreference({ provider, model, targetLanguage: preference.targetLanguage });
+  const handleTranslationDefaultChange = useCallback((_engineId: TranslationEngineId | null) => {
+    setTranslationPreference(readTranslationPreference());
   }, []);
 
 
@@ -585,7 +586,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
         saveApiKey={aiApi.saveApiKey}
         clearApiKey={aiApi.clearApiKey}
         listModels={aiApi.listModels}
-        onDefaultChange={handleAiDefaultChange}
+        appleTranslationAvailable={aiApi.appleTranslationAvailable}
+        onDefaultChange={handleTranslationDefaultChange}
         onBack={() => setRoute({ name: "library" })}
       />
     );

@@ -8,6 +8,51 @@ beforeEach(() => {
   window.localStorage?.clear?.();
 });
 
+test("defaults a new supported Mac to Apple Translation and ranks it first", async () => {
+  const user = userEvent.setup();
+  render(
+    <SettingsPage
+      appleTranslationAvailable={vi.fn().mockResolvedValue(true)}
+      hasApiKey={vi.fn().mockResolvedValue(false)}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([])}
+    />,
+  );
+
+  const search = screen.getByLabelText("Search models");
+  await waitFor(() => expect(search).toHaveValue("Apple Translation"));
+  await user.clear(search);
+  await user.type(search, "Translation");
+  const results = await screen.findAllByRole("button", { name: /Translation/ });
+  expect(results[0]).toHaveTextContent("Apple Translation");
+  expect(results[0]).toHaveTextContent("On-device · Fast · No API key");
+});
+
+test("offers Google Cloud Translation after its dedicated key is connected", async () => {
+  const user = userEvent.setup();
+  const onDefaultChange = vi.fn();
+  render(
+    <SettingsPage
+      appleTranslationAvailable={vi.fn().mockResolvedValue(true)}
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-translation"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([{ id: "nmt", name: "Google Cloud Translation — NMT" }])}
+      onDefaultChange={onDefaultChange}
+    />,
+  );
+
+  const search = screen.getByLabelText("Search models");
+  await waitFor(() => expect(screen.getByLabelText("Connected providers")).toHaveTextContent("Google Cloud Translation"));
+  await user.clear(search);
+  await user.type(search, "Google Cloud");
+  const result = await screen.findByRole("button", { name: /Google Cloud Translation/ });
+  expect(result).toHaveTextContent("Cloud NMT · API key required");
+  await user.click(result);
+  expect(onDefaultChange).toHaveBeenCalledWith("google-translation");
+});
+
 test("connects a provider and loads models using only an API key", async () => {
   const user = userEvent.setup();
   const listModels = vi.fn().mockResolvedValue([
@@ -221,7 +266,7 @@ test("selects a searched model with arrow keys and Enter", async () => {
   await user.type(search, "Gemini");
   await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
 
-  expect(onDefaultChange).toHaveBeenCalledWith("google-ai-studio", "gemini-2.5-pro");
+  expect(onDefaultChange).toHaveBeenCalledWith("ai:google-ai-studio:gemini-2.5-pro");
   expect(screen.getByLabelText("Search models")).toHaveValue("Gemini 2.5 Pro");
   expect(screen.queryByRole("button", { name: /Gemini 2\.5 Pro/ })).not.toBeInTheDocument();
 });

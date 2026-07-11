@@ -108,6 +108,14 @@ async function openReaderAndSelectText(
   user: ReturnType<typeof userEvent.setup>,
   list = vi.fn().mockResolvedValue([document]),
   learningApi?: { listDecks: () => Promise<any[]>; createCard: (input: any) => Promise<any> },
+  aiApi?: {
+    hasApiKey: (provider: string) => Promise<boolean>;
+    saveApiKey: (provider: string, apiKey: string) => Promise<void>;
+    clearApiKey: (provider: string) => Promise<void>;
+    listModels: (provider: string) => Promise<any[]>;
+    appleTranslationAvailable: () => Promise<boolean>;
+    translate: (engineId: string, text: string, targetLanguage: string) => Promise<{ translation: string }>;
+  },
 ) {
   render(
     <App
@@ -119,6 +127,7 @@ async function openReaderAndSelectText(
         deleteDocument: vi.fn().mockResolvedValue(undefined),
       }}
       learningApi={learningApi}
+      aiApi={aiApi}
     />,
   );
   await user.click(await screen.findByRole("button", { name: "Open Linear Algebra" }));
@@ -334,6 +343,37 @@ test("opens the card composer with the live source document and editable front/b
   expect(screen.getByRole("textbox", { name: "Front" })).toHaveValue("selected source text");
   expect(screen.getByRole("textbox", { name: "Back" })).toHaveValue("");
   expect(listDecks).toHaveBeenCalledTimes(1);
+});
+
+test("uses Apple Translation by default for a new installation", async () => {
+  const user = userEvent.setup();
+  const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
+  await openReaderAndSelectText(
+    user,
+    undefined,
+    {
+      listDecks: vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]),
+      createCard: vi.fn(),
+    },
+    {
+      hasApiKey: vi.fn().mockResolvedValue(false),
+      saveApiKey: vi.fn().mockResolvedValue(undefined),
+      clearApiKey: vi.fn().mockResolvedValue(undefined),
+      listModels: vi.fn().mockResolvedValue([]),
+      appleTranslationAvailable: vi.fn().mockResolvedValue(true),
+      translate,
+    },
+  );
+
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+  await user.click(await screen.findByRole("button", { name: "Translate" }));
+
+  expect(translate).toHaveBeenCalledWith(
+    "apple-translation",
+    "selected source text",
+    "Vietnamese",
+  );
+  expect(screen.getByRole("textbox", { name: "Back" })).toHaveValue("Văn bản nguồn đã chọn");
 });
 
 test("keeps the composer visible and reports deck loading errors", async () => {
