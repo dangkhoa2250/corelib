@@ -337,6 +337,19 @@ select {
   font-size: 13px;
 }
 
+.memora-deck-list__content {
+  flex: 1;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+}
+
+.deck-statistics-badge {
+  font-size: 0.85rem;
+  color: #6e6e73;
+  margin-top: 4px;
+}
+
 .memora-deck-list__open {
   display: flex;
   align-items: center;

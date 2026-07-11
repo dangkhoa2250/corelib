@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-import type { Deck, LearningCard } from "../../domain/learning";
+import type { Deck, LearningCard, DeckStatistics } from "../../domain/learning";
+import { getDeckStatistics } from "../../lib/learning";
 
 interface MemoraPageProps {
   listDecks: () => Promise<Deck[]>;
@@ -25,13 +26,21 @@ interface DeckRowProps {
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
   countDeckCards: (id: string) => Promise<number>;
+  getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
 }
 
-function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, countDeckCards }: DeckRowProps) {
+function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, countDeckCards, getDeckStatistics: fetchStats }: DeckRowProps) {
   const [mode, setMode] = useState<"idle" | "rename" | "delete">("idle");
   const [nameValue, setNameValue] = useState(deck.name);
   const [saving, setSaving] = useState(false);
   const [cardCount, setCardCount] = useState<number | null>(null);
+  const [stats, setStats] = useState<DeckStatistics | null>(null);
+
+  useEffect(() => {
+    fetchStats(deck.id)
+      .then(setStats)
+      .catch(() => setStats(null));
+  }, [deck.id, fetchStats]);
 
   const startDelete = () => {
     setCardCount(null);
@@ -121,10 +130,17 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, cou
           className="memora-deck-list__dot"
           style={{ background: deck.color ?? "#8e8e93" }}
         />
-        <span className="memora-deck-list__name">{deck.name}</span>
-        {deck.description ? (
-          <span className="memora-deck-list__description">{deck.description}</span>
-        ) : null}
+        <div className="memora-deck-list__content">
+          <span className="memora-deck-list__name">{deck.name}</span>
+          {deck.description ? (
+            <span className="memora-deck-list__description">{deck.description}</span>
+          ) : null}
+          {stats ? (
+            <span className="deck-statistics-badge">
+              New: {stats.newCards} | Learning: {stats.learningCards} | Due: {stats.dueCards}
+            </span>
+          ) : null}
+        </div>
       </button>
       <div className="memora-deck-list__menu">
         <button
@@ -304,6 +320,7 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
             <DeckRow
               countDeckCards={countDeckCards}
               deck={deck}
+              getDeckStatistics={getDeckStatistics}
               key={deck.id}
               menuOpen={openMenuId === deck.id}
               onDelete={() => handleDeleteDeck(deck.id)}
