@@ -240,7 +240,13 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             )) : <p className="settings-page__provider-empty">No providers connected yet.</p>}
           </div>
 
-        {showProviderEditor ? <div className="settings-page__provider-editor">
+        {showProviderEditor ? <div aria-label="Provider settings" aria-modal="true" className="settings-page__modal-backdrop" role="dialog">
+          <div className="settings-page__modal">
+            <div className="settings-page__modal-header">
+              <h2>Provider settings</h2>
+              <button aria-label="Close provider settings" className="settings-page__modal-close" onClick={() => setShowProviderEditor(false)} type="button">×</button>
+            </div>
+          <div className="settings-page__provider-editor">
         <label className="settings-page__field">
           <span>Provider</span>
           <select aria-label="AI provider" value={provider} onChange={(event) => {
@@ -286,6 +292,8 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           </button>
           {connected[provider] ? <button className="settings-page__secondary-button" disabled={loading} onClick={() => void handleClear()} type="button">Remove key</button> : null}
         </div>
+          </div>
+          </div>
         </div> : null}
 
         </section>

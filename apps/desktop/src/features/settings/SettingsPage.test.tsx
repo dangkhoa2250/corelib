@@ -300,3 +300,21 @@ test("opens the provider editor only from Add provider or Manage", async () => {
   await user.click(screen.getByRole("button", { name: "Manage" }));
   expect(screen.getByRole("combobox", { name: "AI provider" })).toBeInTheDocument();
 });
+
+test("opens and closes the provider editor in a popup", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn().mockResolvedValue(false)}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([])}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "+ Add provider" }));
+  expect(screen.getByRole("dialog", { name: "Provider settings" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Close provider settings" }));
+  expect(screen.queryByRole("dialog", { name: "Provider settings" })).not.toBeInTheDocument();
+});
