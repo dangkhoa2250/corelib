@@ -72,18 +72,6 @@ export function DeckDetailPage({
             <span className="deck-stat-badge deck-stat-badge--due">
               Due: {stats.dueCards}
             </span>
-            <span className="deck-stat-badge deck-stat-badge--review">
-              Review: {stats.reviewCards}
-            </span>
-            <span className="deck-stat-badge deck-stat-badge--relearning">
-              Relearning: {stats.relearningCards}
-            </span>
-            <span className="deck-stat-badge deck-stat-badge--suspended">
-              Suspended: {stats.suspendedCards}
-            </span>
-            <span className="deck-stat-badge deck-stat-badge--total">
-              Total: {stats.totalCards}
-            </span>
           </div>
         ) : error ? (
           <p className="deck-detail-page__error">{error}</p>
