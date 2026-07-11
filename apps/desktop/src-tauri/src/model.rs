@@ -107,6 +107,16 @@ pub struct UpdateCardPayload {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct UpdateAndMoveCardPayload {
+    pub card_id: String,
+    pub front: String,
+    pub back: String,
+    pub tags: Vec<String>,
+    pub destination_deck_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MoveCardsPayload {
     pub card_ids: Vec<String>,
     pub destination_deck_id: String,

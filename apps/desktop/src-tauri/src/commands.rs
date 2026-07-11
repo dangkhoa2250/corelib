@@ -894,6 +894,23 @@ pub fn update_card(
 }
 
 #[tauri::command]
+pub fn update_and_move_card(
+    payload: crate::model::UpdateAndMoveCardPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<LearningCardSummary, String> {
+    use crate::learning::UpdateAndMoveCard;
+    learning_lock(&state)?
+        .update_and_move_card(UpdateAndMoveCard {
+            card_id: payload.card_id,
+            front: payload.front,
+            back: payload.back,
+            tags: payload.tags,
+            destination_deck_id: payload.destination_deck_id,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn move_cards(
     card_ids: Vec<String>,
     destination_deck_id: String,

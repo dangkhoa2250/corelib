@@ -25,8 +25,8 @@ import { MemoraPage } from "../features/memora/MemoraPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended } from "../lib/learning";
-import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput } from "../domain/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended } from "../lib/learning";
+import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
 
 export interface LibraryApi {
@@ -105,6 +105,7 @@ interface LearningApi {
   listActiveTags?: (deckId: string) => Promise<string[]>;
   queryDeckCards?: (payload: CardBrowserQuery) => Promise<CardPage>;
   updateCard?: (payload: UpdateCardInput) => Promise<LearningCard>;
+  updateAndMoveCard?: (payload: UpdateAndMoveCardInput) => Promise<LearningCard>;
   moveCards?: (cardIds: string[], destinationDeckId: string) => Promise<BulkResult>;
   setCardsSuspended?: (cardIds: string[], suspended: boolean) => Promise<BulkResult>;
   trashCards?: (cardIds: string[]) => Promise<BulkResult>;
@@ -127,6 +128,7 @@ const nativeLearningApi: LearningApi = {
   listActiveTags: nativeListActiveTags,
   queryDeckCards: nativeQueryDeckCards,
   updateCard: nativeUpdateCard,
+  updateAndMoveCard: nativeUpdateAndMoveCard,
   moveCards: nativeMoveCards,
   setCardsSuspended: nativeSetCardsSuspended,
   trashCards: nativeTrashCards,
@@ -164,6 +166,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     listActiveTags: learningApi.listActiveTags ?? nativeListActiveTags,
     queryDeckCards: learningApi.queryDeckCards ?? nativeQueryDeckCards,
     updateCard: learningApi.updateCard ?? nativeUpdateCard,
+    updateAndMoveCard: learningApi.updateAndMoveCard ?? nativeUpdateAndMoveCard,
     moveCards: learningApi.moveCards ?? nativeMoveCards,
     setCardsSuspended: learningApi.setCardsSuspended ?? nativeSetCardsSuspended,
     trashCards: learningApi.trashCards ?? nativeTrashCards,
@@ -539,7 +542,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
             trashCards={learning.trashCards}
             listActiveTags={learning.listActiveTags}
             createCard={learning.createCard}
-            updateCard={learning.updateCard}
+            updateAndMoveCard={learning.updateAndMoveCard}
             moveCards={learning.moveCards}
             setCardsSuspended={learning.setCardsSuspended}
           />

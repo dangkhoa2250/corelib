@@ -594,6 +594,129 @@ fn lifecycle_active() {
 }
 
 #[test]
+fn update_and_move_card_is_atomic() {
+    let (_dir, mut db) = db();
+
+    let deck_bio = db.create_deck("Biology").expect("deck");
+    let deck_chem = db.create_deck("Chemistry").expect("deck");
+
+    let c1 = db.create_card(card("ATP energy")).expect("c1");
+
+    use crate::learning::UpdateAndMoveCard;
+
+    // Happy path: update content + move deck in one transaction.
+    let moved = db
+        .update_and_move_card(UpdateAndMoveCard {
+            card_id: c1.id.clone(),
+            front: "ATP updated".into(),
+            back: "Adenosine triphosphate".into(),
+            tags: vec!["energy".into()],
+            destination_deck_id: Some(deck_chem.id.clone()),
+        })
+        .expect("update_and_move");
+
+    assert_eq!(moved.front, "ATP updated");
+    assert_eq!(moved.back, "Adenosine triphosphate");
+    assert_eq!(moved.tags, vec!["energy"]);
+
+    let row: (String, String, String) = db
+        .connection
+        .query_row(
+            "SELECT front, back, deck_id FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .expect("query");
+    assert_eq!(row.0, "ATP updated");
+    assert_eq!(row.1, "Adenosine triphosphate");
+    assert_eq!(row.2, deck_chem.id);
+
+    // Update-only path (destination_deck_id = None): no deck change.
+    let updated = db
+        .update_and_move_card(UpdateAndMoveCard {
+            card_id: c1.id.clone(),
+            front: "ATP v2".into(),
+            back: "Energy molecule".into(),
+            tags: vec![],
+            destination_deck_id: None,
+        })
+        .expect("update only");
+    assert_eq!(updated.front, "ATP v2");
+    let deck_id_unchanged: String = db
+        .connection
+        .query_row(
+            "SELECT deck_id FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+    assert_eq!(deck_id_unchanged, deck_chem.id);
+
+    // Same-deck destination: treated as update-only (no move).
+    let _same_deck = db
+        .update_and_move_card(UpdateAndMoveCard {
+            card_id: c1.id.clone(),
+            front: "ATP v3".into(),
+            back: "Energy molecule v3".into(),
+            tags: vec![],
+            destination_deck_id: Some(deck_chem.id.clone()),
+        })
+        .expect("same deck");
+
+    // Atomicity: move to a non-existent deck must roll back the content edit.
+    let front_before: String = db
+        .connection
+        .query_row(
+            "SELECT front FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+
+    let failed = db.update_and_move_card(UpdateAndMoveCard {
+        card_id: c1.id.clone(),
+        front: "THIS SHOULD NOT PERSIST".into(),
+        back: "NEITHER SHOULD THIS".into(),
+        tags: vec!["ghost".into()],
+        destination_deck_id: Some("nonexistent-deck".into()),
+    });
+    assert!(failed.is_err());
+
+    let front_after: String = db
+        .connection
+        .query_row(
+            "SELECT front FROM cards WHERE id=?1",
+            params![c1.id],
+            |r| r.get(0),
+        )
+        .expect("query");
+    assert_eq!(front_after, front_before);
+    assert_ne!(front_after, "THIS SHOULD NOT PERSIST");
+
+    // Move the card back to Biology for a trashed-card rejection check.
+    db.update_and_move_card(UpdateAndMoveCard {
+        card_id: c1.id.clone(),
+        front: "ATP v3".into(),
+        back: "Energy molecule v3".into(),
+        tags: vec![],
+        destination_deck_id: Some(deck_bio.id.clone()),
+    })
+    .expect("move back");
+
+    db.trash_cards(std::slice::from_ref(&c1.id))
+        .expect("trash");
+
+    let trashed_edit = db.update_and_move_card(UpdateAndMoveCard {
+        card_id: c1.id.clone(),
+        front: "edited while trashed".into(),
+        back: "should fail".into(),
+        tags: vec![],
+        destination_deck_id: None,
+    });
+    assert!(trashed_edit.is_err());
+}
+
+#[test]
 fn trash_and_isolation() {
     let (_dir, mut db) = db();
 

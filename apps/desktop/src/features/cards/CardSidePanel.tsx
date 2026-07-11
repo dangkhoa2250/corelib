@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { Deck, CardBrowserRow } from "../../domain/learning";
-import { updateCard, createCard, moveCards } from "../../lib/learning";
+import { createCard, updateAndMoveCard } from "../../lib/learning";
 
 export interface CardSidePanelProps {
   card: CardBrowserRow | null;
@@ -9,8 +9,7 @@ export interface CardSidePanelProps {
   onSaveSuccess: () => void;
   onDirtyStateChange?: (dirty: boolean) => void;
   createCard?: typeof createCard;
-  updateCard?: typeof updateCard;
-  moveCards?: typeof moveCards;
+  updateAndMoveCard?: typeof updateAndMoveCard;
 }
 
 export function CardSidePanel({
@@ -20,8 +19,7 @@ export function CardSidePanel({
   onSaveSuccess,
   onDirtyStateChange,
   createCard: customCreate = createCard,
-  updateCard: customUpdate = updateCard,
-  moveCards: customMove = moveCards,
+  updateAndMoveCard: customUpdateAndMove = updateAndMoveCard,
 }: CardSidePanelProps) {
   const [front, setFront] = useState("");
   const [back, setBack] = useState("");
@@ -91,16 +89,14 @@ export function CardSidePanel({
         .filter(t => t.length > 0);
 
       if (card.id) {
-        // Edit mode
-        await customUpdate({
+        // Edit mode: update content + optional deck move in one atomic operation.
+        await customUpdateAndMove({
           cardId: card.id,
           front,
           back,
           tags: tagList,
+          destinationDeckId: deckId !== card.deckId ? deckId : null,
         });
-        if (deckId !== card.deckId) {
-          await customMove([card.id], deckId);
-        }
       } else {
         // Create mode
         const deck = decks.find(d => d.id === deckId);

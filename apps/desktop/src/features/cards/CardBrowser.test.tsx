@@ -9,6 +9,7 @@ vi.mock("../../lib/learning", () => ({
   setCardsSuspended: vi.fn(),
   trashCards: vi.fn(),
   updateCard: vi.fn(),
+  updateAndMoveCard: vi.fn(),
   createCard: vi.fn(),
   listActiveTags: vi.fn().mockResolvedValue([]),
 }));

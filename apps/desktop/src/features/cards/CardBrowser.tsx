@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Deck, CardBrowserRow, CardLifecycleState, CardSort } from "../../domain/learning";
-import { queryDeckCards, moveCards, setCardsSuspended, trashCards, listActiveTags, createCard, updateCard } from "../../lib/learning";
+import { queryDeckCards, moveCards, setCardsSuspended, trashCards, listActiveTags, createCard, updateAndMoveCard } from "../../lib/learning";
 import { CardSidePanel } from "./CardSidePanel";
 
 export interface CardBrowserProps {
@@ -18,7 +18,7 @@ export interface CardBrowserProps {
   trashCards?: typeof trashCards;
   listActiveTags?: typeof listActiveTags;
   createCard?: typeof createCard;
-  updateCard?: typeof updateCard;
+  updateAndMoveCard?: typeof updateAndMoveCard;
 }
 
 const PAGE_SIZE = 50;
@@ -38,7 +38,7 @@ export function CardBrowser({
   trashCards: customTrash = trashCards,
   listActiveTags: customListActiveTags = listActiveTags,
   createCard: customCreate = createCard,
-  updateCard: customUpdate = updateCard,
+  updateAndMoveCard: customUpdateAndMove = updateAndMoveCard,
 }: CardBrowserProps) {
   const [deckId, setDeckId] = useState(initialDeckId);
   const [query, setQuery] = useState("");
@@ -566,8 +566,7 @@ export function CardBrowser({
         }}
         onDirtyStateChange={handleDirtyStateChange}
         createCard={customCreate}
-        updateCard={customUpdate}
-        moveCards={customMove}
+        updateAndMoveCard={customUpdateAndMove}
       />
     </div>
   );

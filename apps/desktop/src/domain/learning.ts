@@ -113,3 +113,11 @@ export interface UpdateCardInput {
   back: string;
   tags: string[];
 }
+
+export interface UpdateAndMoveCardInput {
+  cardId: string;
+  front: string;
+  back: string;
+  tags: string[];
+  destinationDeckId: string | null;
+}

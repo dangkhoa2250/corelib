@@ -22,6 +22,13 @@ pub struct UpdateCard {
     pub back: String,
     pub tags: Vec<String>,
 }
+pub struct UpdateAndMoveCard {
+    pub card_id: String,
+    pub front: String,
+    pub back: String,
+    pub tags: Vec<String>,
+    pub destination_deck_id: Option<String>,
+}
 pub struct BulkResult {
     pub affected_ids: Vec<String>,
     pub affected_count: usize,
@@ -891,6 +898,106 @@ impl LibraryDatabase {
         )?;
         tx.execute(
             "INSERT INTO card_text(card_id, body) VALUES(?1, ?2)",
+            params![input.card_id, body],
+        )?;
+
+        tx.commit()?;
+        self.card_by_id(&input.card_id)?
+            .ok_or(LibraryDbError::DocumentNotFound)
+    }
+
+    pub fn update_and_move_card(
+        &mut self,
+        input: UpdateAndMoveCard,
+    ) -> Result<LearningCardSummary> {
+        let front = norm(&input.front, "front is required")?;
+        let back = norm(&input.back, "back is required")?;
+        let mut tags = Vec::new();
+        for tag in input.tags {
+            let tag = tag.trim();
+            if !tag.is_empty() && !tags.iter().any(|x: &String| x.eq_ignore_ascii_case(tag)) {
+                tags.push(tag.to_string());
+            }
+        }
+
+        let tx = self.connection.transaction()?;
+        let now = learning_timestamp();
+
+        let (current_deck_id, is_active): (String, bool) = tx.query_row(
+            "SELECT deck_id, deleted_at IS NULL FROM cards WHERE id = ?1",
+            params![input.card_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        if !is_active {
+            return Err(invalid("card not found or is in Trash"));
+        }
+
+        let final_deck_id: String = match &input.destination_deck_id {
+            Some(dest) if dest.trim() == current_deck_id => current_deck_id,
+            Some(dest) => {
+                let dest_id = dest.trim();
+                let deck_exists: bool = tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM decks WHERE id = ?1)",
+                    params![dest_id],
+                    |r| r.get(0),
+                )?;
+                if !deck_exists {
+                    return Err(invalid("destination deck not found"));
+                }
+                dest_id.to_string()
+            }
+            None => current_deck_id,
+        };
+
+        tx.execute(
+            "UPDATE cards SET front = ?1, back = ?2, deck_id = ?3, updated_at = ?4 WHERE id = ?5",
+            params![front, back, final_deck_id, now, input.card_id],
+        )?;
+
+        tx.execute(
+            "DELETE FROM card_tags WHERE card_id = ?1",
+            params![input.card_id],
+        )?;
+
+        let mut tag_names = Vec::new();
+        for tag in &tags {
+            let tag_id: String = tx
+                .query_row("SELECT id FROM tags WHERE name = ?1", params![tag], |r| {
+                    r.get(0)
+                })
+                .optional()?
+                .unwrap_or_else(|| Uuid::new_v4().to_string());
+            tx.execute(
+                "INSERT OR IGNORE INTO tags (id, name) VALUES (?1, ?2)",
+                params![tag_id, tag],
+            )?;
+            tx.execute(
+                "INSERT INTO card_tags (card_id, tag_id) VALUES (?1, ?2)",
+                params![input.card_id, tag_id],
+            )?;
+            tag_names.push(tag.clone());
+        }
+
+        let (deck_name, source_quote): (String, Option<String>) = tx.query_row(
+            "SELECT d.name, cs.quote FROM cards c JOIN decks d ON c.deck_id = d.id LEFT JOIN card_sources cs ON cs.card_id = c.id WHERE c.id = ?1",
+            params![input.card_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        let quote = source_quote.unwrap_or_default();
+        let body = format!(
+            "{} {} {} {} {}",
+            front,
+            back,
+            deck_name,
+            tag_names.join(" "),
+            quote.trim()
+        );
+        tx.execute(
+            "DELETE FROM card_text WHERE card_id = ?1",
+            params![input.card_id],
+        )?;
+        tx.execute(
+            "INSERT INTO card_text (card_id, body) VALUES (?1, ?2)",
             params![input.card_id, body],
         )?;
 

@@ -76,6 +76,7 @@ pub fn run() {
             commands::query_deck_cards,
             commands::list_active_tags,
             commands::update_card,
+            commands::update_and_move_card,
             commands::move_cards,
             commands::set_cards_suspended,
             commands::trash_cards,
