@@ -138,3 +138,23 @@ test("renders connected providers as a list", async () => {
   expect(within(list).getAllByRole("button", { name: "Manage" })).toHaveLength(2);
   expect(screen.getByRole("button", { name: "+ Add provider" })).toBeInTheDocument();
 });
+
+test("loads models for the connected provider when settings opens", async () => {
+  const user = userEvent.setup();
+  const listModels = vi.fn().mockResolvedValue([
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+  ]);
+
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn().mockResolvedValue(true)}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={listModels}
+    />,
+  );
+
+  await waitFor(() => expect(listModels).toHaveBeenCalledWith("google-ai-studio"));
+  await user.type(screen.getByLabelText("Search models"), "Gemini");
+  expect(await screen.findByRole("button", { name: /Gemini 2\.5 Flash/ })).toBeInTheDocument();
+});

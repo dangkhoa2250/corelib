@@ -87,7 +87,11 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     let cancelled = false;
     void Promise.all(AI_PROVIDERS.map(async (item) => [item.id, await hasApiKey(item.id)] as const))
       .then((entries) => {
-        if (!cancelled) setConnected(Object.fromEntries(entries) as Record<AiProviderId, boolean>);
+        if (cancelled) return;
+        setConnected(Object.fromEntries(entries) as Record<AiProviderId, boolean>);
+        if (entries.some(([id, hasKey]) => id === provider && hasKey)) {
+          void loadModels(provider);
+        }
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
