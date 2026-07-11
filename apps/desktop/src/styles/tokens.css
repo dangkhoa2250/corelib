@@ -6,7 +6,7 @@
 
   /* Window / Surface hierarchy */
   --window-bg: #f2f2f4;
-  --sidebar-bg: rgba(238, 238, 241, 0.78);
+  --sidebar-bg: rgba(238, 238, 241, 0.72);
   --main-bg: #ffffff;
 
   --viewer-canvas-bg: #d9d9dc;
@@ -95,7 +95,7 @@
 [data-theme="dark"] {
   /* Window / Surface hierarchy */
   --window-bg: #131315;
-  --sidebar-bg: rgba(70, 68, 72, 0.72);
+  --sidebar-bg: rgba(70, 68, 72, 0.65);
   --main-bg: #18181a;
 
   --viewer-canvas-bg: #38383b;
@@ -256,8 +256,6 @@ textarea::placeholder {
   padding: 16px 12px;
   border-right: 1px solid var(--border-subtle);
   background: var(--sidebar-bg);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
 .app-sidebar__resize-handle {
@@ -380,8 +378,6 @@ textarea::placeholder {
   overflow: hidden;
   border-right: 1px solid var(--border-subtle);
   background: var(--sidebar-bg);
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
 .settings-page__back,
@@ -1852,8 +1848,6 @@ textarea::placeholder {
   flex: 0 0 192px;
   border-right: 1px solid var(--border-subtle) !important;
   background: var(--sidebar-bg) !important;
-  backdrop-filter: blur(24px) saturate(140%);
-  -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
 
 .reader-sidebar__tabs {
@@ -1950,7 +1944,6 @@ textarea::placeholder {
   border-bottom: 1px solid var(--border-subtle) !important;
   background: var(--toolbar-bg) !important;
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(16px);
 }
 
 .reader-toolbar__title {
