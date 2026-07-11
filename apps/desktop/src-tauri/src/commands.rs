@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::{
     indexer::index_managed_pdf,
-    learning::{AppliedReview, NewCard, NewCardSource},
+    learning::{AppliedReview, DeckStatistics, NewCard, NewCardSource},
     library_db::{LibraryDatabase, NewLocalDocument},
     library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
     model::DocumentSummary,
@@ -674,6 +674,16 @@ pub fn rename_deck(
 pub fn delete_deck(id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
     learning_lock(&state)?
         .delete_deck(&id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_deck_statistics(
+    deck_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<DeckStatistics, String> {
+    learning_lock(&state)?
+        .get_deck_statistics(&deck_id)
         .map_err(|e| e.to_string())
 }
 
