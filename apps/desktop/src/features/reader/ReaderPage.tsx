@@ -670,7 +670,7 @@ export function ReaderPage({
     savePageTimeoutRef.current = setTimeout(() => {
       void onPageChange(document.id, pageNo, pdfDoc?.numPages);
     }, delay);
-  }, [document.id, onPageChange]);
+  }, [document.id, onPageChange, pdfDoc]);
 
   useEffect(() => {
     return () => {
@@ -841,6 +841,22 @@ export function ReaderPage({
       active = false;
     };
   }, [document.id, getDocumentFileUrl]);
+
+  useEffect(() => {
+    if (!pdfDoc || !document.lastReadPage || document.lastReadPage <= 1) return;
+    if (!pdfDoc.numPages || document.lastReadPage > pdfDoc.numPages) return;
+    const pageNo = document.lastReadPage;
+    isNavigatingRef.current = true;
+    if (navigateSettleTimeoutRef.current) {
+      clearTimeout(navigateSettleTimeoutRef.current);
+    }
+    navigateSettleTimeoutRef.current = setTimeout(() => {
+      isNavigatingRef.current = false;
+    }, 700);
+    setCurrentPage(pageNo);
+    debouncedSavePage(pageNo);
+    scrollToPage(pageNo);
+  }, [pdfDoc]);
 
   const scrollToPage = useCallback((pageNo: number) => {
     const element = window.document.getElementById(`pdf-page-${pageNo}`);
