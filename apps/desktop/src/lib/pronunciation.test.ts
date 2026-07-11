@@ -111,7 +111,7 @@ test("ignores empty text", () => {
 
 test("isPlaying becomes true on onstart and false on onend", () => {
   const speak = vi.fn((utterance: SpeechSynthesisUtterance) => {
-    utterance.onstart?.();
+    (utterance.onstart as (() => void))?.();
   });
   window.speechSynthesis = { ...window.speechSynthesis, speak } as unknown as SpeechSynthesis;
   const { result } = renderHook(() => usePronunciation());
@@ -123,7 +123,7 @@ test("isPlaying becomes true on onstart and false on onend", () => {
 
 test("isPlaying resets to false on onerror", () => {
   const speak = vi.fn((utterance: SpeechSynthesisUtterance) => {
-    utterance.onstart?.();
+    (utterance.onstart as (() => void))?.();
   });
   window.speechSynthesis = { ...window.speechSynthesis, speak } as unknown as SpeechSynthesis;
   const { result } = renderHook(() => usePronunciation());
@@ -135,7 +135,7 @@ test("isPlaying resets to false on onerror", () => {
 
 test("stop resets isPlaying to false", () => {
   const speak = vi.fn((utterance: SpeechSynthesisUtterance) => {
-    utterance.onstart?.();
+    (utterance.onstart as (() => void))?.();
   });
   window.speechSynthesis = { ...window.speechSynthesis, speak } as unknown as SpeechSynthesis;
   const { result } = renderHook(() => usePronunciation());
