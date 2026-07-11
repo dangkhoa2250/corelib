@@ -3,7 +3,7 @@ import type { Invoke } from "./desktop";
 import type { Deck, DeckStatistics, LearningCard, NewCardSource, ReviewPreview, ReviewRating, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult } from "../domain/learning";
 import type { LibraryDocument } from "../domain/document";
 
-export type SearchResult = { kind: "nav" | "document" | "card" | "trash"; id: string; title: string; subtitle: string | null };
+export type SearchResult = { kind: "nav" | "document" | "card" | "deck" | "trash"; id: string; title: string; subtitle: string | null };
 export type CreateCardInput = { deckName: string; front: string; back: string; source?: NewCardSource; tags?: string[] };
 
 export function createCard(input: CreateCardInput, call: Invoke = invoke as Invoke): Promise<LearningCard> { return call("create_card", { input }); }

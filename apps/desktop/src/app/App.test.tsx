@@ -769,5 +769,5 @@ test("opens the search palette from the sidebar search field", async () => {
 
   await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
-  expect(screen.getByRole("searchbox", { name: "Navigate to a section" })).toHaveFocus();
+  expect(screen.getByRole("searchbox", { name: "Search everything" })).toHaveFocus();
 });

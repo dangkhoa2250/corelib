@@ -26,7 +26,7 @@ import { DeckDetailPage } from "../features/memora/DeckDetailPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
 import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, DeckStatistics, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
 
@@ -328,15 +328,67 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
 
 
-  const handleOpenSearchResult = useCallback((result: SearchResult) => {
+  const search = useCallback(
+    async (query: string) => {
+      const docCards: SearchResult[] = await (async () => {
+        try { const r = await nativeSearchEverything(query); return r ?? []; } catch { return []; }
+      })();
+      const decks: Deck[] = await (async () => {
+        try { const r = await nativeListDecks(); return r ?? []; } catch { return []; }
+      })();
+      const trashPage: CardPage = await (async () => {
+        try { const r = await nativeListTrashedCards(query, "deletedAt", null, 10); return r ?? { rows: [], total: 0, nextCursor: null }; } catch { return { rows: [], total: 0, nextCursor: null }; }
+      })();
+      const navResults: SearchResult[] = [
+        { kind: "nav", id: "library", title: "Library", subtitle: null },
+        { kind: "nav", id: "memora", title: "Memora", subtitle: null },
+        { kind: "nav", id: "trash", title: "Trash", subtitle: null },
+      ];
+      const deckResults: SearchResult[] = decks
+        .filter((d) => d.name.toLowerCase().includes(query.toLowerCase()))
+        .map((d) => ({ kind: "deck" as const, id: d.id, title: d.name, subtitle: null }));
+      const trashResults: SearchResult[] = trashPage.rows.map((card) => ({
+        kind: "trash" as const,
+        id: card.id,
+        title: card.front,
+        subtitle: card.deckName,
+      }));
+      return [...navResults, ...docCards, ...deckResults, ...trashResults];
+    },
+    [],
+  );
+
+  const handleOpenSearchResult = useCallback(async (result: SearchResult) => {
     if (result.kind === "nav") {
       setRoute(
         result.id === "memora" ? { name: "memora" }
         : result.id === "trash" ? { name: "trash" }
         : { name: "library" },
       );
+      return;
     }
-  }, []);
+    if (result.kind === "document") {
+      const doc = documents?.find((d) => d.id === result.id);
+      if (doc) handleOpen(doc);
+      return;
+    }
+    if (result.kind === "deck") {
+      const deck = decks.find((d) => d.id === result.id);
+      if (deck) setRoute({ name: "deckDetail", deck });
+      return;
+    }
+    if (result.kind === "card") {
+      try {
+        const card = await learning.getCard(result.id);
+        const preview = await learning.previewCardReview(card.id);
+        setRoute({ name: "review", cards: [card], previews: { [card.id]: preview } });
+      } catch (e) { setError(errorMessage(e)); }
+      return;
+    }
+    if (result.kind === "trash") {
+      setRoute({ name: "trash" });
+    }
+  }, [documents, handleOpen, decks, learning]);
 
   const handleReviewToday = useCallback(async () => {
     try {
@@ -442,7 +494,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     } catch (_) {}
   }, [libraryApi]);
 
-  const palette = <CommandPalette ref={paletteRef} onOpen={(result) => void handleOpenSearchResult(result)} />;
+  const palette = <CommandPalette ref={paletteRef} search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
 
   if (route.name === "review") {
     return <><ReviewPage cards={route.cards} previews={route.previews} mode={route.mode} onRate={handleRate} onBack={() => setRoute(route.sourceDeck ? { name: "deckDetail", deck: route.sourceDeck } : { name: "memora" })} />{palette}</>;
