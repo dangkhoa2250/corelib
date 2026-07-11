@@ -202,6 +202,7 @@ it("calls onPageChange when page rendering succeeds", async () => {
   );
 
   await waitFor(() => {
-    expect(onPageChange).toHaveBeenCalledWith("linear-algebra", 1);
+    expect(onPageChange.mock.calls[0][0]).toBe("linear-algebra");
+    expect(onPageChange.mock.calls[0][1]).toBe(1);
   });
 });

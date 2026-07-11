@@ -597,9 +597,9 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     }
   }, [libraryApi, load]);
 
-  const handlePageChange = useCallback(async (id: string, page: number) => {
+  const handlePageChange = useCallback(async (id: string, page: number, numPages?: number) => {
     try {
-      const updated = await (libraryApi.saveReadPage ?? nativeSaveReadPage)(id, page);
+      const updated = await (libraryApi.saveReadPage ?? nativeSaveReadPage)(id, page, numPages);
       if (updated) {
         setDocuments((current) => mergeDocuments(current, [updated]));
       }
