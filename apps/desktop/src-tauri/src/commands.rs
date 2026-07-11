@@ -413,59 +413,66 @@ fn remove_new_managed_files(paths: &[String]) {
     }
 }
 
-#[tauri::command]
-pub fn drive_connect() -> Result<(), String> {
-    let store = crate::drive_auth::KeychainTokenStore::new();
-    crate::drive_api::drive_connect(&store)
+#[derive(serde::Serialize, serde::Deserialize)]
+struct FileCredentials {
+    client_id: String,
+    client_secret: String,
 }
 
 #[tauri::command]
-pub fn save_google_drive_credentials(client_id: String, client_secret: String) -> Result<(), String> {
-    let entry_id = keyring::Entry::new("com.library.desktop.google_drive", "client_id")
-        .map_err(|e| e.to_string())?;
-    entry_id.set_password(&client_id).map_err(|e| e.to_string())?;
+pub fn drive_connect(state: State<'_, LibraryStore>) -> Result<(), String> {
+    let store_path = state.library_root.join(".google_drive_token.txt");
+    let store = crate::drive_auth::FileTokenStore::new(store_path);
+    crate::drive_api::drive_connect(&store, &state.library_root)
+}
 
-    let entry_secret = keyring::Entry::new("com.library.desktop.google_drive", "client_secret")
-        .map_err(|e| e.to_string())?;
-    entry_secret.set_password(&client_secret).map_err(|e| e.to_string())?;
+#[tauri::command]
+pub fn save_google_drive_credentials(
+    state: State<'_, LibraryStore>,
+    client_id: String,
+    client_secret: String,
+) -> Result<(), String> {
+    let path = state.library_root.join(".google_drive_credentials.json");
+    let creds = FileCredentials { client_id, client_secret };
+    let json = serde_json::to_string(&creds).map_err(|e| e.to_string())?;
+    std::fs::write(path, json).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[tauri::command]
-pub fn load_google_drive_credentials() -> Result<Option<std::collections::HashMap<String, String>>, String> {
-    let entry_id = keyring::Entry::new("com.library.desktop.google_drive", "client_id")
-        .map_err(|e| e.to_string())?;
-    let entry_secret = keyring::Entry::new("com.library.desktop.google_drive", "client_secret")
-        .map_err(|e| e.to_string())?;
-    
-    match (entry_id.get_password(), entry_secret.get_password()) {
-        (Ok(id), Ok(secret)) => {
-            let mut map = std::collections::HashMap::new();
-            map.insert("clientId".to_owned(), id);
-            map.insert("clientSecret".to_owned(), secret);
-            Ok(Some(map))
-        }
-        (Err(keyring::Error::NoEntry), _) | (_, Err(keyring::Error::NoEntry)) => Ok(None),
-        (Err(e), _) | (_, Err(e)) => Err(e.to_string()),
+pub fn load_google_drive_credentials(
+    state: State<'_, LibraryStore>,
+) -> Result<Option<std::collections::HashMap<String, String>>, String> {
+    let path = state.library_root.join(".google_drive_credentials.json");
+    if !path.exists() {
+        return Ok(None);
     }
+    let json = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let creds: FileCredentials = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+    
+    let mut map = std::collections::HashMap::new();
+    map.insert("clientId".to_owned(), creds.client_id);
+    map.insert("clientSecret".to_owned(), creds.client_secret);
+    Ok(Some(map))
 }
 
 #[tauri::command]
-pub fn clear_google_drive_credentials() -> Result<(), String> {
-    let entry_id = keyring::Entry::new("com.library.desktop.google_drive", "client_id")
-        .map_err(|e| e.to_string())?;
-    let _ = entry_id.delete_password();
-
-    let entry_secret = keyring::Entry::new("com.library.desktop.google_drive", "client_secret")
-        .map_err(|e| e.to_string())?;
-    let _ = entry_secret.delete_password();
+pub fn clear_google_drive_credentials(state: State<'_, LibraryStore>) -> Result<(), String> {
+    let path = state.library_root.join(".google_drive_credentials.json");
+    if path.exists() {
+        let _ = std::fs::remove_file(path);
+    }
     Ok(())
 }
 
 #[tauri::command]
-pub fn drive_list(folder_id: Option<String>) -> Result<Vec<crate::drive_api::DriveEntry>, String> {
-    let store = crate::drive_auth::KeychainTokenStore::new();
-    crate::drive_api::drive_list(&store, folder_id.as_deref())
+pub fn drive_list(
+    state: State<'_, LibraryStore>,
+    folder_id: Option<String>,
+) -> Result<Vec<crate::drive_api::DriveEntry>, String> {
+    let store_path = state.library_root.join(".google_drive_token.txt");
+    let store = crate::drive_auth::FileTokenStore::new(store_path);
+    crate::drive_api::drive_list(&store, &state.library_root, folder_id.as_deref())
 }
 
 #[tauri::command]
@@ -473,8 +480,9 @@ pub fn drive_import(
     ids: Vec<String>,
     state: State<'_, LibraryStore>,
 ) -> Result<Vec<DocumentSummary>, String> {
-    let store = crate::drive_auth::KeychainTokenStore::new();
-    let imported = crate::drive_api::drive_import(&store, &state.database, ids)?;
+    let store_path = state.library_root.join(".google_drive_token.txt");
+    let store = crate::drive_auth::FileTokenStore::new(store_path);
+    let imported = crate::drive_api::drive_import(&store, &state.library_root, &state.database, ids)?;
     Ok(imported)
 }
 
@@ -522,13 +530,15 @@ pub async fn get_document_file_url(
         .set_document_status(&id, "processing")
         .map_err(|e| e.to_string())?;
 
-    let store = crate::drive_auth::KeychainTokenStore::new();
+    let store_path = library_root.join(".google_drive_token.txt");
+    let store = crate::drive_auth::FileTokenStore::new(store_path);
+    let library_root_for_closure = library_root.clone();
     let result = download_drive_file_async_guarded(
         file_id.clone(),
         library_root,
         Arc::clone(&state.cache_generation),
         Arc::clone(&state.cache_lock),
-        move |id| crate::drive_api::download_drive_file(&store, &id),
+        move |id| crate::drive_api::download_drive_file(&store, &library_root_for_closure, &id),
     )
     .await;
     let path = match result {

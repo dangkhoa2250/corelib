@@ -158,9 +158,6 @@ export function DocumentCard({
         {document.author ? (
           <span className="document-card__author">{document.author}</span>
         ) : null}
-        {statusLabel ? (
-          <span className="document-card__status">{statusLabel}</span>
-        ) : null}
         {document.lastReadPage && document.numPages && document.numPages > 0 ? (
           <span className="document-card__progress">
             <span className="document-card__progress-track">
@@ -173,6 +170,8 @@ export function DocumentCard({
               {Math.round((document.lastReadPage / document.numPages) * 100)}%
             </span>
           </span>
+        ) : statusLabel ? (
+          <span className="document-card__status">{statusLabel}</span>
         ) : null}
       </button>
       {(onDelete || onRename) && (

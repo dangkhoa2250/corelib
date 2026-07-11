@@ -73,11 +73,30 @@ fn parse_code_from_request(request: &str) -> Option<String> {
     None
 }
 
-pub fn drive_connect(token_store: &dyn DriveTokenStore) -> Result<(), String> {
-    let client_id = get_env_var("GOOGLE_OAUTH_CLIENT_ID")
-        .ok_or_else(|| "GOOGLE_OAUTH_CLIENT_ID not found".to_owned())?;
-    let client_secret = get_env_var("GOOGLE_OAUTH_CLIENT_SECRET")
-        .ok_or_else(|| "GOOGLE_OAUTH_CLIENT_SECRET not found".to_owned())?;
+#[derive(serde::Deserialize)]
+struct FileCredentials {
+    client_id: String,
+    client_secret: String,
+}
+
+pub fn load_google_credentials_from_file(library_root: &std::path::Path) -> Option<(String, String)> {
+    let path = library_root.join(".google_drive_credentials.json");
+    if !path.exists() {
+        return None;
+    }
+    let content = std::fs::read_to_string(path).ok()?;
+    let creds: FileCredentials = serde_json::from_str(&content).ok()?;
+    Some((creds.client_id, creds.client_secret))
+}
+
+pub fn drive_connect(token_store: &dyn DriveTokenStore, library_root: &std::path::Path) -> Result<(), String> {
+    let (client_id, client_secret) = if let (Some(id), Some(secret)) = (get_env_var("GOOGLE_OAUTH_CLIENT_ID"), get_env_var("GOOGLE_OAUTH_CLIENT_SECRET")) {
+        (id, secret)
+    } else if let Some((id, secret)) = load_google_credentials_from_file(library_root) {
+        (id, secret)
+    } else {
+        return Err("Google Drive is not configured. Please configure it in settings.".to_owned());
+    };
 
     let listener = TcpListener::bind("127.0.0.1:0")
         .map_err(|e| format!("failed to bind local server: {e}"))?;
@@ -143,15 +162,18 @@ pub fn drive_connect(token_store: &dyn DriveTokenStore) -> Result<(), String> {
     Ok(())
 }
 
-pub fn get_access_token(token_store: &dyn DriveTokenStore) -> Result<String, String> {
+pub fn get_access_token(token_store: &dyn DriveTokenStore, library_root: &std::path::Path) -> Result<String, String> {
     let refresh_token = token_store
         .load()?
         .ok_or_else(|| "Google Drive is not connected".to_owned())?;
 
-    let client_id = get_env_var("GOOGLE_OAUTH_CLIENT_ID")
-        .ok_or_else(|| "GOOGLE_OAUTH_CLIENT_ID not found".to_owned())?;
-    let client_secret = get_env_var("GOOGLE_OAUTH_CLIENT_SECRET")
-        .ok_or_else(|| "GOOGLE_OAUTH_CLIENT_SECRET not found".to_owned())?;
+    let (client_id, client_secret) = if let (Some(id), Some(secret)) = (get_env_var("GOOGLE_OAUTH_CLIENT_ID"), get_env_var("GOOGLE_OAUTH_CLIENT_SECRET")) {
+        (id, secret)
+    } else if let Some((id, secret)) = load_google_credentials_from_file(library_root) {
+        (id, secret)
+    } else {
+        return Err("Google Drive is not configured. Please configure it in settings.".to_owned());
+    };
 
     let client = reqwest::blocking::Client::new();
     let res = client
@@ -179,9 +201,10 @@ pub fn get_access_token(token_store: &dyn DriveTokenStore) -> Result<String, Str
 
 pub fn drive_list(
     token_store: &dyn DriveTokenStore,
+    library_root: &std::path::Path,
     folder_id: Option<&str>,
 ) -> Result<Vec<DriveEntry>, String> {
-    let access_token = get_access_token(token_store)?;
+    let access_token = get_access_token(token_store, library_root)?;
 
     let parent = folder_id.unwrap_or("root");
     let q = format!(
@@ -260,10 +283,11 @@ pub fn parse_drive_entries(
 
 pub fn drive_import(
     token_store: &dyn DriveTokenStore,
+    library_root: &std::path::Path,
     database: &Arc<Mutex<LibraryDatabase>>,
     ids: Vec<String>,
 ) -> Result<Vec<DocumentSummary>, String> {
-    let access_token = get_access_token(token_store)?;
+    let access_token = get_access_token(token_store, library_root)?;
     let client = reqwest::blocking::Client::new();
     let mut imported = Vec::new();
 
@@ -334,9 +358,10 @@ pub fn drive_import(
 
 pub fn download_drive_file(
     token_store: &dyn DriveTokenStore,
+    library_root: &std::path::Path,
     file_id: &str,
 ) -> Result<Vec<u8>, String> {
-    let access_token = get_access_token(token_store)?;
+    let access_token = get_access_token(token_store, library_root)?;
     let client = reqwest::blocking::Client::new();
     let res = client
         .get(format!(

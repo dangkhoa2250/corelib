@@ -46,6 +46,19 @@ pub fn run() {
             app.manage(
                 commands::LibraryStore::open(app_data_directory).map_err(std::io::Error::other)?,
             );
+
+            #[cfg(target_os = "macos")]
+            {
+                let window = app.get_webview_window("main").unwrap();
+                window_vibrancy::apply_vibrancy(
+                    &window,
+                    window_vibrancy::NSVisualEffectMaterial::Sidebar,
+                    None,
+                    None,
+                )
+                .expect("apply_vibrancy requires macOS 10.11+");
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -56,6 +69,9 @@ pub fn run() {
             commands::list_page_tags,
             commands::toggle_page_tag,
             commands::drive_connect,
+            commands::save_google_drive_credentials,
+            commands::load_google_drive_credentials,
+            commands::clear_google_drive_credentials,
             commands::drive_list,
             commands::drive_import,
             commands::get_document_file_url,

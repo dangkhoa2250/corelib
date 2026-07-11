@@ -54,6 +54,7 @@ export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick 
 
   return (
     <nav aria-label="Primary" className="app-sidebar" style={{ width, flexBasis: width }}>
+      <div aria-hidden="true" className="app-sidebar__drag-region" data-tauri-drag-region="true" />
       <button
         aria-label="Search (Command K)"
         className="app-sidebar__search"

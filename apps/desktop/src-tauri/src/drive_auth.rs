@@ -92,3 +92,35 @@ impl DriveTokenStore for MemoryTokenStore {
         Ok(())
     }
 }
+
+pub struct FileTokenStore {
+    path: std::path::PathBuf,
+}
+
+impl FileTokenStore {
+    pub fn new(path: std::path::PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl DriveTokenStore for FileTokenStore {
+    fn load(&self) -> Result<Option<String>, String> {
+        if !self.path.exists() {
+            return Ok(None);
+        }
+        let token = std::fs::read_to_string(&self.path).map_err(|e| e.to_string())?;
+        Ok(Some(token.trim().to_owned()))
+    }
+
+    fn save(&self, refresh_token: &str) -> Result<(), String> {
+        std::fs::write(&self.path, refresh_token).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    fn clear(&self) -> Result<(), String> {
+        if self.path.exists() {
+            let _ = std::fs::remove_file(&self.path);
+        }
+        Ok(())
+    }
+}

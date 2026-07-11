@@ -134,3 +134,11 @@ export function IconCheck({ size = 16 }: IconProps) {
     </svg>
   );
 }
+
+export function IconCloud({ size = 16 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <path d="M17.5 19A4.5 4.5 0 0 0 22 14.5c0-2.22-1.6-4.07-3.73-4.43A6 6 0 0 0 6.5 11c-2.3 0-4.22 1.68-4.48 4A4 4 0 0 0 6 19h11.5Z" />
+    </svg>
+  );
+}

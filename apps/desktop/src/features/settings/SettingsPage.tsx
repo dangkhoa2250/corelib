@@ -15,7 +15,7 @@ import {
   type TranslationEngineId,
 } from "../../domain/translation";
 import { IconEye, IconEyeOff } from "../../app/icons";
-import { IconArrowLeft, IconMemora, IconSearch, IconAppearance } from "../../app/icons";
+import { IconArrowLeft, IconMemora, IconSearch, IconAppearance, IconCloud } from "../../app/icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { Combobox } from "../../components/Combobox";
 
@@ -48,6 +48,9 @@ export interface SettingsPageProps {
   appleTranslationAvailable?: () => Promise<boolean>;
   onDefaultChange?: (engineId: TranslationEngineId | null) => void;
   onBack?: () => void;
+  saveDriveCredentials?: (clientId: string, clientSecret: string) => Promise<void>;
+  loadDriveCredentials?: () => Promise<{ clientId: string; clientSecret: string } | null>;
+  clearDriveCredentials?: () => Promise<void>;
 }
 
 function readProvider(): AiProviderId {
@@ -65,7 +68,7 @@ export function readTranslationPreference(): { engineId: TranslationEngineId | n
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials }: SettingsPageProps) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
@@ -101,8 +104,65 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
   );
   const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
+
+  // Google Drive Credentials State
+  const [driveClientId, setDriveClientId] = useState("");
+  const [driveClientSecret, setDriveClientSecret] = useState("");
+  const [showDriveClientSecret, setShowDriveClientSecret] = useState(false);
+  const [hasSavedDriveCredentials, setHasSavedDriveCredentials] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [driveSuccess, setDriveSuccess] = useState(false);
+
   const showAppearanceSettings = searchQuery.trim().toLowerCase().includes("appearance");
-  const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
+  const showDriveSettings = searchQuery.trim().toLowerCase().includes("drive");
+  const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase()) && !showDriveSettings && !showAppearanceSettings;
+
+  useEffect(() => {
+    if (!loadDriveCredentials) return;
+    loadDriveCredentials()
+      .then((credentials) => {
+        if (credentials) {
+          setDriveClientId(credentials.clientId);
+          setDriveClientSecret(credentials.clientSecret);
+          setHasSavedDriveCredentials(true);
+        }
+      })
+      .catch(() => {});
+  }, [loadDriveCredentials]);
+
+  const handleSaveDriveCredentials = async () => {
+    if (!saveDriveCredentials) return;
+    setLoading(true);
+    setDriveError(null);
+    setDriveSuccess(false);
+    try {
+      await saveDriveCredentials(driveClientId.trim(), driveClientSecret.trim());
+      setHasSavedDriveCredentials(true);
+      setDriveSuccess(true);
+    } catch (err) {
+      setDriveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearDriveCredentials = async () => {
+    if (!clearDriveCredentials) return;
+    setLoading(true);
+    setDriveError(null);
+    setDriveSuccess(false);
+    try {
+      await clearDriveCredentials();
+      setDriveClientId("");
+      setDriveClientSecret("");
+      setHasSavedDriveCredentials(false);
+    } catch (err) {
+      setDriveError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
   const searchableModels = [
     ...builtinTranslationEngines(appleAvailable, connected["google-translation"])
@@ -281,15 +341,27 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
         </label>
         <p className="settings-page__nav-label">General</p>
         <button 
-          className={`settings-page__nav-item ${searchQuery.trim().toLowerCase().includes("appearance") ? "is-active" : ""}`}
+          className={`settings-page__nav-item ${showAppearanceSettings ? "is-active" : ""}`}
           onClick={() => setSearchQuery("appearance")}
           type="button"
         >
           <span className="settings-page__nav-icon"><IconAppearance /></span>
           Appearance
         </button>
+        <button 
+          className={`settings-page__nav-item ${showDriveSettings ? "is-active" : ""}`}
+          onClick={() => setSearchQuery("drive")}
+          type="button"
+        >
+          <span className="settings-page__nav-icon"><IconCloud /></span>
+          Google Drive
+        </button>
         <p className="settings-page__nav-label">Models</p>
-        <button className="settings-page__nav-item is-active" type="button">
+        <button 
+          className={`settings-page__nav-item ${showModelSettings ? "is-active" : ""}`}
+          onClick={() => setSearchQuery("")}
+          type="button"
+        >
           <span className="settings-page__nav-icon"><IconMemora /></span>
           Model
         </button>
@@ -297,9 +369,19 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
 
       <section className="settings-page__main">
         <header className="settings-page__header">
-          <p className="settings-page__eyebrow">Models</p>
-          <h1>Model</h1>
-          <p>Choose the providers and model used by Memora.</p>
+          <p className="settings-page__eyebrow">
+            {showAppearanceSettings ? "General" : showDriveSettings ? "General" : "Models"}
+          </p>
+          <h1>
+            {showAppearanceSettings ? "Appearance" : showDriveSettings ? "Google Drive" : "Model"}
+          </h1>
+          <p>
+            {showAppearanceSettings 
+              ? "Customize how Memora looks." 
+              : showDriveSettings 
+                ? "Configure Google Drive OAuth client credentials." 
+                : "Choose the providers and model used by Memora."}
+          </p>
         </header>
 
         {showAppearanceSettings ? (
@@ -333,6 +415,84 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
               : `Memora is in ${theme} mode.`
             }
           </p>
+        </section>
+        </>
+        ) : showDriveSettings ? (
+        <>
+        <section className="settings-page__section" aria-labelledby="drive-heading">
+          <div className="settings-page__section-heading">
+            <div>
+              <h2 id="drive-heading">Google Drive</h2>
+              <p>Configure Google Drive OAuth client credentials for importing documents.</p>
+            </div>
+          </div>
+
+          <label className="settings-page__field">
+            <span>Client ID</span>
+            <input
+              aria-label="Google Drive Client ID"
+              autoComplete="off"
+              onChange={(event) => {
+                setDriveClientId(event.target.value);
+                setDriveSuccess(false);
+              }}
+              placeholder="Enter Google Drive Client ID"
+              style={{ color: "var(--text-primary)" }}
+              type="text"
+              value={driveClientId}
+            />
+          </label>
+
+          <label className="settings-page__field">
+            <span>Client Secret</span>
+            <span className="settings-page__secret-input">
+              <input
+                aria-label="Google Drive Client Secret"
+                autoComplete="off"
+                onChange={(event) => {
+                  setDriveClientSecret(event.target.value);
+                  setDriveSuccess(false);
+                }}
+                placeholder={hasSavedDriveCredentials ? "••••••••••••••••" : "Enter Google Drive Client Secret"}
+                style={{ color: "var(--text-primary)" }}
+                type={showDriveClientSecret ? "text" : "password"}
+                value={driveClientSecret}
+              />
+              {driveClientSecret ? (
+                <button
+                  aria-label={showDriveClientSecret ? "Hide Client Secret" : "Show Client Secret"}
+                  className="settings-page__secret-toggle"
+                  onClick={() => setShowDriveClientSecret((visible) => !visible)}
+                  type="button"
+                >
+                  {showDriveClientSecret ? <IconEyeOff /> : <IconEye />}
+                </button>
+              ) : null}
+            </span>
+          </label>
+
+          <div className="settings-page__actions">
+            <button
+              disabled={loading || (!driveClientId.trim() && !driveClientSecret.trim())}
+              onClick={() => void handleSaveDriveCredentials()}
+              type="button"
+            >
+              {loading ? "Saving…" : "Save Credentials"}
+            </button>
+            {hasSavedDriveCredentials ? (
+              <button
+                className="settings-page__secondary-button"
+                disabled={loading}
+                onClick={() => void handleClearDriveCredentials()}
+                type="button"
+              >
+                Clear Credentials
+              </button>
+            ) : null}
+          </div>
+          
+          {driveError ? <p className="settings-page__error" role="alert">{driveError}</p> : null}
+          {driveSuccess ? <p role="alert" style={{ color: "var(--success)", fontSize: "13px", marginTop: "8px", fontWeight: "bold" }}>Saved successfully!</p> : null}
         </section>
         </>
         ) : showModelSettings ? <>

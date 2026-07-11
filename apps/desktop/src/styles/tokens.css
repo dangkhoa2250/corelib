@@ -6,8 +6,8 @@
 
   /* Window / Surface hierarchy */
   --window-bg: #f2f2f4;
-  --sidebar-bg: rgba(255, 255, 255, 0.6);
   --main-bg: #ffffff;
+  --sidebar-bg: transparent;
 
   --viewer-canvas-bg: #d9d9dc;
   --toolbar-bg: rgba(248, 248, 250, 0.92);
@@ -71,8 +71,6 @@
 
   /* Reader-specific (PDF page canvas, kept light so documents stay readable) */
   --color-reader-bg: #a1a1a5;
-  --color-reader-page: #e8e8eb;
-  --color-reader-sidebar: #dedee0;
   --color-reader-toolbar: rgb(246 246 247 / 94%);
   --color-reader-glass: rgb(255 255 255 / 52%);
 
@@ -87,15 +85,13 @@
   --color-highlight: rgb(255 212 0 / 45%);
   --color-highlight-active: rgb(255 149 0 / 65%);
 
-  /* Apply main text and background */
+  /* Apply main text; background stays transparent so native window vibrancy shows through */
   color: var(--text-primary);
-  background: var(--window-bg);
 }
 
 [data-theme="dark"] {
   /* Window / Surface hierarchy */
   --window-bg: #131315;
-  --sidebar-bg: rgba(55, 55, 60, 0.55);
   --main-bg: #18181a;
 
   --viewer-canvas-bg: #38383b;
@@ -160,8 +156,6 @@
 
   /* Reader-specific — darker chrome, PDF page stays light */
   --color-reader-bg: #38383a;
-  --color-reader-page: #ffffff;
-  --color-reader-sidebar: #1c1c1e;
   --color-reader-toolbar: rgb(28 28 30 / 94%);
   --color-reader-glass: rgb(255 255 255 / 6%);
 
@@ -198,6 +192,11 @@ body,
 
 body {
   min-height: 100vh;
+}
+
+[data-tauri-drag-region] {
+  app-region: drag;
+  -webkit-app-region: drag;
 }
 
 button,
@@ -253,9 +252,19 @@ textarea::placeholder {
   width: 220px;
   min-width: 160px;
   max-width: 360px;
-  padding: 16px 12px;
+  /* Extra top padding clears the overlaid macOS traffic lights (see trafficLightPosition
+     in tauri.conf.json) since the titlebar no longer reserves its own space. */
+  padding: 40px 12px 16px;
   border-right: 1px solid var(--border-subtle);
   background: var(--sidebar-bg);
+}
+
+.app-sidebar__drag-region {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
 }
 
 .app-sidebar__resize-handle {
@@ -1856,7 +1865,9 @@ textarea::placeholder {
 
 .reader-page {
   color: var(--text-primary);
-  background: var(--color-reader-page);
+  /* Transparent so the same native window vibrancy shows through behind
+     .reader-sidebar, consistent with the main .app-sidebar. */
+  background: transparent;
 }
 
 .reader-page-number {

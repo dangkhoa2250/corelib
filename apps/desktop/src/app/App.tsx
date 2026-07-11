@@ -1,4 +1,5 @@
 import { open } from "@tauri-apps/plugin-dialog";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { useTheme } from "../contexts/ThemeContext";
@@ -199,6 +200,14 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', resolvedTheme);
+    // Keep the native window appearance (and therefore sidebar vibrancy) in sync with
+    // the app theme, since it otherwise follows the OS appearance instead. Guarded
+    // because getCurrentWindow() throws outside a real Tauri window (browser/tests).
+    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+      getCurrentWindow()
+        .setTheme(resolvedTheme)
+        .catch((error) => console.error("Failed to sync native window theme:", error));
+    }
   }, [resolvedTheme]);
 
   const learning = useMemo(() => ({
