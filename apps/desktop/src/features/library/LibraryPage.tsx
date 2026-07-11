@@ -5,7 +5,6 @@ interface LibraryPageProps {
   documents: LibraryDocument[];
   onOpen: (id: string) => void;
   onImport: () => void;
-  onReviewToday?: () => void;
   onOpenDrive?: () => void;
   onClearCache?: () => void;
   onDelete?: (id: string) => void;
@@ -17,7 +16,6 @@ export function LibraryPage({
   documents,
   onOpen,
   onImport,
-  onReviewToday,
   onOpenDrive,
   onClearCache,
   onDelete,
@@ -32,7 +30,6 @@ export function LibraryPage({
           <button type="button" onClick={onImport}>
             Import from Mac
           </button>
-          {onReviewToday && <button type="button" onClick={onReviewToday}>Review today</button>}
           {onOpenDrive && (
             <button type="button" onClick={onOpenDrive}>
               Google Drive

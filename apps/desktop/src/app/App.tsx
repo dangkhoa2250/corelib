@@ -596,7 +596,6 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
                 }
               }}
               onImport={() => void handleImport()}
-              onReviewToday={() => void handleReviewToday()}
               onOpenDrive={() => void handleOpenDrive()}
               onClearCache={() => void handleClearCache()}
               onDelete={(id) => void handleDelete(id)}
