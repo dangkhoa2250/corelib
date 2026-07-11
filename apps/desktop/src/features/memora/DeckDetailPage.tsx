@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import type { Deck, DeckStatistics } from "../../domain/learning";
 import { getDeckStatistics } from "../../lib/learning";
 import { CardBrowser } from "../cards/CardBrowser";
@@ -12,6 +12,7 @@ export interface DeckDetailPageProps {
   onBack: () => void;
   onStudyDeck: (deckId: string) => void;
   onDirtyStateChange?: (dirty: boolean) => void;
+  getDocumentFileUrl?: (id: string) => Promise<string>;
 }
 
 function errorMessage(error: unknown): string {
@@ -27,19 +28,27 @@ export function DeckDetailPage({
   onBack,
   onStudyDeck,
   onDirtyStateChange,
+  getDocumentFileUrl,
 }: DeckDetailPageProps) {
   const [stats, setStats] = useState<DeckStatistics | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cardChangeCount, setCardChangeCount] = useState(0);
 
-  useEffect(() => {
+  const refreshStats = useCallback(() => {
     getDeckStatistics(deck.id)
       .then(setStats)
       .catch((e) => {
         setError(errorMessage(e));
         setStats(null);
       });
-  }, [deck.id, cardChangeCount]);
+  }, [deck.id]);
+
+  useEffect(() => {
+    refreshStats();
+  }, [refreshStats]);
+
+  const handleCardChange = useCallback(() => {
+    refreshStats();
+  }, [refreshStats]);
 
   return (
     <main className="deck-detail-page">
@@ -88,8 +97,9 @@ export function DeckDetailPage({
           setSelectedIds={setSelectedIds}
           refreshTrigger={refreshTrigger}
           onBack={onBack}
-          onCardChange={() => setCardChangeCount((c) => c + 1)}
+          onCardChange={handleCardChange}
           onDirtyStateChange={onDirtyStateChange}
+          getDocumentFileUrl={getDocumentFileUrl}
         />
       </div>
     </main>
