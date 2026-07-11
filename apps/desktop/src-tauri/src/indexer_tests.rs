@@ -19,7 +19,7 @@ fn extracts_plain_text_from_a_managed_pdf() {
     let path = directory.path().join("text.pdf");
     write_text_pdf(&path, "Quantum gardens bloom");
 
-    let text = extract_pdf_text(&path).expect("extract text");
+    let (text, _page_count) = extract_pdf_text(&path).expect("extract text");
 
     assert!(text.contains("Quantum gardens bloom"));
 }
@@ -118,7 +118,7 @@ fn indexer_success_writes_the_extracted_text_to_fts() {
         &database,
         "indexed",
         Path::new("/managed/indexed.pdf"),
-        |_| Ok("Tensor calculus for physics".to_owned()),
+        |_| Ok(("Tensor calculus for physics".to_owned(), 5)),
     );
 
     let documents = database

@@ -45,20 +45,15 @@ pub fn index_document_with<F>(
     path: &Path,
     extract: F,
 ) where
-    F: FnOnce(&Path) -> Result<String, String>,
+    F: FnOnce(&Path) -> Result<(String, usize), String>,
 {
     let extracted = catch_unwind(AssertUnwindSafe(|| extract(path)))
         .unwrap_or_else(|_| Err("PDF text extraction failed".to_owned()));
 
-    let num_pages = lopdf::Document::load(path)
-        .ok()
-        .map(|doc| doc.get_pages().len() as i64)
-        .unwrap_or(0);
-
     if let Ok(mut database) = database.lock() {
         match extracted {
-            Ok(text) => {
-                let _ = database.set_index_ready(id, &text, None, num_pages);
+            Ok((text, page_count)) => {
+                let _ = database.set_index_ready(id, &text, None, page_count as i64);
             }
             Err(_) => {
                 let _ = database.set_index_failed(id);
@@ -67,10 +62,13 @@ pub fn index_document_with<F>(
     }
 }
 
-pub(crate) fn extract_pdf_text(path: &Path) -> Result<String, String> {
+pub(crate) fn extract_pdf_text(path: &Path) -> Result<(String, usize), String> {
     #[cfg(test)]
     {
-        extract_pdf_text_in_worker(path)
+        let result = extract_pdf_text_in_worker(path)?;
+        let newline = result.find('\n').ok_or_else(extraction_error)?;
+        let page_count: usize = result[..newline].parse().map_err(|_| extraction_error())?;
+        Ok((result[newline + 1..].to_owned(), page_count))
     }
 
     #[cfg(not(test))]
@@ -84,7 +82,7 @@ pub(crate) fn extract_pdf_text(path: &Path) -> Result<String, String> {
 ///
 /// The desktop binary uses itself as the worker. This public entry point lets the integration
 /// regression exercise the same isolation protocol with a small worker-only binary.
-pub fn extract_pdf_text_with_worker(path: &Path, worker: &Path) -> Result<String, String> {
+pub fn extract_pdf_text_with_worker(path: &Path, worker: &Path) -> Result<(String, usize), String> {
     validate_pdf_input_size(path)?;
     let mut child = Command::new(worker)
         .arg(PDF_TEXT_WORKER_ARGUMENT)
@@ -125,7 +123,12 @@ pub fn extract_pdf_text_with_worker(path: &Path, worker: &Path) -> Result<String
                         Ok(Err(())) | Err(_) => return Err(extraction_error()),
                     },
                 };
-                return String::from_utf8(bytes).map_err(|_| extraction_error());
+                let full = String::from_utf8(bytes).map_err(|_| extraction_error())?;
+                let newline = full.find('\n').ok_or_else(extraction_error)?;
+                let page_count: usize = full[..newline]
+                    .parse()
+                    .map_err(|_| extraction_error())?;
+                return Ok((full[newline + 1..].to_owned(), page_count))
             }
             None if started.elapsed() >= MAX_WORKER_WALL_CLOCK => return kill_worker(&mut child),
             None => thread::sleep(WORKER_POLL_INTERVAL),
@@ -175,6 +178,7 @@ fn extract_pdf_text_in_worker(path: &Path) -> Result<String, String> {
         return Err("PDF text extraction failed".to_owned());
     }
 
+    let page_count = pages.len();
     let mut extracted = String::new();
     for page in pages.into_keys() {
         let page_text = document
@@ -189,7 +193,7 @@ fn extract_pdf_text_in_worker(path: &Path) -> Result<String, String> {
         }
         extracted.push_str(&page_text);
     }
-    Ok(extracted)
+    Ok(format!("{}\n{}", page_count, extracted))
 }
 
 fn read_worker_output(mut stdout: impl Read) -> Result<Vec<u8>, ()> {
@@ -211,7 +215,7 @@ fn read_worker_output(mut stdout: impl Read) -> Result<Vec<u8>, ()> {
     }
 }
 
-fn kill_worker(child: &mut std::process::Child) -> Result<String, String> {
+fn kill_worker(child: &mut std::process::Child) -> Result<(String, usize), String> {
     let _ = child.kill();
     let _ = child.wait();
     Err(extraction_error())
