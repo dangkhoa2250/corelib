@@ -34,7 +34,7 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
         const path = await getDocumentFileUrl(source.documentId);
         if (!active) return;
         const assetUrl = convertFileSrc(path);
-        const doc = await pdfjs.getDocument({ url: assetUrl }).promise;
+        const doc = await pdfjs.getDocument({ url: assetUrl, enableHWA: true }).promise;
         if (!active) { doc.destroy(); return; }
 
         const page = await doc.getPage(source.page);
@@ -95,23 +95,26 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
       <div ref={containerRef} className="source-viewer__page">
         {loading && <div className="source-viewer__loading">Loading PDF…</div>}
         {error && <div className="source-viewer__error">{error}</div>}
-        {pageDims && (
-          <div style={{ position: "relative", width: pageDims.width, margin: "0 auto" }}>
-            <canvas ref={canvasRef} style={{ width: pageDims.width, height: pageDims.height, display: "block" }} />
-            {source.rects.map((rect, i) => (
-              <div key={i} style={{
-                position: "absolute",
-                left: `${rect.x * scale}px`,
-                top: `${rect.y * scale}px`,
-                width: `${rect.width * scale}px`,
-                height: `${rect.height * scale}px`,
-                background: "rgba(255, 230, 0, 0.35)",
-                pointerEvents: "none",
-                zIndex: 1,
-              }} />
-            ))}
-          </div>
-        )}
+        <div style={{
+          position: "relative",
+          width: pageDims ? pageDims.width : undefined,
+          margin: "0 auto",
+          display: pageDims ? "block" : "none",
+        }}>
+          <canvas ref={canvasRef} style={{ width: pageDims?.width, height: pageDims?.height, display: "block" }} />
+          {pageDims && source.rects.map((rect, i) => (
+            <div key={i} style={{
+              position: "absolute",
+              left: `${rect.x * scale}px`,
+              top: `${rect.y * scale}px`,
+              width: `${rect.width * scale}px`,
+              height: `${rect.height * scale}px`,
+              background: "rgba(255, 230, 0, 0.35)",
+              pointerEvents: "none",
+              zIndex: 1,
+            }} />
+          ))}
+        </div>
       </div>
     </section>
   );

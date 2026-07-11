@@ -22,6 +22,9 @@ export interface CardBrowserProps {
   createCard?: typeof createCard;
   updateAndMoveCard?: typeof updateAndMoveCard;
   getDocumentFileUrl?: (id: string) => Promise<string>;
+  sourceView?: CardSource | null;
+  onSourceViewChange?: (source: CardSource | null) => void;
+  hideSourcePanel?: boolean;
 }
 
 const PAGE_SIZE = 50;
@@ -44,9 +47,14 @@ export function CardBrowser({
   createCard: customCreate = createCard,
   updateAndMoveCard: customUpdateAndMove = updateAndMoveCard,
   getDocumentFileUrl: customGetDocumentFileUrl,
+  sourceView: controlledSourceView,
+  onSourceViewChange,
+  hideSourcePanel = false,
 }: CardBrowserProps) {
   const [deckId, setDeckId] = useState(initialDeckId);
-  const [sourceView, setSourceView] = useState<CardSource | null>(null);
+  const [internalSourceView, setInternalSourceView] = useState<CardSource | null>(null);
+  const sourceView = onSourceViewChange ? controlledSourceView ?? null : internalSourceView;
+  const setSourceView = onSourceViewChange ?? setInternalSourceView;
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [states, setStates] = useState<CardLifecycleState[]>([]);
@@ -582,7 +590,7 @@ export function CardBrowser({
             )}
           </div>
         </div>
-        {sourceView && customGetDocumentFileUrl ? (
+        {!hideSourcePanel && sourceView && customGetDocumentFileUrl ? (
           <SourceViewer
             source={sourceView}
             getDocumentFileUrl={customGetDocumentFileUrl}
