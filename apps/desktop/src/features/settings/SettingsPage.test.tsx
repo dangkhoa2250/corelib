@@ -37,7 +37,7 @@ test("connects a provider and loads models using only an API key", async () => {
   await user.click(result);
   expect(screen.queryByText("Selected: Gemma 4 31B")).not.toBeInTheDocument();
   expect(result).not.toHaveClass("is-highlighted");
-  expect(screen.getByLabelText("Search models")).toHaveValue("");
+  expect(screen.getByLabelText("Search models")).toHaveValue("Gemma 4 31B");
   expect(screen.queryByRole("button", { name: /Gemma 4 31B/ })).not.toBeInTheDocument();
   expect(result).toHaveTextContent("NVIDIA NIM");
   expect(result).not.toHaveTextContent("google/gemma-4-31b");
@@ -215,6 +215,6 @@ test("selects a searched model with arrow keys and Enter", async () => {
   await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
 
   expect(onDefaultChange).toHaveBeenCalledWith("google-ai-studio", "gemini-2.5-pro");
-  expect(screen.getByLabelText("Search models")).toHaveValue("");
+  expect(screen.getByLabelText("Search models")).toHaveValue("Gemini 2.5 Pro");
   expect(screen.queryByRole("button", { name: /Gemini 2\.5 Pro/ })).not.toBeInTheDocument();
 });

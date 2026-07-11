@@ -77,6 +77,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [modelSearch, setModelSearch] = useState("");
+  const [modelSelectionMade, setModelSelectionMade] = useState(false);
   const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
@@ -175,7 +176,8 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     setPreference(DEFAULT_PROVIDER_KEY, model.provider);
     setPreference(`${DEFAULT_PROVIDER_KEY}.model`, model.id);
     onDefaultChange?.(model.provider, model.id);
-    setModelSearch("");
+    setModelSearch(model.name);
+    setModelSelectionMade(true);
     setHighlightedModelIndex(-1);
   };
 
@@ -292,6 +294,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             aria-label="Search models"
             onChange={(event) => {
               setModelSearch(event.target.value);
+              setModelSelectionMade(false);
               setHighlightedModelIndex(-1);
             }}
             onKeyDown={(event) => {
@@ -313,7 +316,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           />
         </label>
 
-        {modelSearch.trim() && filteredModels.length > 0 ? (
+        {modelSearch.trim() && !modelSelectionMade && filteredModels.length > 0 ? (
           <div aria-label="Model results" className="settings-page__model-results">
             {filteredModels.map((model) => (
               <button
