@@ -6,7 +6,7 @@
 
   /* Window / Surface hierarchy */
   --window-bg: #f2f2f4;
-  --sidebar-bg: rgba(238, 238, 241, 0.72);
+  --sidebar-bg: rgba(255, 255, 255, 0.6);
   --main-bg: #ffffff;
 
   --viewer-canvas-bg: #d9d9dc;
@@ -95,7 +95,7 @@
 [data-theme="dark"] {
   /* Window / Surface hierarchy */
   --window-bg: #131315;
-  --sidebar-bg: rgba(70, 68, 72, 0.65);
+  --sidebar-bg: rgba(55, 55, 60, 0.55);
   --main-bg: #18181a;
 
   --viewer-canvas-bg: #38383b;
