@@ -245,3 +245,34 @@ test("defers model search until the user pauses typing", async () => {
   expect(screen.getByRole("button", { name: /Gemini 2\.5 Flash/ })).toBeInTheDocument();
   vi.useRealTimers();
 });
+
+test("restores the selected model in the search field when settings reopens", async () => {
+  const values = new Map([
+    ["library.ai.default-provider", "google-ai-studio"],
+    ["library.ai.default-provider.model", "gemini-2.5-flash"],
+  ]);
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      getItem: (key: string) => values.get(key) ?? null,
+      removeItem: (key: string) => values.delete(key),
+      setItem: (key: string, value: string) => values.set(key, value),
+    },
+  });
+
+  const listModels = vi.fn().mockResolvedValue([
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+  ]);
+
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-ai-studio"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={listModels}
+    />,
+  );
+
+  await waitFor(() => expect(screen.getByLabelText("Search models")).toHaveValue("Gemini 2.5 Flash"));
+  expect(screen.queryByRole("button", { name: /Gemini 2\.5 Flash/ })).not.toBeInTheDocument();
+});

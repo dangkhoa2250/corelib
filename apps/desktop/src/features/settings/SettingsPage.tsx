@@ -110,8 +110,12 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
       const result = await listModels(providerToLoad);
       setModelsByProvider((current) => ({ ...current, [providerToLoad]: result }));
       const savedModel = providerToLoad === defaultProvider ? readAiPreference().model : "";
-      if (result.some((model) => model.id === savedModel)) {
-        setSelectedModel(savedModel);
+      const savedModelDefinition = result.find((model) => model.id === savedModel);
+      if (savedModelDefinition) {
+        setSelectedModel(savedModelDefinition.id);
+        setModelSearch(savedModelDefinition.name);
+        setModelSelectionMade(true);
+        setHighlightedModelIndex(-1);
       }
     } catch (loadError) {
       setModelsByProvider((current) => ({ ...current, [providerToLoad]: [] }));
