@@ -383,7 +383,7 @@ textarea::placeholder {
   gap: 14px;
   height: 100vh;
   min-height: 0;
-  padding: 22px 14px;
+  padding: 38px 14px 22px;
   overflow: hidden;
   border-right: 1px solid var(--border-subtle);
   background: var(--sidebar-bg);
