@@ -143,7 +143,7 @@ type AppRoute =
   | { name: "reader"; document: LibraryDocument }
   | { name: "composer"; document: LibraryDocument; source: CardSource }
   | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> }
-  | { name: "cardBrowser"; deckId?: string | null }
+  | { name: "cardBrowser"; deckId: string }
   | { name: "trash" };
 
 export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi }: AppProps) {
@@ -484,7 +484,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     route.name === "memora"
       ? "memora"
       : route.name === "cardBrowser"
-      ? "cardBrowser"
+      ? "memora"
       : route.name === "trash"
       ? "trash"
       : "library";
@@ -501,8 +501,6 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
           setRoute(
             section === "memora"
               ? { name: "memora" }
-              : section === "cardBrowser"
-              ? { name: "cardBrowser", deckId: "all" }
               : section === "trash"
               ? { name: "trash" }
               : { name: "library" }

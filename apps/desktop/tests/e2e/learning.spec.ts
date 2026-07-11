@@ -125,7 +125,8 @@ test("manages a card through Browser and Trash lifecycle", async ({ page }) => {
   await page.getByRole("button", { name: "Restore to Original Deck" }).click();
   await expect(page.getByText("Trash is empty.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Card Browser" }).click();
+  await page.getByRole("button", { name: "Memora" }).click();
+  await page.getByRole("button", { name: "Biology", exact: true }).click();
   await expect(page.getByText("What is ATP?")).toBeVisible();
   await page.getByRole("checkbox").nth(1).check();
   await page.locator(".card-browser__bulk-banner").getByRole("button", { name: "Trash", exact: true }).click();

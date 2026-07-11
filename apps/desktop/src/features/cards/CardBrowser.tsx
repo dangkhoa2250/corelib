@@ -5,7 +5,7 @@ import { CardSidePanel } from "./CardSidePanel";
 
 export interface CardBrowserProps {
   decks: Deck[];
-  initialDeckId?: string | null;
+  initialDeckId: string;
   onDoubleClilckRow?: (row: CardBrowserRow) => void;
   selectedIds: Set<string>;
   setSelectedIds: (ids: Set<string>) => void;
@@ -25,7 +25,7 @@ const PAGE_SIZE = 50;
 
 export function CardBrowser({
   decks,
-  initialDeckId = null,
+  initialDeckId,
   onDoubleClilckRow,
   selectedIds,
   setSelectedIds,
@@ -40,7 +40,7 @@ export function CardBrowser({
   createCard: customCreate = createCard,
   updateCard: customUpdate = updateCard,
 }: CardBrowserProps) {
-  const [deckId, setDeckId] = useState<string>(initialDeckId ?? "all");
+  const [deckId, setDeckId] = useState(initialDeckId);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [states, setStates] = useState<CardLifecycleState[]>([]);
@@ -66,7 +66,7 @@ export function CardBrowser({
     }
     setIsEditorDirty(false);
     onDirtyStateChange?.(false);
-    setDeckId(initialDeckId ?? "all");
+    setDeckId(initialDeckId);
   }, [initialDeckId, onDirtyStateChange]); // Checked on initialDeckId changes
 
   // Clear selection on deck change only (explicit-selection semantics)
@@ -139,7 +139,7 @@ export function CardBrowser({
     let active = true;
     const fetchTags = async () => {
       try {
-        const tags = await customListActiveTags(deckId === "all" ? "" : deckId);
+        const tags = await customListActiveTags(deckId);
         if (active) {
           setAvailableTags(tags ?? []);
         }
@@ -158,7 +158,7 @@ export function CardBrowser({
     setError(null);
     try {
       const page = await customQuery({
-        deckId: deckId === "all" ? "" : deckId,
+        deckId,
         query: debouncedQuery,
         states,
         tags: selectedTags,
@@ -191,7 +191,7 @@ export function CardBrowser({
     setLoadingMore(true);
     try {
       const page = await customQuery({
-        deckId: deckId === "all" ? "" : deckId,
+        deckId,
         query: debouncedQuery,
         states,
         tags: selectedTags,
@@ -287,15 +287,6 @@ export function CardBrowser({
     }
   };
 
-  const handleDeckChangeGuard = (newDeckId: string) => {
-    if (isEditorDirty) {
-      if (!window.confirm("Discard unsaved changes?")) return;
-    }
-    setIsEditorDirty(false);
-    onDirtyStateChange?.(false);
-    setDeckId(newDeckId);
-  };
-
   const handleRowDoubleClick = (row: CardBrowserRow) => {
     if (isEditorDirty) {
       if (!window.confirm("Discard unsaved changes?")) return;
@@ -314,7 +305,7 @@ export function CardBrowser({
     onDirtyStateChange?.(false);
     setEditingCard({
       id: "",
-      deckId: deckId === "all" ? (decks[0]?.id ?? "") : deckId,
+      deckId,
       deckName: "",
       front: "",
       back: "",
@@ -361,21 +352,6 @@ export function CardBrowser({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-        </div>
-
-        {/* Deck Filter */}
-        <div className="card-browser__filter-group">
-          <label className="card-browser__label">Deck:</label>
-          <select
-            className="card-browser__select"
-            value={deckId}
-            onChange={(e) => handleDeckChangeGuard(e.target.value)}
-          >
-            <option value="all">All Decks</option>
-            {decks.map(d => (
-              <option key={d.id} value={d.id}>{d.name}</option>
-            ))}
-          </select>
         </div>
 
         {/* Sort */}

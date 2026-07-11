@@ -118,6 +118,29 @@ async function openReaderAndSelectText(
   await selectTextOnPage();
 }
 
+test("keeps Card Browser inside Memora rather than in the application sidebar", async () => {
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([]),
+        createCard: vi.fn(),
+        listDueCards: vi.fn().mockResolvedValue([]),
+      }}
+    />,
+  );
+
+  const sidebar = screen.getByRole("navigation", { name: "Primary" });
+  expect(within(sidebar).getByRole("button", { name: "Library" })).toBeInTheDocument();
+  expect(within(sidebar).getByRole("button", { name: "Memora" })).toBeInTheDocument();
+  expect(within(sidebar).getByRole("button", { name: "Trash" })).toBeInTheDocument();
+  expect(within(sidebar).queryByRole("button", { name: "Card Browser" })).not.toBeInTheDocument();
+});
+
 async function selectTextOnPage() {
   const layer = await waitFor(() => {
     const candidate = globalThis.document.querySelector<HTMLElement>("#pdf-page-1 .textLayer");

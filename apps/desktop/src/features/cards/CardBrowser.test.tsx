@@ -79,6 +79,7 @@ describe("CardBrowser component", () => {
     render(
       <CardBrowser
         decks={mockDecks}
+        initialDeckId="d1"
         selectedIds={new Set()}
         setSelectedIds={setSelectedIds}
       />
@@ -93,7 +94,7 @@ describe("CardBrowser component", () => {
     });
 
     expect(queryDeckCards).toHaveBeenCalledWith({
-      deckId: "",
+      deckId: "d1",
       query: "",
       states: [],
       tags: [],
@@ -101,13 +102,14 @@ describe("CardBrowser component", () => {
       cursor: null,
       limit: 50,
     });
+    expect(screen.queryByRole("option", { name: "All Decks" })).not.toBeInTheDocument();
 
     const searchInput = screen.getByPlaceholderText("Search front, back, or tags...");
     fireEvent.change(searchInput, { target: { value: "mitochondria" } });
 
     await waitFor(() => {
       expect(queryDeckCards).toHaveBeenLastCalledWith({
-        deckId: "",
+        deckId: "d1",
         query: "mitochondria",
         states: [],
         tags: [],
@@ -129,6 +131,7 @@ describe("CardBrowser component", () => {
     const { rerender } = render(
       <CardBrowser
         decks={mockDecks}
+        initialDeckId="d1"
         selectedIds={new Set()}
         setSelectedIds={setSelectedIds}
       />
@@ -141,6 +144,7 @@ describe("CardBrowser component", () => {
     rerender(
       <CardBrowser
         decks={mockDecks}
+        initialDeckId="d1"
         selectedIds={new Set(["c1"])}
         setSelectedIds={setSelectedIds}
       />
