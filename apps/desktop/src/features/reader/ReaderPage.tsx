@@ -13,6 +13,32 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 let lastSelectionRange: Range | null = null;
 
+const pdfDocCache = new Map<string, pdfjs.PDFDocumentProxy>();
+const MAX_CACHED_PDFS = 2;
+
+function getCachedPdfDoc(key: string): pdfjs.PDFDocumentProxy | undefined {
+  const value = pdfDocCache.get(key);
+  if (value !== undefined) {
+    pdfDocCache.delete(key);
+    pdfDocCache.set(key, value);
+  }
+  return value;
+}
+
+function setCachedPdfDoc(key: string, doc: pdfjs.PDFDocumentProxy): void {
+  if (pdfDocCache.has(key)) {
+    pdfDocCache.delete(key);
+  } else if (pdfDocCache.size >= MAX_CACHED_PDFS) {
+    const oldest = pdfDocCache.keys().next().value;
+    if (oldest !== undefined) {
+      const evicted = pdfDocCache.get(oldest)!;
+      pdfDocCache.delete(oldest);
+      try { evicted.destroy(); } catch (_) {}
+    }
+  }
+  pdfDocCache.set(key, doc);
+}
+
 const MIN_ZOOM_SCALE = 0.5;
 const MAX_ZOOM_SCALE = 3;
 const MAX_CANVAS_PIXEL_RATIO = 3.0;
@@ -788,44 +814,44 @@ export function ReaderPage({
         const url = await getDocumentFileUrl(document.id);
         if (!active) return;
         const assetUrl = convertFileSrc(url);
-        const loadingTask = pdfjs.getDocument({ url: assetUrl, enableHWA: true });
-        const doc = await loadingTask.promise;
-        if (active) {
-          setPdfDoc(doc);
-          setLoadingDoc(false);
+        const cacheKey = document.id;
+        const cached = getCachedPdfDoc(cacheKey);
+        const doc = cached ?? await pdfjs.getDocument({ url: assetUrl, enableHWA: true }).promise;
+        if (!active) return;
+        if (!cached) {
+          setCachedPdfDoc(cacheKey, doc);
+        }
+        setPdfDoc(doc);
+        setLoadingDoc(false);
 
+        try {
+          const pageForSize = doc.numPages > 1 ? await doc.getPage(2) : await doc.getPage(1);
+          const defaultViewport = pageForSize.getViewport({ scale: 1.0 });
+          setDefaultSize({ width: defaultViewport.width, height: defaultViewport.height });
+        } catch (_) {
           try {
-            const pageForSize = doc.numPages > 1 ? await doc.getPage(2) : await doc.getPage(1);
-            const defaultViewport = pageForSize.getViewport({ scale: 1.0 });
+            const firstPage = await doc.getPage(1);
+            const defaultViewport = firstPage.getViewport({ scale: 1.0 });
             setDefaultSize({ width: defaultViewport.width, height: defaultViewport.height });
-          } catch (_) {
-            try {
-              const firstPage = await doc.getPage(1);
-              const defaultViewport = firstPage.getViewport({ scale: 1.0 });
-              setDefaultSize({ width: defaultViewport.width, height: defaultViewport.height });
-            } catch (_) {}
-          }
-
-          try {
-            const rawOutline = await doc.getOutline();
-            if (rawOutline && rawOutline.length > 0) {
-              setOutline(rawOutline);
-              setSidebarTab("outline");
-            }
-          } catch (_) {}
-
-          try {
-            // Use a uniform page size from the first page instead of
-            // fetching every single page — speeds up loading dramatically
-            // for large PDFs. Individual pages correct their own layout.
-            const page = await doc.getPage(1);
-            const viewport = page.getViewport({ scale: 1.0 });
-            if (active) {
-              const uniform = { width: viewport.width, height: viewport.height };
-              setPageSizes(Array.from({ length: doc.numPages }, () => uniform));
-            }
           } catch (_) {}
         }
+
+        try {
+          const rawOutline = await doc.getOutline();
+          if (rawOutline && rawOutline.length > 0) {
+            setOutline(rawOutline);
+            setSidebarTab("outline");
+          }
+        } catch (_) {}
+
+        try {
+          const page = await doc.getPage(1);
+          const viewport = page.getViewport({ scale: 1.0 });
+          if (active) {
+            const uniform = { width: viewport.width, height: viewport.height };
+            setPageSizes(Array.from({ length: doc.numPages }, () => uniform));
+          }
+        } catch (_) {}
       } catch (e) {
         if (active) {
           setError(e instanceof Error ? e.message : String(e));
