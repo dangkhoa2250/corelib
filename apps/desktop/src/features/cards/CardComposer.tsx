@@ -314,7 +314,7 @@ export function CardComposer({
                 aria-label="Translate"
                 disabled={saving || translating || !front.trim()}
                 onClick={() => void handleTranslate()}
-                style={{ border: 0, borderRadius: "999px", padding: "5px 10px", color: "#007aff", background: "#e5f1ff", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}
+                style={{ border: 0, borderRadius: "999px", padding: "5px 10px", color: "var(--link)", background: "var(--interactive-hover)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}
                 type="button"
               >
                 {translating ? "Translating…" : "Translate"}
@@ -344,10 +344,10 @@ export function CardComposer({
 
         <section
           aria-label="Source preview"
-          style={{ padding: "12px", borderRadius: "12px", background: "#f2f2f7" }}
+          style={{ padding: "12px", borderRadius: "12px", background: "var(--surface-2)" }}
         >
           <strong style={{ display: "block", marginBottom: "4px", fontSize: "13px" }}>Source</strong>
-          <span style={{ color: "#48484a", fontSize: "13px" }}>
+          <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
             Document {draft.documentId ?? "Unavailable"} · Page {draft.page}
           </span>
         </section>
@@ -355,17 +355,43 @@ export function CardComposer({
         {visibleError ? (
           <div
             role="alert"
-            style={{ padding: "10px 12px", borderRadius: "10px", color: "#9a3412", background: "#fff7ed" }}
+            style={{ padding: "10px 12px", borderRadius: "10px", color: "var(--warning)", background: "var(--color-danger-bg-soft)" }}
           >
             {visibleError}
           </div>
         ) : null}
 
         <footer style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "4px" }}>
-          <button disabled={saving} onClick={close} type="button">
+          <button
+            disabled={saving}
+            onClick={close}
+            type="button"
+            style={{
+              border: "1px solid var(--border-strong)",
+              borderRadius: "999px",
+              padding: "8px 16px",
+              color: "var(--button-secondary-text)",
+              background: "var(--button-secondary-bg)",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
             Cancel
           </button>
-          <button disabled={saving || !sourceIsAvailable} type="submit">
+          <button
+            disabled={saving || !sourceIsAvailable}
+            type="submit"
+            style={{
+              border: 0,
+              borderRadius: "999px",
+              padding: "8px 16px",
+              color: "var(--button-primary-text)",
+              background: "var(--button-primary-bg)",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: 600,
+            }}
+          >
             {saving ? "Saving…" : "Save"}
           </button>
         </footer>
@@ -387,8 +413,8 @@ export function CardComposer({
           flexDirection: "column",
           overflowY: "auto",
           padding: "20px",
-          borderLeft: "1px solid rgb(0 0 0 / 9%)",
-          background: "#fff",
+          borderLeft: "1px solid var(--border-subtle)",
+          background: "var(--panel-bg)",
         }}
       >
         <header style={{ marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -403,7 +429,7 @@ export function CardComposer({
               background: "transparent",
               border: "none",
               fontSize: "20px",
-              color: "#8e8e93",
+              color: "var(--text-secondary)",
               cursor: "pointer",
               padding: "4px",
               lineHeight: 1,
@@ -426,7 +452,7 @@ export function CardComposer({
         display: "grid",
         placeItems: "center",
         padding: "20px",
-        background: "rgb(29 29 31 / 28%)",
+        background: "var(--overlay)",
       }}
     >
       <section
@@ -440,10 +466,10 @@ export function CardComposer({
           maxHeight: "calc(100vh - 40px)",
           overflowY: "auto",
           padding: "24px",
-          border: "1px solid rgb(0 0 0 / 9%)",
+          border: "1px solid var(--border-subtle)",
           borderRadius: "18px",
-          background: "rgb(255 255 255 / 96%)",
-          boxShadow: "0 24px 72px rgb(0 0 0 / 24%)",
+          background: "var(--panel-bg)",
+          boxShadow: "var(--shadow-xl)",
           backdropFilter: "blur(24px)",
         }}
       >
@@ -451,7 +477,7 @@ export function CardComposer({
           <h2 id="card-composer-title" style={{ margin: 0, fontSize: "24px", letterSpacing: "-0.02em" }}>
             Create flashcard
           </h2>
-          <p style={{ margin: "6px 0 0", color: "#6e6e73", fontSize: "14px" }}>
+          <p style={{ margin: "6px 0 0", color: "var(--text-secondary)", fontSize: "14px" }}>
             Your selected text is ready to edit on the front of the card.
           </p>
         </header>

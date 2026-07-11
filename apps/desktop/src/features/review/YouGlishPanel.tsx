@@ -56,16 +56,16 @@ export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelPro
         marginTop: "16px",
         padding: "16px",
         borderRadius: "12px",
-        background: "var(--color-bg-tertiary, #f4f4f7)",
-        border: "1px solid var(--color-border, rgba(0, 0, 0, 0.08))",
+        background: "var(--surface-2)",
+        border: "1px solid var(--border-subtle)",
         display: "flex",
         flexDirection: "column",
         gap: "12px",
       }}
     >
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--color-text-primary)" }}>
-          Pronunciation for <span style={{ color: "var(--color-accent, #007aff)" }}>"{word}"</span>
+        <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
+          Pronunciation for <span style={{ color: "var(--link)" }}>"{word}"</span>
         </span>
         <button
           type="button"
@@ -76,7 +76,7 @@ export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelPro
             border: "none",
             fontSize: "18px",
             cursor: "pointer",
-            color: "var(--color-text-tertiary, #8e8e93)",
+            color: "var(--text-secondary)",
             padding: "4px 8px",
           }}
         >
@@ -85,24 +85,24 @@ export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelPro
       </header>
 
       {languageName ? (
-        <div data-testid="youglish-video-viewport" style={{ height: `${viewportHeight}px`, overflow: "hidden", borderRadius: "8px", background: "#fff" }}>
+        <div data-testid="youglish-video-viewport" style={{ height: `${viewportHeight}px`, overflow: "hidden", borderRadius: "8px", background: "var(--surface-1)" }}>
           <iframe
             title={`YouGlish pronunciation for ${word}`}
             data-youglish-id={widgetId}
             src={youGlishEmbedUrl(word, languageName, widgetId)}
             allow="autoplay"
-            style={{ width: "100%", height: "1200px", border: "none", background: "#fff" }}
+            style={{ width: "100%", height: "1200px", border: "none", background: "var(--surface-1)" }}
           />
         </div>
       ) : (
-        <div style={{ padding: "12px", borderRadius: "8px", color: "#9a3412", background: "#fff7ed", fontSize: "13px" }}>
+        <div style={{ padding: "12px", borderRadius: "8px", color: "var(--warning)", background: "var(--color-danger-bg-soft)", fontSize: "13px" }}>
           {!frontLanguage
             ? "No confirmed front language. Choose the front language in card edit to use YouGlish."
             : `Unsupported front language "${frontLanguage}". Choose a supported language in card edit to use YouGlish.`}
         </div>
       )}
 
-      <footer style={{ display: "flex", justifyContent: "flex-end", fontSize: "11px", color: "var(--color-text-tertiary, #8e8e93)" }}>
+      <footer style={{ display: "flex", justifyContent: "flex-end", fontSize: "11px", color: "var(--text-secondary)" }}>
         Powered by&nbsp;
         <a
           href="https://youglish.com"

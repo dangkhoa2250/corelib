@@ -125,7 +125,7 @@ test("masks the API key by default and toggles visibility with the eye button", 
   const input = screen.getByLabelText("API key");
   await user.type(input, "secret-key");
   expect(input).toHaveAttribute("type", "password");
-  expect(input).toHaveStyle({ color: "rgb(29, 29, 31)" });
+  expect(input).toHaveStyle({ color: "var(--text-primary)" });
 
   await user.click(screen.getByRole("button", { name: "Show API key" }));
   expect(input).toHaveAttribute("type", "text");

@@ -23,8 +23,8 @@ export function PronunciationButton({ text, lang }: PronunciationButtonProps) {
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#e5e5ea",
-          color: "#8e8e93",
+          background: "var(--surface-2)",
+          color: "var(--text-secondary)",
           cursor: "not-allowed",
           flexShrink: 0,
         }}
@@ -60,8 +60,8 @@ export function PronunciationButton({ text, lang }: PronunciationButtonProps) {
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        background: isPlaying ? "#d1d1d6" : "#e5f1ff",
-        color: isPlaying ? "#3a3a3c" : "#007aff",
+        background: isPlaying ? "var(--border-strong)" : "var(--surface-2)",
+        color: isPlaying ? "var(--text-primary)" : "var(--link)",
         cursor: "pointer",
         flexShrink: 0,
       }}

@@ -392,7 +392,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
               autoComplete="off"
               onChange={(event) => setApiKey(event.target.value)}
               placeholder={connected[provider] ? "••••••••••••••••" : "Paste API key"}
-              style={{ color: "#1d1d1f" }}
+              style={{ color: "var(--text-primary)" }}
               type={showApiKey ? "text" : "password"}
               value={apiKey}
             />

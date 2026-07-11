@@ -25,10 +25,10 @@ export function CardSelectionToolbar({
         gap: "12px",
         maxWidth: "min(540px, calc(100vw - 32px))",
         padding: "10px 12px",
-        border: "1px solid rgb(0 0 0 / 9%)",
+        border: "1px solid var(--border-subtle)",
         borderRadius: "14px",
-        background: "rgb(255 255 255 / 94%)",
-        boxShadow: "0 12px 32px rgb(0 0 0 / 18%)",
+        background: "var(--toolbar-bg)",
+        boxShadow: "var(--shadow-lg)",
         backdropFilter: "blur(18px)",
       }}
     >
@@ -38,7 +38,7 @@ export function CardSelectionToolbar({
           minWidth: 0,
           margin: 0,
           overflow: "hidden",
-          color: "#48484a",
+          color: "var(--text-secondary)",
           fontSize: "13px",
           lineHeight: 1.35,
           textOverflow: "ellipsis",
@@ -56,8 +56,8 @@ export function CardSelectionToolbar({
             border: 0,
             borderRadius: "999px",
             padding: "7px 10px",
-            color: "#3a3a3c",
-            background: "#e5e5ea",
+            color: "var(--button-secondary-text)",
+            background: "var(--button-secondary-bg)",
             cursor: "pointer",
           }}
           type="button"
@@ -72,8 +72,8 @@ export function CardSelectionToolbar({
             border: 0,
             borderRadius: "999px",
             padding: "7px 12px",
-            color: "#fff",
-            background: "#007aff",
+            color: "var(--button-primary-text)",
+            background: "var(--button-primary-bg)",
             cursor: "pointer",
             fontWeight: 600,
           }}

@@ -38,12 +38,12 @@ export function LanguagePicker({
         disabled={disabled}
       />
       {!value && (
-        <span style={{ fontSize: "12px", color: "var(--color-text-tertiary, #666)" }}>
+        <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
           Choose a front language to enable YouGlish lookup.
         </span>
       )}
       {value && !isManual && detectedLanguage && (
-        <span style={{ fontSize: "11px", color: "#007aff", fontWeight: 500 }}>
+        <span style={{ fontSize: "11px", color: "var(--link)", fontWeight: 500 }}>
           Auto-detected: {SUPPORTED_LANGUAGES[detectedLanguage] ?? detectedLanguage}
         </span>
       )}

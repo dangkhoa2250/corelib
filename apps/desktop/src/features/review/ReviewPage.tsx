@@ -18,10 +18,10 @@ export interface ReviewPageProps {
 
 const ratings: ReviewRating[] = ["again", "hard", "good", "easy"];
 const ratingColors: Record<ReviewRating, string> = {
-  again: "#ff3b30",
-  hard: "#ff9500",
-  good: "#34c759",
-  easy: "#0071e3",
+  again: "var(--error)",
+  hard: "var(--warning)",
+  good: "var(--success)",
+  easy: "var(--link)",
 };
 
 function errorMessage(error: unknown): string {
@@ -266,9 +266,9 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
             marginTop: "16px",
             padding: "16px",
             borderRadius: "12px",
-            background: "#fff7ed",
-            border: "1px solid #ffedd5",
-            color: "#9a3412",
+            background: "var(--surface-2)",
+            border: "1px solid var(--border-subtle)",
+            color: "var(--text-secondary)",
             fontSize: "13px",
             display: "flex",
             flexDirection: "column",

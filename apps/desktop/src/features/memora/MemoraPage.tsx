@@ -128,7 +128,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, cou
         <span
           aria-hidden="true"
           className="memora-deck-list__dot"
-          style={{ background: deck.color ?? "#8e8e93" }}
+          style={{ background: deck.color ?? "var(--text-secondary)" }}
         />
         <div className="memora-deck-list__content">
           <span className="memora-deck-list__name">{deck.name}</span>

@@ -157,7 +157,7 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active }: ThumbnailPagePro
           }}
         >
           <canvas ref={canvasRef} style={{ width: "100%", height: "100%", objectFit: "cover", display: rendered ? "block" : "none" }} />
-          {!rendered && <span style={{ color: "#8e8e93", fontSize: "14px" }}>{pageNumber}</span>}
+          {!rendered && <span className="reader-page-number">{pageNumber}</span>}
         </div>
       </div>
       <span className={`reader-thumbnail__label ${active ? "reader-thumbnail__label--active" : ""}`}>{pageNumber}</span>
@@ -443,7 +443,7 @@ const PdfPage = React.memo(
             display: isVisible ? "block" : "none",
           }}
         >
-          <canvas ref={canvasRef} style={{ background: "#ffffff" }} />
+          <canvas ref={canvasRef} className="reader-canvas" />
           <div
             ref={textLayerRef}
             className="textLayer"
@@ -554,7 +554,7 @@ function OutlineNode({ node, onNavigate }: { node: any; onNavigate: (dest: any) 
         </span>
       </div>
       {hasChildren && expanded && (
-        <div style={{ borderLeft: "1px solid #d1d1d6", marginLeft: "6px" }}>
+        <div style={{ borderLeft: "1px solid var(--border-subtle)", marginLeft: "6px" }}>
           {node.items.map((subNode: any, idx: number) => (
             <OutlineNode key={idx} node={subNode} onNavigate={onNavigate} />
           ))}
@@ -995,7 +995,7 @@ export function ReaderPage({
       </aside>
 
       {/* Main View Area */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "#f5f5f7" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "var(--viewer-canvas-bg)" }}>
       <section style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {/* Toolbar */}
         <header
