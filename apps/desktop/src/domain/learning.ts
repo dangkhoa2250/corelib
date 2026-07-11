@@ -49,6 +49,16 @@ export interface Deck {
   archived: boolean;
 }
 
+export interface DeckStatistics {
+  totalCards: number;
+  newCards: number;
+  learningCards: number;
+  reviewCards: number;
+  relearningCards: number;
+  suspendedCards: number;
+  dueCards: number;
+}
+
 export type ReviewPreview = Record<
   ReviewRating,
   { dueAt: string; intervalLabel: string }
