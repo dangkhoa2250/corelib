@@ -419,8 +419,8 @@ select {
 
 .deck-detail-page__stats-breakdown {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
   margin-top: 12px;
 }
 
