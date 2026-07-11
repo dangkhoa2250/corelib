@@ -7,10 +7,11 @@ use std::{
 
 use rusqlite::{params, Connection, OptionalExtension, Row, TransactionBehavior};
 
-use crate::model::DocumentSummary;
+use crate::model::{DocumentSummary, PageTagSummary};
+use uuid::Uuid;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATIONS: [(&str, &str); 8] = [
+const MIGRATIONS: [(&str, &str); 9] = [
     (
         "0001_library",
         include_str!("../migrations/0001_library.sql"),
@@ -42,6 +43,10 @@ const MIGRATIONS: [(&str, &str); 8] = [
     (
         "0008_page_count",
         include_str!("../migrations/0008_page_count.sql"),
+    ),
+    (
+        "0009_page_tags",
+        include_str!("../migrations/0009_page_tags.sql"),
     ),
 ];
 const SUMMARY_COLUMNS: &str =
@@ -269,6 +274,59 @@ impl LibraryDatabase {
 
         self.summary_by_id(id)?
             .ok_or(LibraryDbError::DocumentNotFound)
+    }
+
+    pub fn list_page_tags(&self, document_id: &str) -> Result<Vec<PageTagSummary>> {
+        let mut statement = self.connection.prepare(
+            "SELECT id, document_id, page FROM page_tags WHERE document_id = ?1 ORDER BY page ASC",
+        )?;
+        let tags = statement
+            .query_map(params![document_id], |row| {
+                Ok(PageTagSummary {
+                    id: row.get(0)?,
+                    document_id: row.get(1)?,
+                    page: row.get(2)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(tags)
+    }
+
+    pub fn toggle_page_tag(
+        &mut self,
+        document_id: &str,
+        page: i64,
+    ) -> Result<Vec<PageTagSummary>> {
+        if page <= 0 {
+            return Err(LibraryDbError::InvalidPage);
+        }
+        let transaction = self.connection.transaction()?;
+        let exists = transaction
+            .query_row(
+                "SELECT 1 FROM page_tags WHERE document_id = ?1 AND page = ?2",
+                params![document_id, page],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some();
+        if exists {
+            transaction.execute(
+                "DELETE FROM page_tags WHERE document_id = ?1 AND page = ?2",
+                params![document_id, page],
+            )?;
+        } else {
+            transaction.execute(
+                "INSERT INTO page_tags (id, document_id, page, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    Uuid::new_v4().to_string(),
+                    document_id,
+                    page,
+                    portable_timestamp(),
+                ],
+            )?;
+        }
+        transaction.commit()?;
+        self.list_page_tags(document_id)
     }
 
     pub fn set_index_ready(

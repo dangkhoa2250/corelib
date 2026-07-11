@@ -773,3 +773,45 @@ fn upgrading_0005_adds_card_lifecycle_without_data_loss() {
         .expect("count logs");
     assert_eq!(logs_count, 1);
 }
+
+#[test]
+fn toggle_page_tag_adds_then_removes_a_tag() {
+    let directory = tempdir().expect("create temporary directory");
+    let mut database = LibraryDatabase::open(directory.path()).expect("open database");
+    database
+        .insert_local(NewLocalDocument {
+            id: "tagged-doc".into(),
+            title: "Tagged Book".into(),
+            content_hash: "tagged-hash".into(),
+            managed_path: "/managed/tagged.pdf".into(),
+        })
+        .expect("insert document");
+
+    let added = database.toggle_page_tag("tagged-doc", 5).expect("add tag");
+    assert_eq!(added.len(), 1);
+    assert_eq!(added[0].page, 5);
+
+    let listed = database.list_page_tags("tagged-doc").expect("list tags");
+    assert_eq!(listed.len(), 1);
+
+    let removed = database
+        .toggle_page_tag("tagged-doc", 5)
+        .expect("remove tag");
+    assert!(removed.is_empty());
+}
+
+#[test]
+fn toggle_page_tag_rejects_non_positive_pages() {
+    let directory = tempdir().expect("create temporary directory");
+    let mut database = LibraryDatabase::open(directory.path()).expect("open database");
+    database
+        .insert_local(NewLocalDocument {
+            id: "doc-x".into(),
+            title: "X".into(),
+            content_hash: "hash-x".into(),
+            managed_path: "/managed/x.pdf".into(),
+        })
+        .expect("insert document");
+
+    assert!(database.toggle_page_tag("doc-x", 0).is_err());
+}

@@ -17,6 +17,14 @@ pub struct DocumentSummary {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct PageTagSummary {
+    pub id: String,
+    #[serde(rename = "documentId")]
+    pub document_id: String,
+    pub page: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SelectionRect {
     pub x: f64,
     pub y: f64,
