@@ -320,6 +320,33 @@ pub fn save_read_page(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+pub fn list_page_tags(
+    id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<crate::model::PageTagSummary>, String> {
+    state
+        .database
+        .lock()
+        .map_err(|_| "library database is unavailable".to_owned())?
+        .list_page_tags(&id)
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn toggle_page_tag(
+    document_id: String,
+    page: i64,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<crate::model::PageTagSummary>, String> {
+    state
+        .database
+        .lock()
+        .map_err(|_| "library database is unavailable".to_owned())?
+        .toggle_page_tag(&document_id, page)
+        .map_err(|error| error.to_string())
+}
+
 pub fn validate_import_paths(paths: &[String]) -> Result<(), String> {
     if paths.is_empty() {
         return Err("select at least one PDF".to_owned());

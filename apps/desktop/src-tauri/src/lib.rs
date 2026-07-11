@@ -53,6 +53,8 @@ pub fn run() {
             commands::import_local_documents,
             commands::search_documents,
             commands::save_read_page,
+            commands::list_page_tags,
+            commands::toggle_page_tag,
             commands::drive_connect,
             commands::drive_list,
             commands::drive_import,
