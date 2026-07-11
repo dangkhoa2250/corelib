@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   AI_PROVIDERS,
-  modelLabel,
   providerDefinition,
   type AiModel,
   type AiProviderId,
@@ -171,19 +170,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     setShowProviderEditor(true);
   };
 
-  const handleDefaultChange = (checked: boolean) => {
-    const nextProvider = checked ? provider : null;
-    setDefaultProvider(nextProvider);
-    if (nextProvider) {
-      setPreference(DEFAULT_PROVIDER_KEY, nextProvider);
-      setPreference(`${DEFAULT_PROVIDER_KEY}.model`, selectedModel);
-    } else {
-      removePreference(DEFAULT_PROVIDER_KEY);
-      removePreference(`${DEFAULT_PROVIDER_KEY}.model`);
-    }
-    onDefaultChange?.(nextProvider, checked ? selectedModel : "");
-  };
-
   return (
     <main className="settings-page">
       <aside className="settings-page__sidebar" aria-label="Settings navigation">
@@ -315,25 +301,31 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           <input aria-label="Search models" onChange={(event) => setModelSearch(event.target.value)} placeholder="Search by model name…" type="search" value={modelSearch} />
         </label>
 
-        <label className="settings-page__field">
-          <span>Model</span>
-          <select aria-label="AI model" disabled={loading || models.length === 0} value={selectedModel} onChange={(event) => {
-            const nextModel = event.target.value;
-            setSelectedModel(nextModel);
-            if (defaultProvider === provider) {
-              setPreference(`${DEFAULT_PROVIDER_KEY}.model`, nextModel);
-              onDefaultChange?.(provider, nextModel);
-            }
-          }}>
-            <option value="">{models.length ? (filteredModels.length ? "Choose a model" : "No matching models") : "Connect to load models"}</option>
-            {filteredModels.map((model) => <option key={model.id} value={model.id}>{modelLabel(model)}</option>)}
-          </select>
-        </label>
+        {modelSearch.trim() && filteredModels.length > 0 ? (
+          <div aria-label="Model results" className="settings-page__model-results">
+            {filteredModels.map((model) => (
+              <button
+                aria-pressed={selectedModel === model.id}
+                className={`settings-page__model-result ${selectedModel === model.id ? "is-selected" : ""}`}
+                key={model.id}
+                onClick={() => {
+                  setSelectedModel(model.id);
+                  setDefaultProvider(provider);
+                  setPreference(DEFAULT_PROVIDER_KEY, provider);
+                  setPreference(`${DEFAULT_PROVIDER_KEY}.model`, model.id);
+                  onDefaultChange?.(provider, model.id);
+                  setModelSearch(model.name);
+                }}
+                type="button"
+              >
+                <span>{model.name}</span>
+                <small>{model.id}</small>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
-        <label className="settings-page__checkbox">
-          <input checked={defaultProvider === provider && Boolean(selectedModel)} disabled={!selectedModel} onChange={(event) => handleDefaultChange(event.target.checked)} type="checkbox" />
-          <span>Use this provider and model for translation</span>
-        </label>
+        {selectedModel ? <p className="settings-page__selected-model">Selected: {models.find((model) => model.id === selectedModel)?.name ?? selectedModel}</p> : null}
 
         <label className="settings-page__field">
           <span>Translate to</span>

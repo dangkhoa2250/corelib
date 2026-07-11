@@ -405,6 +405,52 @@ select {
   font-size: 14px;
 }
 
+.settings-page__model-results {
+  display: grid;
+  gap: 6px;
+  max-height: 280px;
+  margin-top: 8px;
+  overflow: auto;
+}
+
+.settings-page__model-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #e5e5ea;
+  border-radius: 10px;
+  color: #1d1d1f;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-page__model-result:hover,
+.settings-page__model-result.is-selected {
+  border-color: #8bbcff;
+  background: #f4f9ff;
+}
+
+.settings-page__model-result span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-page__model-result small {
+  color: #6e6e73;
+  font-size: 11px;
+}
+
+.settings-page__selected-model {
+  margin: 10px 0 0;
+  color: #0a7a3b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .settings-page__secret-input {
   position: relative;
   display: block;
@@ -466,15 +512,6 @@ select {
 .settings-page__actions .settings-page__secondary-button {
   color: #ff3b30;
   background: #fff0ef;
-}
-
-.settings-page__checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 18px;
-  color: #1d1d1f;
-  font-size: 13px;
 }
 
 .settings-page__error {

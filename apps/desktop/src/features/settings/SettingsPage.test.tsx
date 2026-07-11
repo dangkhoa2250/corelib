@@ -32,7 +32,10 @@ test("connects a provider and loads models using only an API key", async () => {
 
   await waitFor(() => expect(saveApiKey).toHaveBeenCalledWith("nvidia", "nvapi-test"));
   expect(listModels).toHaveBeenCalledWith("nvidia");
-  expect(await screen.findByRole("option", { name: /Gemma 4 31B/ })).toBeInTheDocument();
+  await user.type(screen.getByLabelText("Search models"), "Gemma");
+  await user.click(await screen.findByRole("button", { name: /Gemma 4 31B/ }));
+  expect(screen.getByText("Selected: Gemma 4 31B")).toBeInTheDocument();
+  expect(screen.queryByRole("checkbox", { name: /Use this provider/ })).not.toBeInTheDocument();
 });
 
 test("shows provider errors without losing the settings form", async () => {
