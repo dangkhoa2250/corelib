@@ -217,14 +217,25 @@ pub fn list_documents(state: State<'_, LibraryStore>) -> Result<Vec<DocumentSumm
 }
 
 #[tauri::command]
-pub fn import_local_documents(
+pub async fn import_local_documents(
     paths: Vec<String>,
     state: State<'_, LibraryStore>,
 ) -> Result<Vec<DocumentSummary>, String> {
+    let database = Arc::clone(&state.database);
+    let library_root = state.library_root.clone();
+    let index_coordinator = Arc::clone(&state.index_coordinator);
+    import_local_documents_inner(paths, database, library_root, index_coordinator)
+}
+
+fn import_local_documents_inner(
+    paths: Vec<String>,
+    database: Arc<Mutex<LibraryDatabase>>,
+    library_root: PathBuf,
+    index_coordinator: Arc<IndexCoordinator>,
+) -> Result<Vec<DocumentSummary>, String> {
     let documents = prepare_local_documents(&paths)?;
 
-    let mut database = state
-        .database
+    let mut guard = database
         .lock()
         .map_err(|_| "library database is unavailable".to_owned())?;
     let mut created_paths = Vec::new();
@@ -232,7 +243,7 @@ pub fn import_local_documents(
         .iter()
         .map(|document| {
             let imported = import_pdf_with_status(
-                &state.library_root,
+                &library_root,
                 &document.source_path,
                 &document.content_hash,
             )
@@ -257,16 +268,27 @@ pub fn import_local_documents(
         }
     };
 
-    let summaries = database
+    let summaries = guard
         .insert_local_batch(imported_documents)
         .map_err(|error| {
             remove_new_managed_files(&created_paths);
             error.to_string()
         })?;
-    drop(database);
-    state.schedule_pending_indexes()?;
+    drop(guard);
+    index_coordinator.schedule_pending_indexes();
 
     Ok(summaries)
+}
+
+#[cfg(test)]
+pub(crate) fn import_local_documents_for_test(
+    paths: Vec<String>,
+    state: tauri::State<'_, LibraryStore>,
+) -> Result<Vec<DocumentSummary>, String> {
+    let database = Arc::clone(&state.database);
+    let library_root = state.library_root.clone();
+    let index_coordinator = Arc::clone(&state.index_coordinator);
+    import_local_documents_inner(paths, database, library_root, index_coordinator)
 }
 
 #[tauri::command]

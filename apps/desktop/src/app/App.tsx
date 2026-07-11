@@ -25,6 +25,7 @@ import type { CardSaveInput } from "../features/cards/CardComposer";
 import { MemoraPage } from "../features/memora/MemoraPage";
 import { DeckDetailPage } from "../features/memora/DeckDetailPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
+import type { PendingImport } from "./ImportProgress";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
 import { SettingsPage, readTranslationPreference } from "../features/settings/SettingsPage";
@@ -217,7 +218,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
   const [route, setRoute] = useState<AppRoute>({ name: "library" });
   const [loading, setLoading] = useState(true);
-  const [importing, setImporting] = useState(false);
+  const [pendingImports, setPendingImports] = useState<PendingImport[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [composerSource, setComposerSource] = useState<CardSource | null>(null);
   const [composerDecks, setComposerDecks] = useState<Deck[]>([]);
@@ -318,28 +319,47 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   }, [load, reloadDecks]);
 
   const handleImport = useCallback(async () => {
-    if (importing) {
+    if (pendingImports.length > 0) {
       return;
     }
 
     setError(null);
-    setImporting(true);
     try {
       const paths = await libraryApi.pick();
       if (!paths || paths.length === 0) {
         return;
       }
 
-      const imported = await libraryApi.importDocuments(paths);
-      requestId.current += 1;
-      setDocuments((current) => mergeDocuments(current, imported));
+      const items: PendingImport[] = paths.map((p, i) => ({
+        id: `pending-${i}-${Date.now()}`,
+        name: p.split("/").pop()?.replace(/\.pdf$/i, "") ?? p,
+      }));
+      setPendingImports(items);
+      const fileErrors: string[] = [];
+
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      for (let i = 0; i < paths.length; i++) {
+        try {
+          const imported = await libraryApi.importDocuments([paths[i]]);
+          setDocuments((current) => mergeDocuments(current, imported));
+        } catch (fileError) {
+          fileErrors.push(`${items[i].name}: ${errorMessage(fileError)}`);
+        }
+        setPendingImports((prev) => prev.filter((p) => p.id !== items[i].id));
+      }
+
       await load();
+
+      if (fileErrors.length > 0) {
+        setError(fileErrors.join("\n"));
+      }
     } catch (importError) {
       setError(errorMessage(importError));
     } finally {
-      setImporting(false);
+      setPendingImports([]);
     }
-  }, [importing, libraryApi, load]);
+  }, [pendingImports, libraryApi, load]);
 
   const handleOpen = useCallback((document: LibraryDocument) => {
     setSourceHighlight(null);
@@ -720,6 +740,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
               onClearCache={() => void handleClearCache()}
               onDelete={(id) => void handleDelete(id)}
               getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
+              pendingImports={pendingImports}
             />
             {loading ? <p role="status" aria-label="Loading library">Loading library…</p> : null}
             {error ? (

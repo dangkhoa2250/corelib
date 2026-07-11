@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import type { LibraryDocument } from "../../domain/document";
 import { DocumentCard } from "./DocumentCard";
+import type { PendingImport } from "../../app/ImportProgress";
 
 interface DocumentGridProps {
   documents: LibraryDocument[];
@@ -8,9 +9,10 @@ interface DocumentGridProps {
   onDelete?: (id: string) => void;
   onRename?: (id: string, newTitle: string) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
+  pendingImports?: PendingImport[];
 }
 
-export function DocumentGrid({ documents, onOpen, onDelete, onRename, getDocumentFileUrl }: DocumentGridProps) {
+export function DocumentGrid({ documents, onOpen, onDelete, onRename, getDocumentFileUrl, pendingImports }: DocumentGridProps) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -37,6 +39,14 @@ export function DocumentGrid({ documents, onOpen, onDelete, onRename, getDocumen
           onMenuToggle={(open) => setOpenMenuId(open ? document.id : null)}
           getDocumentFileUrl={getDocumentFileUrl}
         />
+      ))}
+      {pendingImports?.map((item) => (
+        <article key={item.id} className="document-card document-card--placeholder" aria-label={`Importing ${item.name}`}>
+          <div className="document-card__cover document-card__cover--placeholder">
+            <div className="document-card__shimmer" />
+          </div>
+          <div className="document-card__loading-bar" />
+        </article>
       ))}
     </section>
   );

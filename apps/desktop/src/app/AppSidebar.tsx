@@ -1,8 +1,12 @@
-import type { ComponentType } from "react";
+import { useCallback, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 
 import { IconLibrary, IconMemora, IconSearch, IconSettings, IconTrash } from "./icons";
 
 export type AppSection = "library" | "memora" | "trash" | "settings";
+
+const SIDEBAR_MIN_WIDTH = 160;
+const SIDEBAR_MAX_WIDTH = 360;
+const SIDEBAR_DEFAULT_WIDTH = 220;
 
 interface AppSidebarProps {
   active: AppSection;
@@ -18,8 +22,38 @@ const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] =
 ];
 
 export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick }: AppSidebarProps) {
+  const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+
+  const handleResizeStart = useCallback(
+    (e: ReactMouseEvent) => {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startWidth = width;
+
+      const onMove = (ev: MouseEvent) => {
+        const next = Math.min(
+          SIDEBAR_MAX_WIDTH,
+          Math.max(SIDEBAR_MIN_WIDTH, startWidth + ev.clientX - startX),
+        );
+        setWidth(next);
+      };
+      const onUp = () => {
+        document.removeEventListener("mousemove", onMove);
+        document.removeEventListener("mouseup", onUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    },
+    [width],
+  );
+
   return (
-    <nav aria-label="Primary" className="app-sidebar">
+    <nav aria-label="Primary" className="app-sidebar" style={{ width, flexBasis: width }}>
       <button
         aria-label="Search (Command K)"
         className="app-sidebar__search"
@@ -59,6 +93,13 @@ export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick 
           Settings
         </button>
       </div>
+      <div
+        aria-label="Resize sidebar"
+        aria-orientation="vertical"
+        className="app-sidebar__resize-handle"
+        onMouseDown={handleResizeStart}
+        role="separator"
+      />
     </nav>
   );
 }

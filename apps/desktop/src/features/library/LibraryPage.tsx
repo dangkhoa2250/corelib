@@ -1,4 +1,5 @@
 import type { LibraryDocument } from "../../domain/document";
+import type { PendingImport } from "../../app/ImportProgress";
 import { DocumentGrid } from "./DocumentGrid";
 
 interface LibraryPageProps {
@@ -10,6 +11,7 @@ interface LibraryPageProps {
   onDelete?: (id: string) => void;
   onRename?: (id: string, newTitle: string) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
+  pendingImports?: PendingImport[];
 }
 
 export function LibraryPage({
@@ -21,6 +23,7 @@ export function LibraryPage({
   onDelete,
   onRename,
   getDocumentFileUrl,
+  pendingImports,
 }: LibraryPageProps) {
   return (
     <main className="library-page">
@@ -37,13 +40,14 @@ export function LibraryPage({
           )}
         </div>
       </header>
-      {documents.length > 0 ? (
+      {documents.length > 0 || (pendingImports && pendingImports.length > 0) ? (
         <DocumentGrid
           documents={documents}
           onOpen={onOpen}
           onDelete={onDelete}
           onRename={onRename}
           getDocumentFileUrl={getDocumentFileUrl}
+          pendingImports={pendingImports}
         />
       ) : (
         <p className="library-page__empty">Your books will appear here.</p>

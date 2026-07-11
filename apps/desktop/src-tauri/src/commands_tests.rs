@@ -16,8 +16,8 @@ use tempfile::tempdir;
 
 use crate::commands::{
     download_drive_file_async, download_drive_file_async_guarded, get_document_file_url,
-    import_local_documents, validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool,
-    LibraryStore, INDEX_QUEUE_CAPACITY,
+    import_local_documents_for_test, validate_import_paths, validate_read_page, IndexTask,
+    IndexWorkerPool, LibraryStore, INDEX_QUEUE_CAPACITY,
 };
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
@@ -170,7 +170,7 @@ fn import_returns_pending_before_its_background_index_task_runs() {
     fs::write(&source, b"%PDF-1.4\npending\n").expect("write valid PDF");
     let (app, tasks) = app_with_controlled_indexer(&library_root);
 
-    let imported = import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
         .expect("import document without waiting for extraction");
 
     assert_eq!(imported[0].status, "processing");
@@ -220,9 +220,9 @@ fn reimporting_a_pending_document_does_not_schedule_a_second_extraction() {
     fs::write(&source, b"%PDF-1.4\npending\n").expect("write valid PDF");
     let (app, tasks) = app_with_controlled_indexer(&library_root);
 
-    import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+    import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
         .expect("initial import");
-    import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+    import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
         .expect("reimport while pending");
 
     assert!(
@@ -265,7 +265,7 @@ fn a_rejected_index_schedule_leaves_the_document_durably_pending() {
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("build test application");
 
-    let imported = import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
         .expect("import document");
     let mut database = LibraryDatabase::open(&library_root).expect("open database");
 
@@ -311,7 +311,7 @@ fn completed_workers_drain_overflowed_pending_indexes_without_another_import_or_
         })
         .collect();
 
-    let imported = import_local_documents(sources, app.state()).expect("import documents");
+    let imported = import_local_documents_for_test(sources, app.state()).expect("import documents");
 
     assert_eq!(
         scheduled.load(Ordering::SeqCst),
@@ -351,7 +351,7 @@ fn import_recovers_an_existing_managed_pdf_without_a_database_row_and_indexes_it
     fs::copy(&source, &managed_path).expect("seed managed PDF without database record");
     let (app, tasks) = app_with_controlled_indexer(&library_root);
 
-    let imported = import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
         .expect("recover managed document");
 
     assert_eq!(imported.len(), 1);
@@ -375,7 +375,7 @@ fn importing_an_existing_ready_database_record_does_not_queue_another_index_task
     fs::write(&source, b"%PDF-1.4\nexisting\n").expect("write valid PDF");
     let (app, tasks) = app_with_controlled_indexer(&library_root);
 
-    import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+    import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
         .expect("initial import");
     tasks
         .try_recv()
@@ -385,7 +385,7 @@ fn importing_an_existing_ready_database_record_does_not_queue_another_index_task
         "ready"
     );
 
-    import_local_documents(vec![source.to_string_lossy().into_owned()], app.state())
+    import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
         .expect("reimport existing database record");
 
     assert!(
@@ -410,7 +410,7 @@ fn batch_import_rejects_a_whitespace_title_without_creating_any_documents() {
     fs::write(&blank_title_pdf, b"%PDF-1.4\nblank title\n").expect("write blank-title PDF");
     let app = app_with_library(&library_root);
 
-    let result = import_local_documents(
+    let result = import_local_documents_for_test(
         vec![
             valid_pdf.to_string_lossy().into_owned(),
             blank_title_pdf.to_string_lossy().into_owned(),
@@ -438,7 +438,7 @@ fn batch_import_prevalidates_every_path_before_copying() {
     fs::write(&invalid_path, b"not a PDF").expect("write invalid input");
     let app = app_with_library(&library_root);
 
-    let result = import_local_documents(
+    let result = import_local_documents_for_test(
         vec![
             valid_pdf.to_string_lossy().into_owned(),
             invalid_path.to_string_lossy().into_owned(),
@@ -464,7 +464,7 @@ fn batch_import_removes_new_managed_files_when_the_database_batch_fails() {
         .install_insert_failure_for_test()
         .expect("install insert failure");
 
-    let result = import_local_documents(vec![source.to_string_lossy().into_owned()], app.state());
+    let result = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state());
 
     assert!(result.is_err());
     assert!(crate::commands::list_documents(app.state())
@@ -488,7 +488,7 @@ fn import_rejects_a_pdf_name_with_non_pdf_contents() {
     fs::write(&renamed_text, b"this is not a PDF").expect("write renamed text file");
     let app = app_with_library(&library_root);
 
-    let result = import_local_documents(
+    let result = import_local_documents_for_test(
         vec![renamed_text.to_string_lossy().into_owned()],
         app.state(),
     );
@@ -511,7 +511,7 @@ fn import_rejects_missing_and_directory_paths() {
 
     for path in [missing, directory_pdf] {
         assert!(
-            import_local_documents(vec![path.to_string_lossy().into_owned()], app.state()).is_err()
+            import_local_documents_for_test(vec![path.to_string_lossy().into_owned()], app.state()).is_err()
         );
     }
 
@@ -534,7 +534,7 @@ fn import_rejects_symlinked_pdf_input() {
     symlink(&target, &symlink_path).expect("create symlink");
     let app = app_with_library(&library_root);
 
-    assert!(import_local_documents(
+    assert!(import_local_documents_for_test(
         vec![symlink_path.to_string_lossy().into_owned()],
         app.state()
     )
@@ -559,7 +559,7 @@ fn import_rejects_fifo_pdf_input() {
     let app = app_with_library(&library_root);
 
     assert!(
-        import_local_documents(vec![fifo_path.to_string_lossy().into_owned()], app.state())
+        import_local_documents_for_test(vec![fifo_path.to_string_lossy().into_owned()], app.state())
             .is_err()
     );
     assert!(crate::commands::list_documents(app.state())
