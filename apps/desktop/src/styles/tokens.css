@@ -380,7 +380,7 @@ textarea::placeholder {
 .settings-page__sidebar {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 1px;
   height: 100vh;
   min-height: 0;
   padding: 38px 14px 22px;
@@ -408,6 +408,7 @@ textarea::placeholder {
   padding: 4px 10px;
   font-weight: 600;
   font-size: 13px;
+  margin-bottom: 13px;
 }
 
 .settings-page__back:hover,
