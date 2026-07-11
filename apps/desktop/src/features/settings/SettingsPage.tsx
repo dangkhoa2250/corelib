@@ -8,6 +8,7 @@ import {
   type AiProviderId,
 } from "../../domain/ai";
 import { IconEye, IconEyeOff } from "../../app/icons";
+import { IconArrowLeft, IconMemora, IconSearch } from "../../app/icons";
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
@@ -35,6 +36,7 @@ export interface SettingsPageProps {
   clearApiKey: (provider: AiProviderId) => Promise<void>;
   listModels: (provider: AiProviderId) => Promise<AiModel[]>;
   onDefaultChange?: (provider: AiProviderId | null, model: string) => void;
+  onBack?: () => void;
 }
 
 function readProvider(): AiProviderId {
@@ -57,7 +59,7 @@ export function readAiPreference(): { provider: AiProviderId | null; model: stri
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, onDefaultChange }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, onDefaultChange, onBack }: SettingsPageProps) {
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -73,7 +75,9 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [targetLanguage, setTargetLanguage] = useState(readAiPreference().targetLanguage);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
+  const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
 
   useEffect(() => {
     let cancelled = false;
@@ -154,22 +158,38 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
 
   return (
     <main className="settings-page">
-      <header className="settings-page__header">
-        <div>
-          <p className="settings-page__eyebrow">Preferences</p>
-          <h1>Settings</h1>
-          <p>Connect an AI provider to translate selected text into flashcards.</p>
-        </div>
-      </header>
+      <aside className="settings-page__sidebar" aria-label="Settings navigation">
+        <button className="settings-page__back" onClick={onBack} type="button">
+          <IconArrowLeft />
+          <span>Back to app</span>
+        </button>
+        <label className="settings-page__search">
+          <IconSearch />
+          <input aria-label="Search settings" onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings…" value={searchQuery} />
+        </label>
+        <p className="settings-page__nav-label">Models</p>
+        <button className="settings-page__nav-item is-active" type="button">
+          <span className="settings-page__nav-icon"><IconMemora /></span>
+          Model
+        </button>
+      </aside>
 
-      <section className="settings-page__section" aria-labelledby="ai-provider-heading">
-        <div className="settings-page__section-heading">
-          <div>
-            <h2 id="ai-provider-heading">AI provider</h2>
-            <p>Only the API key is required. Provider endpoints are configured automatically.</p>
+      <section className="settings-page__main">
+        <header className="settings-page__header">
+          <p className="settings-page__eyebrow">Models</p>
+          <h1>Model</h1>
+          <p>Choose the providers and model used by Memora.</p>
+        </header>
+
+        {showModelSettings ? <>
+        <section className="settings-page__section" aria-labelledby="providers-heading">
+          <div className="settings-page__section-heading">
+            <div>
+              <h2 id="providers-heading">Providers</h2>
+              <p>Add multiple providers and manage their API keys.</p>
+            </div>
+            {defaultProvider ? <span className="settings-page__default-badge">Default: {providerDefinition(defaultProvider).name}</span> : null}
           </div>
-          {defaultProvider ? <span className="settings-page__default-badge">Default: {providerDefinition(defaultProvider).name}</span> : null}
-        </div>
 
         <label className="settings-page__field">
           <span>Provider</span>
@@ -218,6 +238,16 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           {connected[provider] ? <button className="settings-page__secondary-button" disabled={loading} onClick={() => void handleClear()} type="button">Remove key</button> : null}
         </div>
 
+        </section>
+
+        <section className="settings-page__section" aria-labelledby="translate-model-heading">
+          <div className="settings-page__section-heading">
+            <div>
+              <h2 id="translate-model-heading">Translate model</h2>
+              <p>Used when you translate selected text into a card.</p>
+            </div>
+          </div>
+
         <label className="settings-page__field">
           <span>Model</span>
           <select aria-label="AI model" disabled={loading || models.length === 0} value={selectedModel} onChange={(event) => {
@@ -248,6 +278,8 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
 
         {error ? <p className="settings-page__error" role="alert">{error}</p> : null}
         <p className="settings-page__privacy">API keys are stored in the device keychain and are never saved in cards.</p>
+      </section>
+        </> : <p className="settings-page__empty">No settings match “{searchQuery}”.</p>}
       </section>
     </main>
   );

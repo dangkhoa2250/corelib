@@ -532,6 +532,19 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     );
   }
 
+  if (route.name === "settings") {
+    return (
+      <SettingsPage
+        hasApiKey={aiApi.hasApiKey}
+        saveApiKey={aiApi.saveApiKey}
+        clearApiKey={aiApi.clearApiKey}
+        listModels={aiApi.listModels}
+        onDefaultChange={handleAiDefaultChange}
+        onBack={() => setRoute({ name: "library" })}
+      />
+    );
+  }
+
   const activeSection: AppSection =
     route.name === "memora" || route.name === "deckDetail"
       ? "memora"
@@ -539,8 +552,6 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       ? "memora"
       : route.name === "trash"
       ? "trash"
-      : route.name === "settings"
-      ? "settings"
       : "library";
 
   return (
@@ -564,15 +575,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
         onSettingsClick={() => setRoute({ name: "settings" })}
       />
       <div className="app-shell__content">
-        {route.name === "settings" ? (
-          <SettingsPage
-            hasApiKey={aiApi.hasApiKey}
-            saveApiKey={aiApi.saveApiKey}
-            clearApiKey={aiApi.clearApiKey}
-            listModels={aiApi.listModels}
-            onDefaultChange={handleAiDefaultChange}
-          />
-        ) : route.name === "memora" ? (
+        {route.name === "memora" ? (
           <MemoraPage
             listDecks={learning.listDecks}
             listDueCards={learning.listDueCards}

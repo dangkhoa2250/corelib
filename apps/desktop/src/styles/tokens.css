@@ -141,24 +141,108 @@ select {
 }
 
 .settings-page {
-  min-height: 100%;
-  padding: clamp(24px, 5vw, 72px);
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  min-height: 100vh;
+  color: #1d1d1f;
   background: #f5f5f7;
 }
 
-.settings-page__header,
-.settings-page__section {
-  width: min(760px, 100%);
-  margin: 0 auto;
+.settings-page__sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 14px;
+  border-right: 1px solid rgb(0 0 0 / 8%);
+  background: #e5e5e7;
+}
+
+.settings-page__back,
+.settings-page__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  color: #3a3a3c;
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-page__back {
+  padding: 12px 10px;
+  font-weight: 600;
+}
+
+.settings-page__back:hover,
+.settings-page__nav-item:hover {
+  background: rgb(255 255 255 / 45%);
+}
+
+.settings-page__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgb(0 0 0 / 10%);
+  border-radius: 10px;
+  color: #6e6e73;
+  background: rgb(255 255 255 / 45%);
+}
+
+.settings-page__search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: #1d1d1f;
+  background: transparent;
+  font-size: 13px;
+}
+
+.settings-page__search input::placeholder {
+  color: #6e6e73;
+}
+
+.settings-page__nav-label {
+  margin: 14px 8px 0;
+  color: #6e6e73;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.settings-page__nav-item {
+  padding: 9px 10px;
+}
+
+.settings-page__nav-item.is-active {
+  color: #1d1d1f;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+  font-weight: 600;
+}
+
+.settings-page__nav-icon {
+  display: flex;
+  color: #6e6e73;
+}
+
+.settings-page__main {
+  width: min(940px, 100%);
+  padding: 64px clamp(28px, 6vw, 88px);
 }
 
 .settings-page__header {
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 
 .settings-page__header h1 {
   margin: 0;
-  font-size: clamp(30px, 4vw, 44px);
+  font-size: clamp(32px, 4vw, 48px);
   letter-spacing: -0.04em;
 }
 
@@ -173,7 +257,7 @@ select {
 
 .settings-page__eyebrow {
   margin: 0 0 8px;
-  color: #007aff;
+  color: #6e6e73;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -181,11 +265,12 @@ select {
 }
 
 .settings-page__section {
+  margin: 0 0 28px;
   padding: 24px;
   border: 1px solid rgb(0 0 0 / 8%);
-  border-radius: 20px;
+  border-radius: 16px;
   background: #fff;
-  box-shadow: 0 16px 40px rgb(0 0 0 / 5%);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 4%);
 }
 
 .settings-page__section-heading {
@@ -319,6 +404,14 @@ select {
 .settings-page__privacy {
   margin: 20px 0 0;
   font-size: 12px;
+}
+
+.settings-page__empty {
+  padding: 24px;
+  border: 1px dashed #c7c7cc;
+  border-radius: 16px;
+  color: #6e6e73;
+  background: #fff;
 }
 
 .library-page {

@@ -50,7 +50,7 @@ test("shows provider errors without losing the settings form", async () => {
   await user.click(screen.getByRole("button", { name: "Connect" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Invalid API key");
-  expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Model" })).toBeInTheDocument();
 });
 
 test("masks the API key by default and toggles visibility with the eye button", async () => {
