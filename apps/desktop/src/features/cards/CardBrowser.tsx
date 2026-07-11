@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { Deck, CardBrowserRow, CardLifecycleState, CardSort } from "../../domain/learning";
+import type { Deck, CardBrowserRow, CardLifecycleState, CardSort, CardSource } from "../../domain/learning";
 import { queryDeckCards, moveCards, setCardsSuspended, trashCards, listActiveTags, createCard, updateAndMoveCard } from "../../lib/learning";
 import { CardSidePanel } from "./CardSidePanel";
+import { SourceViewer } from "./SourceViewer";
 
 export interface CardBrowserProps {
   decks: Deck[];
@@ -19,7 +20,7 @@ export interface CardBrowserProps {
   listActiveTags?: typeof listActiveTags;
   createCard?: typeof createCard;
   updateAndMoveCard?: typeof updateAndMoveCard;
-  onViewSource?: (row: CardBrowserRow) => void;
+  getDocumentFileUrl?: (id: string) => Promise<string>;
 }
 
 const PAGE_SIZE = 50;
@@ -40,9 +41,10 @@ export function CardBrowser({
   listActiveTags: customListActiveTags = listActiveTags,
   createCard: customCreate = createCard,
   updateAndMoveCard: customUpdateAndMove = updateAndMoveCard,
-  onViewSource: customViewSource = () => {},
+  getDocumentFileUrl: customGetDocumentFileUrl,
 }: CardBrowserProps) {
   const [deckId, setDeckId] = useState(initialDeckId);
+  const [sourceView, setSourceView] = useState<CardSource | null>(null);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [states, setStates] = useState<CardLifecycleState[]>([]);
@@ -475,102 +477,113 @@ export function CardBrowser({
       )}
 
       {/* Main Table */}
-      <div className="card-browser__table-container">
-        <table className="card-browser__table">
-          <thead>
-            <tr>
-              <th className="card-browser__th-select">
-                <input
-                  type="checkbox"
-                  checked={rows.length > 0 && selectedIds.size === rows.length}
-                  onChange={handleToggleSelectAll}
-                />
-              </th>
-              <th>Front</th>
-              <th>Back</th>
-              <th>Deck</th>
-              <th>State</th>
-              <th>Due Date</th>
-              <th>Updated</th>
-              <th>Source</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(row => {
-              const isSelected = selectedIds.has(row.id);
-              const isSuspended = row.state === "suspended";
-              return (
-                <tr
-                  key={row.id}
-                  className={`card-browser__row ${isSelected ? 'is-selected' : ''} ${isSuspended ? 'is-suspended' : ''}`}
-                  onDoubleClick={() => handleRowDoubleClick(row)}
-                >
-                  <td className="card-browser__td-select">
+      <div className="card-browser__split">
+        <div className="card-browser__main">
+          <div className="card-browser__table-container">
+            <table className="card-browser__table">
+              <thead>
+                <tr>
+                  <th className="card-browser__th-select">
                     <input
                       type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleToggleRow(row.id)}
+                      checked={rows.length > 0 && selectedIds.size === rows.length}
+                      onChange={handleToggleSelectAll}
                     />
-                  </td>
-                  <td className="card-browser__td-text card-browser__td-front">
-                    <div className="card-browser__cell-text">{row.front}</div>
-                    {row.tags.length > 0 && (
-                      <div className="card-browser__cell-tags">
-                        {row.tags.map(t => <span key={t} className="card-browser__cell-tag">#{t}</span>)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="card-browser__td-text card-browser__td-back">
-                    <div className="card-browser__cell-text">{row.back}</div>
-                  </td>
-                  <td>
-                    <span className="card-browser__deck-badge">{row.deckName}</span>
-                  </td>
-                  <td>
-                    <span className={`card-browser__state-badge card-browser__state-badge--${row.state}`}>
-                      {row.state}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="card-browser__date-cell">{formatDate(row.dueAt)}</span>
-                  </td>
-                  <td>
-                    <span className="card-browser__date-cell">{formatDate(row.updatedAt)}</span>
-                  </td>
-                  <td>
-                    {row.source?.documentId ? (
-                      <button
-                        type="button"
-                        className="card-browser__source-btn"
-                        onClick={() => customViewSource(row)}
-                        aria-label="View source"
-                      >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                          <circle cx="12" cy="12" r="3"/>
-                        </svg>
-                      </button>
-                    ) : null}
-                  </td>
+                  </th>
+                  <th>Front</th>
+                  <th>Back</th>
+                  <th>Deck</th>
+                  <th>State</th>
+                  <th>Due Date</th>
+                  <th>Updated</th>
+                  <th>Source</th>
                 </tr>
-              );
-            })}
-            {rows.length === 0 && !loading && (
-              <tr>
-                <td colSpan={8} className="card-browser__empty">
-                  No cards found matching current filters.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {rows.map(row => {
+                  const isSelected = selectedIds.has(row.id);
+                  const isSuspended = row.state === "suspended";
+                  return (
+                    <tr
+                      key={row.id}
+                      className={`card-browser__row ${isSelected ? 'is-selected' : ''} ${isSuspended ? 'is-suspended' : ''}`}
+                      onDoubleClick={() => handleRowDoubleClick(row)}
+                    >
+                      <td className="card-browser__td-select">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleRow(row.id)}
+                        />
+                      </td>
+                      <td className="card-browser__td-text card-browser__td-front">
+                        <div className="card-browser__cell-text">{row.front}</div>
+                        {row.tags.length > 0 && (
+                          <div className="card-browser__cell-tags">
+                            {row.tags.map(t => <span key={t} className="card-browser__cell-tag">#{t}</span>)}
+                          </div>
+                        )}
+                      </td>
+                      <td className="card-browser__td-text card-browser__td-back">
+                        <div className="card-browser__cell-text">{row.back}</div>
+                      </td>
+                      <td>
+                        <span className="card-browser__deck-badge">{row.deckName}</span>
+                      </td>
+                      <td>
+                        <span className={`card-browser__state-badge card-browser__state-badge--${row.state}`}>
+                          {row.state}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="card-browser__date-cell">{formatDate(row.dueAt)}</span>
+                      </td>
+                      <td>
+                        <span className="card-browser__date-cell">{formatDate(row.updatedAt)}</span>
+                      </td>
+                      <td>
+                        {row.source?.documentId ? (
+                          <button
+                            type="button"
+                            className="card-browser__source-btn"
+                            onClick={() => setSourceView(row.source)}
+                            aria-label="View source"
+                          >
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                              <circle cx="12" cy="12" r="3"/>
+                            </svg>
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {rows.length === 0 && !loading && (
+                  <tr>
+                    <td colSpan={8} className="card-browser__empty">
+                      No cards found matching current filters.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
 
-        {/* Intersection Observer target for scroll trigger */}
-        {nextCursor && (
-          <div ref={observerRef} className="card-browser__scroll-trigger">
-            {loadingMore ? "Loading more cards..." : <button type="button" onClick={loadMore}>Load More</button>}
+            {/* Intersection Observer target for scroll trigger */}
+            {nextCursor && (
+              <div ref={observerRef} className="card-browser__scroll-trigger">
+                {loadingMore ? "Loading more cards..." : <button type="button" onClick={loadMore}>Load More</button>}
+              </div>
+            )}
           </div>
-        )}
+        </div>
+        {sourceView && customGetDocumentFileUrl ? (
+          <SourceViewer
+            source={sourceView}
+            getDocumentFileUrl={customGetDocumentFileUrl}
+            onClose={() => setSourceView(null)}
+          />
+        ) : null}
       </div>
 
       {/* Card Edit Side Panel */}
