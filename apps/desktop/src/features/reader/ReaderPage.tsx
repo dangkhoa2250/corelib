@@ -574,6 +574,7 @@ interface ReaderPageProps {
   composerDecks?: CardComposerDeck[];
   composerError?: string | null;
   onSaveCard?: (input: CardSaveInput) => Promise<void>;
+  onTranslate?: (text: string) => Promise<string>;
   onCloseComposer?: () => void;
   sourceHighlight?: CardSource | null;
 }
@@ -588,6 +589,7 @@ export function ReaderPage({
   composerDecks,
   composerError,
   onSaveCard,
+  onTranslate,
   onCloseComposer,
   sourceHighlight,
 }: ReaderPageProps) {
@@ -1206,6 +1208,7 @@ export function ReaderPage({
           decks={composerDecks ?? []}
           onCancel={onCloseComposer}
           onSave={onSaveCard}
+          onTranslate={onTranslate}
           variant="panel"
           externalError={composerError}
         />

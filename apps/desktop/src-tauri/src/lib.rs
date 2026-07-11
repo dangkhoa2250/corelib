@@ -1,6 +1,7 @@
 use tauri::Manager;
 
 pub mod commands;
+pub mod ai;
 pub mod drive_api;
 pub mod drive_auth;
 pub mod drive_cache;
@@ -86,6 +87,11 @@ pub fn run() {
             commands::restore_cards,
             commands::delete_cards_permanently,
             commands::empty_trash,
+            ai::save_ai_api_key,
+            ai::clear_ai_api_key,
+            ai::has_ai_api_key,
+            ai::list_ai_models,
+            ai::translate_with_ai,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

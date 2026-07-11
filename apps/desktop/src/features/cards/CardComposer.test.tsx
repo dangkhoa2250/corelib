@@ -69,6 +69,25 @@ test("prefills the front from the selection and lets both card sides be edited",
   expect(back).toHaveValue("A set closed under vector addition and scalar multiplication.");
 });
 
+test("translates the selected text into the back field", async () => {
+  const onTranslate = vi.fn().mockResolvedValue("Tôi đã định gọi cho bạn.");
+  const { user } = renderComposer({ onTranslate });
+
+  await user.click(screen.getByRole("button", { name: "Translate" }));
+
+  expect(onTranslate).toHaveBeenCalledWith(draft.quote);
+  expect(await screen.findByRole("textbox", { name: "Back" })).toHaveValue("Tôi đã định gọi cho bạn.");
+});
+
+test("keeps the composer usable when translation fails", async () => {
+  const { user } = renderComposer({ onTranslate: vi.fn().mockRejectedValue(new Error("No default AI provider")) });
+
+  await user.click(screen.getByRole("button", { name: "Translate" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("No default AI provider");
+  expect(screen.getByRole("textbox", { name: "Back" })).toBeEnabled();
+});
+
 test("hydrates the first loaded deck when the composer opened before decks resolved", async () => {
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onCancel = vi.fn();

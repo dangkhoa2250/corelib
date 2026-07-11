@@ -40,6 +40,7 @@ export interface CardComposerProps {
    */
   onSave: (input: CardSaveInput) => Promise<void>;
   onCancel: () => void;
+  onTranslate?: (text: string) => Promise<string>;
   variant?: "modal" | "panel";
   externalError?: string | null;
 }
@@ -61,6 +62,7 @@ export function CardComposer({
   decks,
   onSave,
   onCancel,
+  onTranslate,
   variant = "modal",
   externalError,
 }: CardComposerProps) {
@@ -71,6 +73,7 @@ export function CardComposer({
   const [deckValue, setDeckValue] = useState(() => activeDecks[0]?.id ?? NEW_DECK_VALUE);
   const [newDeckName, setNewDeckName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [translating, setTranslating] = useState(false);
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const dialogRef = useRef<HTMLElement | null>(null);
@@ -185,6 +188,20 @@ export function CardComposer({
     close();
   };
 
+  const handleTranslate = async () => {
+    if (!onTranslate || translating || saving || !front.trim()) return;
+    setTranslating(true);
+    setError(null);
+    try {
+      const translation = await onTranslate(front.trim());
+      setBack(translation);
+    } catch (translateError) {
+      setError(errorMessage(translateError));
+    } finally {
+      setTranslating(false);
+    }
+  };
+
   if (closed) {
     return null;
   }
@@ -244,10 +261,23 @@ export function CardComposer({
         </label>
 
         <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
-          Back
+          <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+            Back
+            {onTranslate ? (
+              <button
+                aria-label="Translate"
+                disabled={saving || translating || !front.trim()}
+                onClick={() => void handleTranslate()}
+                style={{ border: 0, borderRadius: "999px", padding: "5px 10px", color: "#007aff", background: "#e5f1ff", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}
+                type="button"
+              >
+                {translating ? "Translating…" : "Translate"}
+              </button>
+            ) : null}
+          </span>
           <textarea
             aria-label="Back"
-            disabled={saving}
+            disabled={saving || translating}
             onChange={(event) => setBack(event.target.value)}
             rows={5}
             value={back}

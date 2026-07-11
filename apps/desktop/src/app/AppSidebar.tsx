@@ -1,13 +1,14 @@
 import type { ComponentType } from "react";
 
-import { IconLibrary, IconMemora, IconSearch, IconTrash } from "./icons";
+import { IconLibrary, IconMemora, IconSearch, IconSettings, IconTrash } from "./icons";
 
-export type AppSection = "library" | "memora" | "trash";
+export type AppSection = "library" | "memora" | "trash" | "settings";
 
 interface AppSidebarProps {
   active: AppSection;
   onNavigate: (section: AppSection) => void;
   onSearchClick: () => void;
+  onSettingsClick: () => void;
 }
 
 const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] = [
@@ -16,7 +17,7 @@ const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] =
   { section: "trash", label: "Trash", icon: IconTrash },
 ];
 
-export function AppSidebar({ active, onNavigate, onSearchClick }: AppSidebarProps) {
+export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick }: AppSidebarProps) {
   return (
     <nav aria-label="Primary" className="app-sidebar">
       <button
@@ -47,6 +48,17 @@ export function AppSidebar({ active, onNavigate, onSearchClick }: AppSidebarProp
           );
         })}
       </ul>
+      <div className="app-sidebar__footer">
+        <button
+          aria-current={active === "settings" ? "page" : undefined}
+          className={`app-sidebar__nav-item ${active === "settings" ? "is-active" : ""}`}
+          onClick={onSettingsClick}
+          type="button"
+        >
+          <span aria-hidden="true" className="app-sidebar__nav-icon"><IconSettings /></span>
+          Settings
+        </button>
+      </div>
     </nav>
   );
 }
