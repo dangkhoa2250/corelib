@@ -1,6 +1,6 @@
 # Corelib project memory
 
-Last updated: 2026-07-10
+Last updated: 2026-07-11
 
 ## What this project is
 
@@ -8,7 +8,7 @@ Corelib is becoming a macOS-first personal learning/research library. The first 
 
 ## Current state
 
-The first Library v1 slice is implemented and merged into `master`:
+The Library v1 slice and the Memora (native Anki-style learning) slice are implemented and merged into `master`:
 
 - Tauri 2 + React + TypeScript desktop app under `apps/desktop`.
 - Apple Books-like flat cover grid.
@@ -20,16 +20,14 @@ The first Library v1 slice is implemented and merged into `master`:
 - PDF.js reader with page thumbnails, outline, in-document search, zoom, reading-position persistence, and lazy rendering.
 - Zoom fix: cursor-anchored Ctrl-wheel/pinch, center-anchored toolbar zoom, and scroll layout that follows the zoom scale.
 - Google Drive: browse/select PDFs or folders, read-only OAuth flow, download-on-demand cache, lazy covers, cache clearing, and offline cached reading.
+- Persistent Apple Books-style sidebar with Search, Library, and Memora sections; Feather-style icons; deck rename/delete from the sidebar.
+- Memora Card Browser: full card lifecycle UI scoped to decks — create, edit (front/back/tags/deck), move, suspend/unsuspend, trash, restore (to original or different deck), delete permanently, and empty trash. Tag pills, status filters, sort, search, and infinite scroll.
+- Atomic card edit + move: `update_and_move_card` backend command updates content and optionally moves deck in a single SQLite transaction, replacing the previous two-step `update_card` → `move_cards` flow that could leave content changed when a deck move failed.
+- Migration 0006 (`card_lifecycle`): adds `deleted_at`, `deleted_from_deck_name`, and `suspended_from_state` columns; rebuilds cards, card_sources, review_logs, and card_tags with nullable `deck_id`; recreates indexes and FTS cleanup trigger.
 
 ## Important commits
 
-- `78605f4` — complete Google Drive library integration; current `master` HEAD.
-- `3259c4e` — Drive navigation/download/lazy-cover hardening.
-- `2c2e32e` — PDF zoom anchored while scrolling.
-- `c5de93c` — bounded indexing queue and extraction limits.
-- `a68011f` — background indexing and `Cmd+K` search.
-- `8667048` — Library grid and local PDF import.
-- `ec30019` — atomic managed PDF copy.
+- `78605f4` — complete Google Drive library integration.
 - `867a33e` — native Anki learning design and data model.
 - `1590d97`, `a7a77ba` — learning schema, upgrade-safe source deletion, and FTS cleanup.
 - `65ed0ee`, `1b28540` — FSRS 6.6 scheduler with millisecond ISO due timestamps.
@@ -37,6 +35,9 @@ The first Library v1 slice is implemented and merged into `master`:
 - `22bc7f4`, `9685eae` — typed Tauri learning commands and frontend bridge.
 - `229016a`, `b79e0e2`, `2145949` — PDF selection → editable Front/Back composer, cross-page guards, and async deck hydration.
 - `ca60c0a`, `617c5f3`, `b5005b6`, `44881ef`, `829c8f7`, `2e1cc1c` — Review today, Search Everything card results, timer/source error handling, and source resolver integration.
+- `b662719`, `1200ce1`, `630861f`, `3dfb3f8` — persistent sidebar, deck management, flashcard browsing UI, and interactive slideshow.
+- `99e6e9c`, `3f9c630` — Memora card browser lifecycle design and implementation (trash, restore, suspend, move, bulk actions).
+- `749c685` — scope Card Browser to Memora decks.
 
 ## How to run
 
@@ -55,7 +56,7 @@ cargo test --all-targets --manifest-path src-tauri/Cargo.toml
 cargo clippy --all-targets --all-features --manifest-path src-tauri/Cargo.toml -- -D warnings
 ```
 
-The current verified Anki baseline is 74 frontend tests, 73 Rust unit tests, and 1 PDF extraction isolation test passing; production TypeScript/Vite build, Playwright learning smoke test, Rust fmt, and clippy with `-D warnings` are green.
+The current verified baseline is 91 frontend tests, 89 Rust unit tests, 1 PDF extraction isolation test, and 2 Playwright E2E tests (library + learning lifecycle) passing; production TypeScript/Vite build, Rust fmt, and clippy with `-D warnings` are green.
 
 ## Architecture notes
 
@@ -66,7 +67,8 @@ The current verified Anki baseline is 74 frontend tests, 73 Rust unit tests, and
 - `document_id` is stable and should anchor future notes, highlights, vocabulary cards, AI/RAG citations, and cross-device sync.
 - Learning cards live in `decks`, `cards`, `card_sources`, `review_logs`, `tags`, `card_tags`, and FTS5 `card_text`. Source document deletion preserves the card and quote while setting `documentId` to null.
 - Card creation is manual: PDF selection pre-fills Front, Back remains user-editable, and both fields are required. Review uses native FSRS 6.6 at 90% desired retention with Again/Hard/Good/Easy.
-- `Cmd/Ctrl+K` now searches documents and cards. Card results open Review today; Show source resolves the source document/page and keeps review usable when a source is unavailable.
+- Card editing uses a single atomic `update_and_move_card` command that combines content update and optional deck move in one transaction; if the deck move fails, the content change rolls back too.
+- `Cmd/Ctrl+K` searches documents and cards. Card results open Review today; Show source resolves the source document/page and keeps review usable when a source is unavailable.
 - OAuth tokens belong in the OS credential store; do not put secrets in SQLite or logs.
 
 ## Not implemented yet
