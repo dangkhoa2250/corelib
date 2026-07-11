@@ -22,6 +22,7 @@ import { DrivePicker } from "../features/drive/DrivePicker";
 import { ReviewPage } from "../features/review/ReviewPage";
 import type { CardSaveInput } from "../features/cards/CardComposer";
 import { MemoraPage } from "../features/memora/MemoraPage";
+import { DeckDetailPage } from "../features/memora/DeckDetailPage";
 import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
@@ -145,6 +146,7 @@ type AppRoute =
   | { name: "reader"; document: LibraryDocument }
   | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview> }
   | { name: "cardBrowser"; deckId: string }
+  | { name: "deckDetail"; deck: Deck }
   | { name: "trash" };
 
 export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi }: AppProps) {
@@ -198,7 +200,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   }, [learning]);
 
   useEffect(() => {
-    if (route.name === "cardBrowser" || route.name === "trash") {
+    if (route.name === "deckDetail" || route.name === "cardBrowser" || route.name === "trash") {
       void reloadDecks();
     }
   }, [route.name, reloadDecks]);
@@ -224,8 +226,17 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       if (!window.confirm("You have unsaved changes. Discard changes?")) return;
     }
     setIsBrowserDirty(false);
-    setRoute({ name: "cardBrowser", deckId: deck.id });
+    setRoute({ name: "deckDetail", deck });
   }, [isBrowserDirty]);
+
+  const handleStudyDeck = useCallback(async (deckId: string) => {
+    try {
+      const cards = await learning.listDueCards();
+      const deckCards = cards.filter((c) => c.deckId === deckId);
+      const pairs = await Promise.all(deckCards.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
+      setRoute({ name: "review", cards: deckCards, previews: Object.fromEntries(pairs) });
+    } catch (reviewError) { setError(errorMessage(reviewError)); }
+  }, [learning]);
   const load = useCallback(async () => {
     const currentRequestId = ++requestId.current;
     setLoading(true);
@@ -481,7 +492,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   }
 
   const activeSection: AppSection =
-    route.name === "memora"
+    route.name === "memora" || route.name === "deckDetail"
       ? "memora"
       : route.name === "cardBrowser"
       ? "memora"
@@ -519,6 +530,23 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
             deleteDeck={handleDeleteDeck}
             countDeckCards={learning.countDeckCards}
             onOpenDeck={handleOpenDeck}
+          />
+        ) : route.name === "deckDetail" ? (
+          <DeckDetailPage
+            deck={route.deck}
+            decks={decks}
+            selectedIds={selectedCardIds}
+            setSelectedIds={setSelectedCardIds}
+            refreshTrigger={browserRefreshTrigger}
+            onBack={() => {
+              if (isBrowserDirty) {
+                if (!window.confirm("You have unsaved changes. Discard changes?")) return;
+              }
+              setIsBrowserDirty(false);
+              setRoute({ name: "memora" });
+            }}
+            onStudyDeck={handleStudyDeck}
+            onDirtyStateChange={setIsBrowserDirty}
           />
         ) : route.name === "cardBrowser" ? (
           <CardBrowser

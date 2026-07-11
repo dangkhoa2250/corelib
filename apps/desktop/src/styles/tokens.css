@@ -364,6 +364,99 @@ select {
   cursor: pointer;
 }
 
+.deck-detail-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.deck-detail-page__stats {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgb(0 0 0 / 6%);
+  background: #fff;
+}
+
+.deck-detail-page__stats-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.deck-detail-page__stats-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.deck-detail-page__stats-info h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.deck-detail-page__study-btn {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 20px;
+  background: #0071e3;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.deck-detail-page__study-btn:disabled {
+  background: #c7c7cc;
+  cursor: not-allowed;
+}
+
+.deck-detail-page__study-btn:not(:disabled):hover {
+  background: #0077ed;
+}
+
+.deck-detail-page__stats-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.deck-stat-badge {
+  font-size: 0.85rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f5f5f7;
+  color: #55555a;
+}
+
+.deck-stat-badge--new { background: #e8f2ff; color: #0071e3; }
+.deck-stat-badge--learning { background: #e8f8e8; color: #34c759; }
+.deck-stat-badge--due { background: #fff2e8; color: #ff9500; }
+.deck-stat-badge--review { background: #f0f0f5; color: #5856d6; }
+.deck-stat-badge--relearning { background: #ffebeb; color: #ff3b30; }
+.deck-stat-badge--suspended { background: #f5f5f7; color: #8e8e93; }
+.deck-stat-badge--total { background: #f5f5f7; color: #55555a; }
+
+.deck-detail-page__error {
+  color: #ff3b30;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.deck-detail-page__loading {
+  color: #8e8e93;
+  font-size: 14px;
+  margin-top: 8px;
+}
+
+.deck-detail-page__card-browser {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .memora-deck-cards__back {
   align-self: flex-start;
   padding: 0;
