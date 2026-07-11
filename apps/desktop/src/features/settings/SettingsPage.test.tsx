@@ -33,8 +33,11 @@ test("connects a provider and loads models using only an API key", async () => {
   await waitFor(() => expect(saveApiKey).toHaveBeenCalledWith("nvidia", "nvapi-test"));
   expect(listModels).toHaveBeenCalledWith("nvidia");
   await user.type(screen.getByLabelText("Search models"), "Gemma");
-  await user.click(await screen.findByRole("button", { name: /Gemma 4 31B/ }));
+  const result = await screen.findByRole("button", { name: /Gemma 4 31B/ });
+  await user.click(result);
   expect(screen.getByText("Selected: Gemma 4 31B")).toBeInTheDocument();
+  expect(result).toHaveTextContent("NVIDIA NIM");
+  expect(result).not.toHaveTextContent("google/gemma-4-31b");
   expect(screen.queryByRole("checkbox", { name: /Use this provider/ })).not.toBeInTheDocument();
 });
 
@@ -82,7 +85,7 @@ test("masks the API key by default and toggles visibility with the eye button", 
 test("shows a masked saved-key state after the key is stored", async () => {
   render(
     <SettingsPage
-      hasApiKey={vi.fn().mockResolvedValue(true)}
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-ai-studio"))}
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn()}
@@ -147,7 +150,7 @@ test("loads models for the connected provider when settings opens", async () => 
 
   render(
     <SettingsPage
-      hasApiKey={vi.fn().mockResolvedValue(true)}
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-ai-studio"))}
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={listModels}
@@ -157,4 +160,30 @@ test("loads models for the connected provider when settings opens", async () => 
   await waitFor(() => expect(listModels).toHaveBeenCalledWith("google-ai-studio"));
   await user.type(screen.getByLabelText("Search models"), "Gemini");
   expect(await screen.findByRole("button", { name: /Gemini 2\.5 Flash/ })).toBeInTheDocument();
+});
+
+test("searches models across connected providers without a translate provider selector", async () => {
+  const user = userEvent.setup();
+  const listModels = vi.fn((provider: string) => Promise.resolve(
+    provider === "google-ai-studio"
+      ? [{ id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" }]
+      : [{ id: "google/gemma-4-31b", name: "Gemma 4 31B" }],
+  ));
+
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-ai-studio" || provider === "nvidia"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={listModels}
+    />,
+  );
+
+  await waitFor(() => expect(listModels).toHaveBeenCalledWith("nvidia"));
+  expect(screen.queryByRole("combobox", { name: "Translate provider" })).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText("Search models"), "Gemma");
+  const result = await screen.findByRole("button", { name: /Gemma 4 31B/ });
+  expect(result).toHaveTextContent("Gemma 4 31B");
+  expect(result).toHaveTextContent("NVIDIA NIM");
+  expect(result).not.toHaveTextContent("google/gemma-4-31b");
 });

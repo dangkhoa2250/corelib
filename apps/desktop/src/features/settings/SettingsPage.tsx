@@ -69,7 +69,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     openrouter: false,
     cerebras: false,
   });
-  const [models, setModels] = useState<AiModel[]>([]);
+  const [modelsByProvider, setModelsByProvider] = useState<Partial<Record<AiProviderId, AiModel[]>>>({});
   const [selectedModel, setSelectedModel] = useState(readAiPreference().model);
   const [defaultProvider, setDefaultProvider] = useState<AiProviderId | null>(readAiPreference().provider);
   const [targetLanguage, setTargetLanguage] = useState(readAiPreference().targetLanguage);
@@ -80,8 +80,8 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
   const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
-  const translateProviderOptions = connectedProviders.length > 0 ? connectedProviders : AI_PROVIDERS;
-  const filteredModels = models.filter((model) => `${model.name} ${model.id}`.toLowerCase().includes(modelSearch.trim().toLowerCase()));
+  const searchableModels = connectedProviders.flatMap((item) => (modelsByProvider[item.id] ?? []).map((model) => ({ ...model, provider: item.id })));
+  const filteredModels = searchableModels.filter((model) => `${model.name} ${providerDefinition(model.provider).name}`.toLowerCase().includes(modelSearch.trim().toLowerCase()));
 
   useEffect(() => {
     let cancelled = false;
@@ -89,9 +89,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
       .then((entries) => {
         if (cancelled) return;
         setConnected(Object.fromEntries(entries) as Record<AiProviderId, boolean>);
-        if (entries.some(([id, hasKey]) => id === provider && hasKey)) {
-          void loadModels(provider);
-        }
+        void Promise.all(entries.filter(([, hasKey]) => hasKey).map(([id]) => loadModels(id)));
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
@@ -102,15 +100,13 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     setError(null);
     try {
       const result = await listModels(providerToLoad);
-      setModels(result);
+      setModelsByProvider((current) => ({ ...current, [providerToLoad]: result }));
       const savedModel = providerToLoad === defaultProvider ? readAiPreference().model : "";
-      const nextModel = result.some((model) => model.id === savedModel) ? savedModel : result[0]?.id ?? "";
-      setSelectedModel(nextModel);
-      if (providerToLoad === defaultProvider && nextModel) {
-        setPreference(`${DEFAULT_PROVIDER_KEY}.model`, nextModel);
+      if (result.some((model) => model.id === savedModel)) {
+        setSelectedModel(savedModel);
       }
     } catch (loadError) {
-      setModels([]);
+      setModelsByProvider((current) => ({ ...current, [providerToLoad]: [] }));
       setError(loadError instanceof Error ? loadError.message : String(loadError));
     } finally {
       setLoading(false);
@@ -138,7 +134,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     try {
       await clearApiKey(provider);
       setConnected((current) => ({ ...current, [provider]: false }));
-      setModels([]);
+      setModelsByProvider((current) => ({ ...current, [provider]: [] }));
       setSelectedModel("");
       setApiKey("");
       setShowApiKey(false);
@@ -160,7 +156,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     setProvider(nextProvider);
     setApiKey("");
     setShowApiKey(false);
-    setModels([]);
     setError(null);
     setShowProviderEditor(true);
   };
@@ -169,7 +164,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     setProvider(providerId);
     setApiKey("");
     setShowApiKey(false);
-    setModels([]);
     setError(null);
     setShowProviderEditor(true);
   };
@@ -217,7 +211,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
                   <span>{item.description}</span>
                 </div>
                 <div className="settings-page__provider-row-actions">
-                  {defaultProvider === item.id ? <span className="settings-page__default-badge">Default</span> : null}
                   <button onClick={() => handleManageProvider(item.id)} type="button">Manage</button>
                 </div>
               </div>
@@ -231,8 +224,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             setProvider(event.target.value as AiProviderId);
             setApiKey("");
             setShowApiKey(false);
-            setModels([]);
-            setModelSearch("");
             setError(null);
           }}>
             {AI_PROVIDERS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
@@ -284,22 +275,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             </div>
           </div>
 
-          <label className="settings-page__field">
-          <span>Provider</span>
-          <select aria-label="Translate provider" value={provider} onChange={(event) => {
-            const nextProvider = event.target.value as AiProviderId;
-            setProvider(nextProvider);
-            setApiKey("");
-            setShowApiKey(false);
-            setModels([]);
-            setModelSearch("");
-            setError(null);
-            if (connected[nextProvider]) void loadModels(nextProvider);
-          }}>
-            {translateProviderOptions.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        </label>
-
         <label className="settings-page__field">
           <span>Search models</span>
           <input aria-label="Search models" onChange={(event) => setModelSearch(event.target.value)} placeholder="Search by model name…" type="search" value={modelSearch} />
@@ -311,25 +286,25 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
               <button
                 aria-pressed={selectedModel === model.id}
                 className={`settings-page__model-result ${selectedModel === model.id ? "is-selected" : ""}`}
-                key={model.id}
+                key={`${model.provider}-${model.id}`}
                 onClick={() => {
                   setSelectedModel(model.id);
-                  setDefaultProvider(provider);
-                  setPreference(DEFAULT_PROVIDER_KEY, provider);
+                  setDefaultProvider(model.provider);
+                  setPreference(DEFAULT_PROVIDER_KEY, model.provider);
                   setPreference(`${DEFAULT_PROVIDER_KEY}.model`, model.id);
-                  onDefaultChange?.(provider, model.id);
+                  onDefaultChange?.(model.provider, model.id);
                   setModelSearch(model.name);
                 }}
                 type="button"
               >
                 <span>{model.name}</span>
-                <small>{model.id}</small>
+                <small>{providerDefinition(model.provider).name}</small>
               </button>
             ))}
           </div>
         ) : null}
 
-        {selectedModel ? <p className="settings-page__selected-model">Selected: {models.find((model) => model.id === selectedModel)?.name ?? selectedModel}</p> : null}
+        {selectedModel ? <p className="settings-page__selected-model">Selected: {searchableModels.find((model) => model.id === selectedModel)?.name ?? selectedModel}</p> : null}
 
         <label className="settings-page__field">
           <span>Translate to</span>
