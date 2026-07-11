@@ -28,6 +28,20 @@ This slice deliberately completes card management before expanding the review en
 
 ## User experience
 
+### Application navigation
+
+The persistent application sidebar contains exactly Library, Memora, and Trash. Card Browser is not a top-level application destination.
+
+Memora owns the card-management flow:
+
+```text
+Memora -> select deck -> deck-scoped Card Browser -> Back -> Memora
+```
+
+The Card Browser receives a required deck ID from the Memora route and does not expose an All Decks option in this slice. This keeps card management anchored to the deck the user intentionally opened.
+
+Trash remains a top-level application destination because it will eventually contain recoverable documents, notes, highlights, and other item types in addition to cards. The current implementation may render only card rows, but its navigation label and page shell must remain generic. Card-specific lifecycle persistence stays in the learning repository until a later cross-domain Trash design introduces a shared item-type model.
+
 ### Opening a deck
 
 Opening a deck navigates directly to its Card Browser. The existing slideshow is removed from the management flow; studying remains a separate session initiated from a Study action.
