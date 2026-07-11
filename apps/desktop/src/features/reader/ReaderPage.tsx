@@ -174,6 +174,7 @@ interface PdfPageProps {
   pagesContainerRef: React.RefObject<HTMLDivElement | null>;
   onVisible: () => void;
   onSelection: (source: CardSource, focusPage: number) => void;
+  highlightRects?: SelectionRect[] | null;
 }
 
 const PdfPage = React.memo(
@@ -186,6 +187,7 @@ const PdfPage = React.memo(
     pagesContainerRef,
     onVisible,
     onSelection,
+    highlightRects,
   }: PdfPageProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -489,6 +491,18 @@ const PdfPage = React.memo(
             Page {pageNumber}
           </div>
         )}
+        {isVisible && highlightRects?.map((rect, i) => (
+          <div key={i} style={{
+            position: "absolute",
+            left: `${rect.x}px`,
+            top: `${rect.y}px`,
+            width: `${rect.width}px`,
+            height: `${rect.height}px`,
+            background: "rgba(255, 230, 0, 0.35)",
+            pointerEvents: "none",
+            zIndex: 1,
+          }} />
+        ))}
       </div>
     );
   },
@@ -499,8 +513,9 @@ const PdfPage = React.memo(
       prevProps.renderScale === nextProps.renderScale &&
       prevProps.defaultWidth === nextProps.defaultWidth &&
       prevProps.defaultHeight === nextProps.defaultHeight &&
-      prevProps.pagesContainerRef === nextProps.pagesContainerRef
-      && prevProps.onSelection === nextProps.onSelection
+      prevProps.pagesContainerRef === nextProps.pagesContainerRef &&
+      prevProps.onSelection === nextProps.onSelection &&
+      prevProps.highlightRects === nextProps.highlightRects
     );
   }
 );
@@ -560,6 +575,7 @@ interface ReaderPageProps {
   composerError?: string | null;
   onSaveCard?: (input: CardSaveInput) => Promise<void>;
   onCloseComposer?: () => void;
+  sourceHighlight?: CardSource | null;
 }
 
 export function ReaderPage({
@@ -573,6 +589,7 @@ export function ReaderPage({
   composerError,
   onSaveCard,
   onCloseComposer,
+  sourceHighlight,
 }: ReaderPageProps) {
   const [pdfDoc, setPdfDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(document.lastReadPage ?? 1);
@@ -1151,6 +1168,7 @@ export function ReaderPage({
                   }
                 }}
                 onSelection={handleSelection}
+                highlightRects={sourceHighlight?.page === pageNumber ? sourceHighlight.rects : null}
               />
             ))}
             </div>

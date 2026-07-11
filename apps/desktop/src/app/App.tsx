@@ -26,7 +26,7 @@ import { AppSidebar, type AppSection } from "./AppSidebar";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
 import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended } from "../lib/learning";
-import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
+import type { BulkResult, CardBrowserQuery, CardBrowserRow, CardPage, CardSource, Deck, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
 
 export interface LibraryApi {
@@ -188,6 +188,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
   const [isBrowserDirty, setIsBrowserDirty] = useState(false);
+  const [sourceHighlight, setSourceHighlight] = useState<CardSource | null>(null);
 
   const reloadDecks = useCallback(async () => {
     try {
@@ -274,6 +275,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
   }, [importing, libraryApi, load]);
 
   const handleOpen = useCallback((document: LibraryDocument) => {
+    setSourceHighlight(null);
     setRoute({ name: "reader", document });
   }, []);
 
@@ -351,9 +353,24 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
     } catch (sourceError) {
       throw new Error(errorMessage(sourceError));
     }
+    setSourceHighlight(source);
     setRoute({ name: "reader", document: { ...document, lastReadPage: source.page } });
     return true;
   }, [documents, learning, libraryApi]);
+
+  const handleViewSource = useCallback(async (row: CardBrowserRow) => {
+    const source = row.source;
+    if (!source?.documentId) return;
+    let document: LibraryDocument;
+    try {
+      document = documents?.find((candidate) => candidate.id === source.documentId)
+        ?? await (libraryApi.getDocument ?? nativeGetDocument)(source.documentId);
+    } catch (_) {
+      return;
+    }
+    setSourceHighlight(source);
+    setRoute({ name: "reader", document: { ...document, lastReadPage: source.page } });
+  }, [documents, libraryApi]);
 
   const loadDriveFolder = useCallback(async (folderId?: string) => {
     const list = libraryApi.listDrive ?? listDrive;
@@ -458,7 +475,10 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       <>
         <ReaderPage
           document={route.document}
-          onBack={() => setRoute({ name: "library" })}
+          onBack={() => {
+            setSourceHighlight(null);
+            setRoute({ name: "library" });
+          }}
           getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
           onPageChange={handlePageChange}
           onCreateCard={handleCreateCard}
@@ -467,6 +487,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
           composerError={composerError}
           onSaveCard={handleSaveCard}
           onCloseComposer={handleCloseComposer}
+          sourceHighlight={sourceHighlight}
         />
         {palette}
       </>
@@ -535,6 +556,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
             updateAndMoveCard={learning.updateAndMoveCard}
             moveCards={learning.moveCards}
             setCardsSuspended={learning.setCardsSuspended}
+            onViewSource={handleViewSource}
           />
         ) : route.name === "trash" ? (
           <TrashPage

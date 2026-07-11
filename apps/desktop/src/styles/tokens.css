@@ -1613,6 +1613,24 @@ select {
   font-size: 13px;
 }
 
+.card-browser__source-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  color: #8e8e93;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, background 0.15s;
+}
+
+.card-browser__source-btn:hover {
+  color: #007aff;
+  background: #f0f0f5;
+}
+
 .card-browser__row {
   cursor: pointer;
   transition: background-color 0.15s;

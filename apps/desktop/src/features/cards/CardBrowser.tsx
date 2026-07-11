@@ -19,6 +19,7 @@ export interface CardBrowserProps {
   listActiveTags?: typeof listActiveTags;
   createCard?: typeof createCard;
   updateAndMoveCard?: typeof updateAndMoveCard;
+  onViewSource?: (row: CardBrowserRow) => void;
 }
 
 const PAGE_SIZE = 50;
@@ -39,6 +40,7 @@ export function CardBrowser({
   listActiveTags: customListActiveTags = listActiveTags,
   createCard: customCreate = createCard,
   updateAndMoveCard: customUpdateAndMove = updateAndMoveCard,
+  onViewSource: customViewSource = () => {},
 }: CardBrowserProps) {
   const [deckId, setDeckId] = useState(initialDeckId);
   const [query, setQuery] = useState("");
@@ -490,6 +492,7 @@ export function CardBrowser({
               <th>State</th>
               <th>Due Date</th>
               <th>Updated</th>
+              <th>Source</th>
             </tr>
           </thead>
           <tbody>
@@ -534,12 +537,27 @@ export function CardBrowser({
                   <td>
                     <span className="card-browser__date-cell">{formatDate(row.updatedAt)}</span>
                   </td>
+                  <td>
+                    {row.source?.documentId ? (
+                      <button
+                        type="button"
+                        className="card-browser__source-btn"
+                        onClick={() => customViewSource(row)}
+                        aria-label="View source"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      </button>
+                    ) : null}
+                  </td>
                 </tr>
               );
             })}
             {rows.length === 0 && !loading && (
               <tr>
-                <td colSpan={7} className="card-browser__empty">
+                <td colSpan={8} className="card-browser__empty">
                   No cards found matching current filters.
                 </td>
               </tr>
