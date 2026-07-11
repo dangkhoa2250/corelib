@@ -87,6 +87,14 @@ export function deleteDocument(
   return call<void>("delete_document", { id });
 }
 
+export function saveCover(
+  id: string,
+  data: number[],
+  call: Invoke = invoke as Invoke,
+): Promise<LibraryDocument> {
+  return call<LibraryDocument>("save_cover", { id, data });
+}
+
 export function renameDocument(
   id: string,
   title: string,

@@ -73,6 +73,7 @@ pub fn run() {
             commands::search_everything,
             commands::get_document,
             commands::rename_document,
+            commands::save_cover,
             commands::query_deck_cards,
             commands::list_active_tags,
             commands::update_card,

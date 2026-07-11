@@ -4,8 +4,11 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
 import { documentStatusLabel, type LibraryDocument } from "../../domain/document";
+import { saveCover as saveCoverApi } from "../../lib/desktop";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
+
+const coverCache = new Map<string, string>();
 
 interface DocumentCardProps {
   document: LibraryDocument;
@@ -29,6 +32,8 @@ function DynamicCover({
   const [visible, setVisible] = useState(false);
   const [rendered, setRendered] = useState(false);
 
+  const cachedUrl = coverCache.get(document.id);
+
   useEffect(() => {
     const element = coverRef.current;
     if (!element) return;
@@ -40,7 +45,7 @@ function DynamicCover({
   }, []);
 
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || cachedUrl) return;
     let active = true;
     let loadingTask: ReturnType<typeof pdfjs.getDocument> | undefined;
     let renderTask: { promise: Promise<unknown>; cancel: () => void } | undefined;
@@ -68,8 +73,22 @@ function DynamicCover({
         context.scale(dpr, dpr);
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
-        if (active) {
-          setRendered(true);
+        if (!active) return;
+
+        setRendered(true);
+
+        if (!coverCache.has(document.id)) {
+          canvas.toBlob(async (blob) => {
+            if (!blob) return;
+            const blobUrl = URL.createObjectURL(blob);
+            coverCache.set(document.id, blobUrl);
+
+            const buffer = await blob.arrayBuffer();
+            const data = Array.from(new Uint8Array(buffer));
+            try {
+              await saveCoverApi(document.id, data);
+            } catch (_) {}
+          }, "image/png");
         }
       } catch (_) {}
     };
@@ -81,12 +100,28 @@ function DynamicCover({
         void loadingTask.destroy();
       }
     };
-  }, [visible, document.id, document.source, document.status, getDocumentFileUrl]);
+  }, [visible, document.id, document.source, document.status, getDocumentFileUrl, cachedUrl]);
+
+  if (cachedUrl) {
+    return (
+      <div ref={coverRef} style={{ width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
+        <img src={cachedUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+      </div>
+    );
+  }
 
   return (
     <div ref={coverRef} style={{ width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", objectFit: "cover", display: rendered ? "block" : "none" }} />
-      {!rendered && <span aria-hidden="true">{document.title.charAt(0)}</span>}
+      {!rendered && (
+        document.status === "processing" ? (
+          <div className="cover-loading" aria-label="Preparing cover">
+            <div className="cover-loading__bar" />
+          </div>
+        ) : (
+          <span aria-hidden="true">{document.title.charAt(0)}</span>
+        )
+      )}
     </div>
   );
 }
@@ -112,7 +147,7 @@ export function DocumentCard({
       >
         <div className="document-card__cover">
           {document.coverUrl ? (
-            <img src={document.coverUrl} alt="" />
+            <img src={convertFileSrc(document.coverUrl)} alt="" />
           ) : getDocumentFileUrl ? (
             <DynamicCover document={document} getDocumentFileUrl={getDocumentFileUrl} />
           ) : (

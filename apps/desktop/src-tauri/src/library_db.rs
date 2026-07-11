@@ -428,6 +428,18 @@ impl LibraryDatabase {
         Ok(())
     }
 
+    pub fn set_cover_path(&mut self, id: &str, cover_path: Option<&str>) -> Result<DocumentSummary> {
+        let updated = self.connection.execute(
+            "UPDATE documents SET cover_path = ?1, updated_at = ?2 WHERE id = ?3",
+            params![cover_path, portable_timestamp(), id],
+        )?;
+        if updated == 0 {
+            return Err(LibraryDbError::DocumentNotFound);
+        }
+        self.summary_by_id(id)?
+            .ok_or(LibraryDbError::DocumentNotFound)
+    }
+
     pub fn clear_drive_cache(&mut self) -> Result<()> {
         self.connection.execute(
             "UPDATE documents SET status = 'download_required' WHERE source = 'google_drive'",

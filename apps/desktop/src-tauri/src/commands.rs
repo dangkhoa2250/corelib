@@ -529,6 +529,28 @@ pub fn clear_drive_cache(state: State<'_, LibraryStore>) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn save_cover(
+    id: String,
+    data: Vec<u8>,
+    state: State<'_, LibraryStore>,
+) -> Result<DocumentSummary, String> {
+    let covers_dir = state.library_root.join("covers");
+    std::fs::create_dir_all(&covers_dir)
+        .map_err(|e| format!("failed to create covers directory: {e}"))?;
+    let cover_path = covers_dir.join(format!("{id}.png"));
+    std::fs::write(&cover_path, &data)
+        .map_err(|e| format!("failed to write cover: {e}"))?;
+
+    let cover_str = cover_path.to_string_lossy().into_owned();
+    state
+        .database
+        .lock()
+        .map_err(|_| "library database is unavailable".to_owned())?
+        .set_cover_path(&id, Some(&cover_str))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub fn delete_document(id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
     let managed_path = state
         .database
@@ -540,6 +562,10 @@ pub fn delete_document(id: String, state: State<'_, LibraryStore>) -> Result<(),
     if let Some(path) = managed_path {
         let _ = std::fs::remove_file(path);
     }
+
+    let cover_path = state.library_root.join("covers").join(format!("{id}.png"));
+    let _ = std::fs::remove_file(cover_path);
+
     Ok(())
 }
 
