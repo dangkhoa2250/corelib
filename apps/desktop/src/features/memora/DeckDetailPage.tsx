@@ -11,6 +11,7 @@ export interface DeckDetailPageProps {
   refreshTrigger?: number;
   onBack: () => void;
   onStudyDeck: (deckId: string) => void;
+  onPracticeAll: (deckId: string) => void;
   onDirtyStateChange?: (dirty: boolean) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
 }
@@ -27,6 +28,7 @@ export function DeckDetailPage({
   refreshTrigger,
   onBack,
   onStudyDeck,
+  onPracticeAll,
   onDirtyStateChange,
   getDocumentFileUrl,
 }: DeckDetailPageProps) {
@@ -62,16 +64,26 @@ export function DeckDetailPage({
             />
             <h1>{deck.name}</h1>
           </div>
-          <button
-            className="deck-detail-page__study-btn"
-            disabled={!stats || (stats.newCards === 0 && stats.dueCards === 0)}
-            onClick={() => onStudyDeck(deck.id)}
-            type="button"
-          >
-            {stats && stats.newCards + stats.dueCards > 0
-              ? `Study Now (${stats.newCards + stats.dueCards})`
-              : "Nothing due"}
-          </button>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              className="deck-detail-page__study-btn"
+              disabled={!stats || (stats.newCards === 0 && stats.dueCards === 0)}
+              onClick={() => onStudyDeck(deck.id)}
+              type="button"
+            >
+              {stats && stats.newCards + stats.dueCards > 0
+                ? `Study Now (${stats.newCards + stats.dueCards})`
+                : "Nothing due"}
+            </button>
+            <button
+              className="deck-detail-page__practice-btn"
+              disabled={!stats || stats.totalCards === 0}
+              onClick={() => onPracticeAll(deck.id)}
+              type="button"
+            >
+              Practice All ({stats?.totalCards ?? 0})
+            </button>
+          </div>
         </div>
         {stats ? (
           <div className="deck-detail-page__stats-breakdown">

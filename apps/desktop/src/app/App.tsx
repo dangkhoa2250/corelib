@@ -240,6 +240,14 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       setRoute({ name: "review", cards: toStudy, previews: Object.fromEntries(pairs) });
     } catch (reviewError) { setError(errorMessage(reviewError)); }
   }, [learning]);
+
+  const handlePracticeAll = useCallback(async (deckId: string) => {
+    try {
+      const deckCards = await learning.listDeckCards(deckId);
+      const pairs = await Promise.all(deckCards.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
+      setRoute({ name: "review", cards: deckCards, previews: Object.fromEntries(pairs) });
+    } catch (reviewError) { setError(errorMessage(reviewError)); }
+  }, [learning]);
   const load = useCallback(async () => {
     const currentRequestId = ++requestId.current;
     setLoading(true);
@@ -549,6 +557,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
               setRoute({ name: "memora" });
             }}
             onStudyDeck={handleStudyDeck}
+            onPracticeAll={handlePracticeAll}
             onDirtyStateChange={setIsBrowserDirty}
             getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
           />
