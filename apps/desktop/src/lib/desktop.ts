@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
-import type { LibraryDocument } from "../domain/document";
+import type { LibraryDocument, PageTag } from "../domain/document";
 
 export type Invoke = <T>(
   command: string,
@@ -40,6 +40,21 @@ export function saveReadPage(
   call: Invoke = invoke as Invoke,
 ): Promise<LibraryDocument> {
   return call<LibraryDocument>("save_read_page", { id, page });
+}
+
+export function listPageTags(
+  id: string,
+  call: Invoke = invoke as Invoke,
+): Promise<PageTag[]> {
+  return call<PageTag[]>("list_page_tags", { id });
+}
+
+export function togglePageTag(
+  documentId: string,
+  page: number,
+  call: Invoke = invoke as Invoke,
+): Promise<PageTag[]> {
+  return call<PageTag[]>("toggle_page_tag", { documentId, page });
 }
 
 export type DriveEntry = {

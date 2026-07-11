@@ -18,6 +18,12 @@ export interface LibraryDocument {
   numPages: number | null;
 }
 
+export interface PageTag {
+  id: string;
+  documentId: string;
+  page: number;
+}
+
 export function documentStatusLabel(document: LibraryDocument): string {
   if (document.status === "ready" && !document.indexed) {
     return "Needs attention";

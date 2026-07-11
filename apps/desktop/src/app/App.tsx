@@ -2,7 +2,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
 import { useTheme } from "../contexts/ThemeContext";
-import type { LibraryDocument } from "../domain/document";
+import type { LibraryDocument, PageTag } from "../domain/document";
 import {
   importLocalDocuments,
   listDocuments,
@@ -15,6 +15,8 @@ import {
   getDocumentFileUrl as nativeGetDocumentFileUrl,
   saveReadPage as nativeSaveReadPage,
   deleteDocument as nativeDeleteDocument,
+  listPageTags as nativeListPageTags,
+  togglePageTag as nativeTogglePageTag,
 } from "../lib/desktop";
 import { LibraryPage } from "../features/library/LibraryPage";
 import { ReaderPage } from "../features/reader/ReaderPage";
@@ -49,6 +51,8 @@ export interface LibraryApi {
   importDrive?: (ids: string[]) => Promise<LibraryDocument[]>;
   clearDriveCache?: () => Promise<void>;
   getDocument?: (id: string) => Promise<LibraryDocument>;
+  listPageTags?: (id: string) => Promise<PageTag[]>;
+  togglePageTag?: (documentId: string, page: number) => Promise<PageTag[]>;
 }
 
 async function pickLocalPdfs(): Promise<string[] | null> {
@@ -77,6 +81,8 @@ const nativeLibraryApi: LibraryApi = {
   importDrive,
   clearDriveCache,
   getDocument: nativeGetDocument,
+  listPageTags: nativeListPageTags,
+  togglePageTag: nativeTogglePageTag,
 };
 
 function errorMessage(error: unknown): string {
