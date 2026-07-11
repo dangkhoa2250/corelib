@@ -3,6 +3,7 @@ import type { Deck, CardBrowserRow, CardLifecycleState, CardSort, CardSource } f
 import { queryDeckCards, moveCards, setCardsSuspended, trashCards, listActiveTags, createCard, updateAndMoveCard } from "../../lib/learning";
 import { CardSidePanel } from "./CardSidePanel";
 import { SourceViewer } from "./SourceViewer";
+import { Combobox } from "../../components/Combobox";
 
 export interface CardBrowserProps {
   decks: Deck[];
@@ -377,16 +378,17 @@ export function CardBrowser({
         {/* Sort */}
         <div className="card-browser__filter-group">
           <label className="card-browser__label">Sort:</label>
-          <select
-            className="card-browser__select"
+          <Combobox
             value={sort}
-            onChange={(e) => setSort(e.target.value as CardSort)}
-          >
-            <option value="updated_desc">Updated (Newest)</option>
-            <option value="created_desc">Created (Newest)</option>
-            <option value="due_asc">Due (Soonest)</option>
-            <option value="front_asc">Front (A-Z)</option>
-          </select>
+            onChange={(v) => setSort(v as CardSort)}
+            options={[
+              { value: "updated_desc", label: "Updated (Newest)" },
+              { value: "created_desc", label: "Created (Newest)" },
+              { value: "due_asc", label: "Due (Soonest)" },
+              { value: "front_asc", label: "Front (A-Z)" },
+            ]}
+            ariaLabel="Sort"
+          />
         </div>
 
         {/* Clear Filters */}
@@ -448,16 +450,16 @@ export function CardBrowser({
             {selectedIds.size} cards selected
           </span>
           <div className="card-browser__bulk-actions">
-            <select
-              className="card-browser__select"
-              value={bulkDeckId}
-              onChange={(e) => setBulkDeckId(e.target.value)}
-            >
-              <option value="">Move to deck...</option>
-              {decks.filter(d => d.id !== deckId).map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
+            <Combobox
+              value={bulkDeckId || null}
+              onChange={(v) => setBulkDeckId(v)}
+              options={decks.filter(d => d.id !== deckId).map(d => ({
+                value: d.id,
+                label: d.name,
+              }))}
+              placeholder="Move to deck..."
+              ariaLabel="Move to deck"
+            />
             <button
               className="card-browser__bulk-btn"
               type="button"

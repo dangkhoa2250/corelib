@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Deck, CardBrowserRow, TrashSort } from "../../domain/learning";
 import { listTrashedCards, restoreCards, deleteCardsPermanently, emptyTrash } from "../../lib/learning";
+import { Combobox } from "../../components/Combobox";
 
 export interface TrashPageProps {
   decks: Deck[];
@@ -210,14 +211,15 @@ export function TrashPage({ decks, refreshTrigger = 0, onRefreshNeeded }: TrashP
         {/* Sort */}
         <div className="card-browser__filter-group">
           <label className="card-browser__label">Sort:</label>
-          <select
-            className="card-browser__select"
+          <Combobox
             value={sort}
-            onChange={(e) => setSort(e.target.value as TrashSort)}
-          >
-            <option value="deleted_desc">Deleted Date (Newest)</option>
-            <option value="front_asc">Front (A-Z)</option>
-          </select>
+            onChange={(v) => setSort(v as TrashSort)}
+            options={[
+              { value: "deleted_desc", label: "Deleted Date (Newest)" },
+              { value: "front_asc", label: "Front (A-Z)" },
+            ]}
+            ariaLabel="Sort"
+          />
         </div>
 
         {/* Clear Filters */}
@@ -251,16 +253,16 @@ export function TrashPage({ decks, refreshTrigger = 0, onRefreshNeeded }: TrashP
             </button>
             
             <div className="card-browser__restore-dest-group">
-              <select
-                className="card-browser__select"
-                value={restoreDeckId}
-                onChange={(e) => setRestoreDeckId(e.target.value)}
-              >
-                <option value="">Restore to specific deck...</option>
-                {decks.map(d => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+              <Combobox
+                value={restoreDeckId || null}
+                onChange={(v) => setRestoreDeckId(v)}
+                options={decks.map(d => ({
+                  value: d.id,
+                  label: d.name,
+                }))}
+                placeholder="Restore to specific deck..."
+                ariaLabel="Restore to specific deck"
+              />
               <button
                 className="card-browser__bulk-btn"
                 type="button"

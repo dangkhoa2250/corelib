@@ -396,7 +396,8 @@ test("keeps the composer visible and reports card save errors", async () => {
   });
   await user.click(screen.getByRole("button", { name: "Create flashcard" }));
   await user.type(screen.getByRole("textbox", { name: "Back" }), "definition");
-  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "english");
+  await user.click(screen.getByRole("combobox", { name: "Deck" }));
+  await user.click(screen.getByRole("option", { name: "English" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Card save failed");
@@ -417,7 +418,8 @@ test("returns to the source page after saving or cancelling a card", async () =>
   });
   await user.click(screen.getByRole("button", { name: "Create flashcard" }));
   await user.type(screen.getByRole("textbox", { name: "Back" }), "definition");
-  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "english");
+  await user.click(screen.getByRole("combobox", { name: "Deck" }));
+  await user.click(screen.getByRole("option", { name: "English" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(await screen.findByRole("heading", { name: "Linear Algebra" })).toBeInTheDocument();
   expect(screen.getByText("Page 1 of 5")).toBeInTheDocument();

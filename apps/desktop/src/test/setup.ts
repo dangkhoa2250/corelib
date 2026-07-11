@@ -92,6 +92,8 @@ class MockIntersectionObserver {
 
 globalThis.IntersectionObserver = MockIntersectionObserver as any;
 
+Element.prototype.scrollIntoView = vi.fn();
+
 afterEach(() => {
   cleanup();
 });

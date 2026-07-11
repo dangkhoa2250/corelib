@@ -3,6 +3,7 @@ import type { Deck, CardBrowserRow } from "../../domain/learning";
 import { createCard, updateAndMoveCard } from "../../lib/learning";
 import { detectLanguage } from "../../lib/languageDetector";
 import { LanguagePicker } from "./LanguagePicker";
+import { Combobox } from "../../components/Combobox";
 
 export interface CardSidePanelProps {
   card: CardBrowserRow | null;
@@ -163,18 +164,16 @@ export function CardSidePanel({
 
           <div className="card-side-panel__field">
             <label className="card-side-panel__label">Deck</label>
-            <select
-              className="card-side-panel__select"
+            <Combobox
               value={deckId}
-              onChange={e => setDeckId(e.target.value)}
+              onChange={(v) => setDeckId(v)}
+              options={decks.map((d) => ({
+                value: d.id,
+                label: d.name,
+              }))}
               disabled={saving}
-            >
-              {decks.map(d => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+              ariaLabel="Deck"
+            />
           </div>
 
           <div className="card-side-panel__field">

@@ -101,7 +101,7 @@ test("hydrates the first loaded deck when the composer opened before decks resol
     />,
   );
 
-  expect(screen.getByRole("combobox", { name: "Deck" })).toHaveValue("__new_deck__");
+  expect(screen.getByRole("combobox", { name: "Deck" })).toHaveTextContent("New deck…");
 
   view.rerender(
     <CardComposer
@@ -113,7 +113,7 @@ test("hydrates the first loaded deck when the composer opened before decks resol
   );
 
   await waitFor(() => {
-    expect(screen.getByRole("combobox", { name: "Deck" })).toHaveValue("math");
+    expect(screen.getByRole("combobox", { name: "Deck" })).toHaveTextContent("Mathematics");
   });
   await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
   await user.click(screen.getByRole("button", { name: "Save" }));
@@ -141,7 +141,8 @@ test("does not replace an explicit new deck choice when decks finish loading", a
     />,
   );
 
-  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "__new_deck__");
+  await user.click(screen.getByRole("combobox", { name: "Deck" }));
+  await user.click(screen.getByText("New deck…"));
   view.rerender(
     <CardComposer
       draft={draft}
@@ -151,7 +152,7 @@ test("does not replace an explicit new deck choice when decks finish loading", a
     />,
   );
 
-  expect(screen.getByRole("combobox", { name: "Deck" })).toHaveValue("__new_deck__");
+  expect(screen.getByRole("combobox", { name: "Deck" })).toHaveTextContent("New deck…");
   expect(screen.getByRole("textbox", { name: "New deck name" })).toBeInTheDocument();
 });
 
@@ -176,7 +177,8 @@ test("disables saving and explains when the selected source is no longer availab
 test("saves the selected source, chosen deck, and comma-separated tags", async () => {
   const { onSave, user } = renderComposer();
 
-  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "language");
+  await user.click(screen.getByRole("combobox", { name: "Deck" }));
+  await user.click(screen.getByRole("option", { name: "Language" }));
   await user.clear(screen.getByRole("textbox", { name: "Front" }));
   await user.type(screen.getByRole("textbox", { name: "Front" }), "What is a vector space?");
   await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
@@ -217,7 +219,8 @@ test("submits a new deck through the atomic card save transaction after a failed
   });
   const { onCancel, user } = renderComposer({ onSave });
 
-  await user.selectOptions(screen.getByRole("combobox", { name: "Deck" }), "__new_deck__");
+  await user.click(screen.getByRole("combobox", { name: "Deck" }));
+  await user.click(screen.getByText("New deck…"));
   await user.type(screen.getByRole("textbox", { name: "New deck name" }), "English vocabulary");
   await user.type(screen.getByRole("textbox", { name: "Back" }), "A set with vector operations.");
 

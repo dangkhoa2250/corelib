@@ -17,6 +17,7 @@ import {
 import { IconEye, IconEyeOff } from "../../app/icons";
 import { IconArrowLeft, IconMemora, IconSearch, IconAppearance } from "../../app/icons";
 import { useTheme } from "../../contexts/ThemeContext";
+import { Combobox } from "../../components/Combobox";
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
@@ -313,15 +314,17 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           
           <label className="settings-page__field">
             <span>Theme</span>
-            <select 
-              aria-label="Theme selection"
+            <Combobox
               value={theme}
-              onChange={(e) => setTheme(e.target.value as "light" | "dark" | "system")}
-            >
-              <option value="system">System</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+              onChange={(v) => setTheme(v as "light" | "dark" | "system")}
+              options={[
+                { value: "system", label: "System" },
+                { value: "light", label: "Light" },
+                { value: "dark", label: "Dark" },
+              ]}
+              searchPlaceholder="Search themes..."
+              ariaLabel="Theme selection"
+            />
           </label>
           
           <p className="settings-page__description">
@@ -365,14 +368,18 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           <div className="settings-page__provider-editor">
         <label className="settings-page__field">
           <span>Provider</span>
-          <select aria-label="AI provider" value={provider} onChange={(event) => {
-            setProvider(event.target.value as AiProviderId);
-            setApiKey("");
-            setShowApiKey(false);
-            setError(null);
-          }}>
-            {AI_PROVIDERS.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
+          <Combobox
+            value={provider}
+            onChange={(v) => {
+              setProvider(v as AiProviderId);
+              setApiKey("");
+              setShowApiKey(false);
+              setError(null);
+            }}
+            options={AI_PROVIDERS.map((item) => ({ value: item.id, label: item.name }))}
+            searchPlaceholder="Search providers..."
+            ariaLabel="AI provider"
+          />
         </label>
 
         <p className="settings-page__description">{currentProvider.description}</p>

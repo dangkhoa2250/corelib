@@ -72,7 +72,8 @@ test("connects a provider and loads models using only an API key", async () => {
   );
 
   await user.click(screen.getByRole("button", { name: "+ Add provider" }));
-  await user.selectOptions(screen.getByRole("combobox", { name: "AI provider" }), "nvidia");
+  await user.click(screen.getByRole("combobox", { name: "AI provider" }));
+  await user.click(screen.getByText("NVIDIA NIM"));
   await user.type(screen.getByLabelText("API key"), "nvapi-test");
   await user.click(screen.getByRole("button", { name: "Connect" }));
 

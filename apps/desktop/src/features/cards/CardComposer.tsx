@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import { PronunciationButton } from "../../components/PronunciationButton";
+import { Combobox } from "../../components/Combobox";
 import type { CardSource, NewCardSource } from "../reader/readerSelection";
 import { detectLanguage } from "../../lib/languageDetector";
 import { LanguagePicker } from "./LanguagePicker";
@@ -11,7 +12,6 @@ const SOURCE_UNAVAILABLE_MESSAGE = "Source document is no longer available. Sele
 const FOCUSABLE_SELECTOR = [
   "button:not([disabled])",
   "input:not([disabled])",
-  "select:not([disabled])",
   "textarea:not([disabled])",
   "[href]",
   "[tabindex]:not([tabindex='-1'])",
@@ -247,22 +247,23 @@ export function CardComposer({
       <div style={{ display: "grid", gap: "16px" }}>
         <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
           Deck
-          <select
-            aria-label="Deck"
-            disabled={saving}
-            onChange={(event) => {
-              deckSelectionTouchedRef.current = true;
-              setDeckValue(event.target.value);
-            }}
+          <Combobox
             value={deckValue}
-          >
-            {activeDecks.map((deck) => (
-              <option key={deck.id} value={deck.id}>
-                {deck.name}
-              </option>
-            ))}
-            <option value={NEW_DECK_VALUE}>New deck…</option>
-          </select>
+            onChange={(v) => {
+              deckSelectionTouchedRef.current = true;
+              setDeckValue(v);
+            }}
+            options={[
+              ...activeDecks.map((deck) => ({
+                value: deck.id,
+                label: deck.name,
+              })),
+              { value: NEW_DECK_VALUE, label: "New deck…" },
+            ]}
+            placeholder="Select a deck"
+            disabled={saving}
+            ariaLabel="Deck"
+          />
         </label>
 
         {usingNewDeck ? (
