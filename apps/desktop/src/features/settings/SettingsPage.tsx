@@ -65,6 +65,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [showProviderEditor, setShowProviderEditor] = useState(false);
   const [connected, setConnected] = useState<Record<AiProviderId, boolean>>({
     "google-ai-studio": false,
+    "google-translation": false,
     nvidia: false,
     openrouter: false,
     cerebras: false,

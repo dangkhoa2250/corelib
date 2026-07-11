@@ -1,4 +1,4 @@
-export type AiProviderId = "google-ai-studio" | "nvidia" | "openrouter" | "cerebras";
+export type AiProviderId = "google-ai-studio" | "google-translation" | "nvidia" | "openrouter" | "cerebras";
 
 export interface AiProviderDefinition {
   id: AiProviderId;
@@ -32,6 +32,11 @@ export const AI_PROVIDERS: AiProviderDefinition[] = [
     id: "google-ai-studio",
     name: "Google AI Studio",
     description: "Gemini API with automatic model discovery.",
+  },
+  {
+    id: "google-translation",
+    name: "Google Cloud Translation",
+    description: "Google Cloud Translation NMT API.",
   },
   {
     id: "nvidia",
