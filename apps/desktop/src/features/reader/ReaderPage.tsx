@@ -3,7 +3,7 @@ import * as pdfjs from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
-import type { LibraryDocument } from "../../domain/document";
+import type { LibraryDocument, PageTag } from "../../domain/document";
 import type { CardSource, SelectionRect } from "../../domain/learning";
 import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
@@ -63,9 +63,10 @@ interface ThumbnailPageProps {
   pageNumber: number;
   onClick: () => void;
   active: boolean;
+  tagged?: boolean;
 }
 
-function ThumbnailPage({ pdfDoc, pageNumber, onClick, active }: ThumbnailPageProps) {
+function ThumbnailPage({ pdfDoc, pageNumber, onClick, active, tagged }: ThumbnailPageProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLButtonElement | null>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -161,6 +162,7 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active }: ThumbnailPagePro
         </div>
       </div>
       <span className={`reader-thumbnail__label ${active ? "reader-thumbnail__label--active" : ""}`}>{pageNumber}</span>
+      {tagged && <span className="reader-thumbnail__tag-dot" />}
     </button>
   );
 }
@@ -577,6 +579,8 @@ interface ReaderPageProps {
   onTranslate?: (text: string) => Promise<string>;
   onCloseComposer?: () => void;
   sourceHighlight?: CardSource | null;
+  listPageTags?: (docId: string) => Promise<PageTag[]>;
+  togglePageTag?: (docId: string, page: number) => Promise<PageTag[]>;
 }
 
 export function ReaderPage({
@@ -592,6 +596,8 @@ export function ReaderPage({
   onTranslate,
   onCloseComposer,
   sourceHighlight,
+  listPageTags,
+  togglePageTag,
 }: ReaderPageProps) {
   const [pdfDoc, setPdfDoc] = useState<pdfjs.PDFDocumentProxy | null>(null);
   const [currentPage, setCurrentPage] = useState(document.lastReadPage ?? 1);
@@ -630,6 +636,31 @@ export function ReaderPage({
   // thumbnail can end up on a different page than the one that was clicked.
   const isNavigatingRef = useRef(false);
   const navigateSettleTimeoutRef = useRef<any>(null);
+
+  const [pageTags, setPageTags] = useState<PageTag[]>([]);
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!listPageTags) return;
+    listPageTags(document.id).then(setPageTags).catch(() => {});
+  }, [document.id, listPageTags]);
+
+  useEffect(() => {
+    if (!tagMenuOpen) return;
+    const handler = () => setTagMenuOpen(false);
+    window.document.addEventListener("click", handler);
+    return () => window.document.removeEventListener("click", handler);
+  }, [tagMenuOpen]);
+
+  const handleToggleTag = useCallback(async () => {
+    if (!togglePageTag) return;
+    try {
+      const updated = await togglePageTag(document.id, currentPage);
+      setPageTags(updated);
+    } catch (_) {}
+  }, [togglePageTag, document.id, currentPage]);
+
+  const currentTagged = pageTags.some((t) => t.page === currentPage);
 
   const debouncedSavePage = useCallback((pageNo: number) => {
     if (savePageTimeoutRef.current) {
@@ -980,6 +1011,7 @@ export function ReaderPage({
                   pdfDoc={pdfDoc!}
                   pageNumber={pageNumber}
                   active={currentPage === pageNumber}
+                  tagged={pageTags.some((t) => t.page === pageNumber)}
                   onClick={() => handlePageSelect(pageNumber)}
                 />
               ))}
@@ -1047,6 +1079,56 @@ export function ReaderPage({
               ›
             </button>
           </div>
+
+          {togglePageTag && (
+            <div className="reader-tag-menu">
+              <button
+                type="button"
+                className="reader-icon-button"
+                aria-label="Page tags"
+                title="Page tags"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setTagMenuOpen(!tagMenuOpen);
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                  <line x1="7" y1="7" x2="7.01" y2="7" />
+                </svg>
+              </button>
+              {tagMenuOpen && (
+                <div className="reader-tag-dropdown" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="reader-tag-dropdown__toggle"
+                    onClick={() => void handleToggleTag()}
+                  >
+                    {currentTagged ? `✓ Page ${currentPage} tagged` : `+ Tag Page ${currentPage}`}
+                  </button>
+                  <div className="reader-tag-dropdown__list">
+                    {pageTags.length === 0 ? (
+                      <p className="reader-tag-dropdown__empty">No tagged pages yet</p>
+                    ) : (
+                      pageTags.map((tag) => (
+                        <button
+                          key={tag.id}
+                          type="button"
+                          className={`reader-tag-dropdown__item${tag.page === currentPage ? " is-active" : ""}`}
+                          onClick={() => {
+                            handlePageSelect(tag.page);
+                            setTagMenuOpen(false);
+                          }}
+                        >
+                          Page {tag.page}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="reader-toolbar__group">
             <button
