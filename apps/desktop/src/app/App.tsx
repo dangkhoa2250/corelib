@@ -1,6 +1,7 @@
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useRef, useState, useMemo } from "react";
 
+import { useTheme } from "../contexts/ThemeContext";
 import type { LibraryDocument } from "../domain/document";
 import {
   importLocalDocuments,
@@ -184,6 +185,12 @@ const nativeAiApi: AiApi = {
 };
 
 export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi, aiApi = nativeAiApi }: AppProps) {
+  const { resolvedTheme } = useTheme();
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+  }, [resolvedTheme]);
+
   const learning = useMemo(() => ({
     listDecks: learningApi.listDecks,
     createCard: learningApi.createCard,

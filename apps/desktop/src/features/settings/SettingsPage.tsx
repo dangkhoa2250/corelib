@@ -15,7 +15,8 @@ import {
   type TranslationEngineId,
 } from "../../domain/translation";
 import { IconEye, IconEyeOff } from "../../app/icons";
-import { IconArrowLeft, IconMemora, IconSearch } from "../../app/icons";
+import { IconArrowLeft, IconMemora, IconSearch, IconAppearance } from "../../app/icons";
+import { useTheme } from "../../contexts/ThemeContext";
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
@@ -64,6 +65,7 @@ export function readTranslationPreference(): { engineId: TranslationEngineId | n
 }
 
 export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack }: SettingsPageProps) {
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
@@ -98,6 +100,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
   );
   const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
+  const showAppearanceSettings = searchQuery.trim().toLowerCase().includes("appearance");
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
   const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
   const searchableModels = [
@@ -275,6 +278,15 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           <IconSearch />
           <input aria-label="Search settings" onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings…" value={searchQuery} />
         </label>
+        <p className="settings-page__nav-label">General</p>
+        <button 
+          className={`settings-page__nav-item ${searchQuery.trim().toLowerCase().includes("appearance") ? "is-active" : ""}`}
+          onClick={() => setSearchQuery("appearance")}
+          type="button"
+        >
+          <span className="settings-page__nav-icon"><IconAppearance /></span>
+          Appearance
+        </button>
         <p className="settings-page__nav-label">Models</p>
         <button className="settings-page__nav-item is-active" type="button">
           <span className="settings-page__nav-icon"><IconMemora /></span>
@@ -289,7 +301,38 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           <p>Choose the providers and model used by Memora.</p>
         </header>
 
-        {showModelSettings ? <>
+        {showAppearanceSettings ? (
+        <>
+        <section className="settings-page__section" aria-labelledby="appearance-heading">
+          <div className="settings-page__section-heading">
+            <div>
+              <h2 id="appearance-heading">Appearance</h2>
+              <p>Customize how Memora looks.</p>
+            </div>
+          </div>
+          
+          <label className="settings-page__field">
+            <span>Theme</span>
+            <select 
+              aria-label="Theme selection"
+              value={theme}
+              onChange={(e) => setTheme(e.target.value as "light" | "dark" | "system")}
+            >
+              <option value="system">System</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+          
+          <p className="settings-page__description">
+            {theme === "system" 
+              ? `Memora will match your system theme (${resolvedTheme}).`
+              : `Memora is in ${theme} mode.`
+            }
+          </p>
+        </section>
+        </>
+        ) : showModelSettings ? <>
         <section className="settings-page__section" aria-labelledby="providers-heading">
           <div className="settings-page__section-heading">
             <div>
