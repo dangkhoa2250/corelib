@@ -62,7 +62,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
   const [showApiKey, setShowApiKey] = useState(false);
-  const [showProviderEditor, setShowProviderEditor] = useState(true);
+  const [showProviderEditor, setShowProviderEditor] = useState(false);
   const [connected, setConnected] = useState<Record<AiProviderId, boolean>>({
     "google-ai-studio": false,
     nvidia: false,

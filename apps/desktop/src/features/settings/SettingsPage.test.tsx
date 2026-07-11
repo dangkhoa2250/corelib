@@ -26,6 +26,7 @@ test("connects a provider and loads models using only an API key", async () => {
     />,
   );
 
+  await user.click(screen.getByRole("button", { name: "+ Add provider" }));
   await user.selectOptions(screen.getByRole("combobox", { name: "AI provider" }), "nvidia");
   await user.type(screen.getByLabelText("API key"), "nvapi-test");
   await user.click(screen.getByRole("button", { name: "Connect" }));
@@ -55,6 +56,7 @@ test("shows provider errors without losing the settings form", async () => {
     />,
   );
 
+  await user.click(screen.getByRole("button", { name: "+ Add provider" }));
   await user.type(screen.getByLabelText("API key"), "bad-key");
   await user.click(screen.getByRole("button", { name: "Connect" }));
 
@@ -73,6 +75,7 @@ test("masks the API key by default and toggles visibility with the eye button", 
     />,
   );
 
+  await user.click(screen.getByRole("button", { name: "+ Add provider" }));
   const input = screen.getByLabelText("API key");
   await user.type(input, "secret-key");
   expect(input).toHaveAttribute("type", "password");
@@ -86,6 +89,7 @@ test("masks the API key by default and toggles visibility with the eye button", 
 });
 
 test("shows a masked saved-key state after the key is stored", async () => {
+  const user = userEvent.setup();
   render(
     <SettingsPage
       hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-ai-studio"))}
@@ -95,6 +99,7 @@ test("shows a masked saved-key state after the key is stored", async () => {
     />,
   );
 
+  await user.click(await screen.findByRole("button", { name: "Manage" }));
   await waitFor(() => {
     expect(screen.getByLabelText("API key")).toHaveAttribute("placeholder", "••••••••••••••••");
   });
@@ -113,6 +118,7 @@ test("keeps the saved key available to reveal during the current settings sessio
     />,
   );
 
+  await user.click(screen.getByRole("button", { name: "+ Add provider" }));
   const input = screen.getByLabelText("API key");
   await user.type(input, "secret-key");
   await user.click(screen.getByRole("button", { name: "Connect" }));
@@ -275,4 +281,22 @@ test("restores the selected model in the search field when settings reopens", as
 
   await waitFor(() => expect(screen.getByLabelText("Search models")).toHaveValue("Gemini 2.5 Flash"));
   expect(screen.queryByRole("button", { name: /Gemini 2\.5 Flash/ })).not.toBeInTheDocument();
+});
+
+test("opens the provider editor only from Add provider or Manage", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-ai-studio"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([])}
+    />,
+  );
+
+  await screen.findByText("Google AI Studio");
+  expect(screen.queryByRole("combobox", { name: "AI provider" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Manage" }));
+  expect(screen.getByRole("combobox", { name: "AI provider" })).toBeInTheDocument();
 });
