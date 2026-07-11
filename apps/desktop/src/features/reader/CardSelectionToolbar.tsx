@@ -1,3 +1,5 @@
+import { PronunciationButton } from "../../components/PronunciationButton";
+
 export interface CardSelectionToolbarProps {
   quote: string;
   onCreate: () => void;
@@ -46,6 +48,7 @@ export function CardSelectionToolbar({
         {selectedTextSummary(quote)}
       </p>
       <div style={{ display: "flex", flex: "0 0 auto", gap: "8px" }}>
+        <PronunciationButton text={quote} />
         <button
           aria-label="Dismiss"
           onClick={() => onDismiss()}

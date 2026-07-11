@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi, beforeEach } from "vitest";
 import type { LearningCard } from "../../domain/learning";
 import { ReviewPage } from "./ReviewPage";
 
@@ -10,7 +10,32 @@ const card: LearningCard = {
   lastReviewAt: null, tags: [], source: null, frontLanguage: null,
 };
 
-afterEach(() => vi.useRealTimers());
+beforeEach(() => {
+  const mockSynth = {
+    cancel: vi.fn(),
+    speak: vi.fn(),
+    getVoices: vi.fn().mockReturnValue([]),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+    onvoiceschanged: null,
+    paused: false,
+    pending: false,
+    speaking: false,
+  };
+  Object.defineProperty(window, "speechSynthesis", {
+    value: mockSynth,
+    writable: true,
+    configurable: true,
+  });
+  window.SpeechSynthesisUtterance = vi.fn().mockImplementation(
+    function (this: any, text: string) { this.text = text; this.lang = ""; }
+  ) as unknown as typeof SpeechSynthesisUtterance;
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 test("reveals rating buttons on card click and rates", async () => {
   const user = userEvent.setup();
@@ -80,4 +105,10 @@ test("practice mode shows summary after all cards reviewed", async () => {
   }
   expect(screen.getByText("Practice Complete")).toBeInTheDocument();
   expect(screen.getByText("2")).toBeInTheDocument();
+});
+
+test("shows pronunciation control on the front face", () => {
+  render(<ReviewPage cards={[card]} previews={{}} onRate={vi.fn()} />);
+  const buttons = screen.getAllByRole("button", { name: "Play pronunciation" });
+  expect(buttons).toHaveLength(2);
 });

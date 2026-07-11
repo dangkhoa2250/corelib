@@ -4,7 +4,9 @@ import { ClickableFrontText } from "./ClickableFrontText";
 import { YouGlishPanel } from "./YouGlishPanel";
 import { LanguagePicker } from "../cards/LanguagePicker";
 import { detectLanguage } from "../../lib/languageDetector";
+import { detectLanguage as detectSpeechLanguage } from "../../lib/language";
 import { updateCard } from "../../lib/learning";
+import { PronunciationButton } from "../../components/PronunciationButton";
 
 export interface ReviewPageProps {
   cards: LearningCard[];
@@ -186,16 +188,19 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
           <div className="review-page__card-face review-page__card-face--front">
             <div className="review-page__card-face-scroll">
               <p className="review-page__label">Front</p>
-              <div className="review-page__content">
-                <ClickableFrontText
-                  text={card.front}
-                  frontLanguage={card.frontLanguage}
-                  selectedWord={selectedWord}
-                  onWordSelect={(word) => {
-                    setSelectedWord(word);
-                    setShowYouGlish(true);
-                  }}
-                />
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                <div className="review-page__content">
+                  <ClickableFrontText
+                    text={card.front}
+                    frontLanguage={card.frontLanguage}
+                    selectedWord={selectedWord}
+                    onWordSelect={(word) => {
+                      setSelectedWord(word);
+                      setShowYouGlish(true);
+                    }}
+                  />
+                </div>
+                <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
               </div>
             </div>
             <div className="review-page__flip-hint">Tap to flip</div>
@@ -203,16 +208,19 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
           <div className="review-page__card-face review-page__card-face--back">
             <div className="review-page__card-face-scroll">
               <p className="review-page__label">Front</p>
-              <div className="review-page__content review-page__content--small">
-                <ClickableFrontText
-                  text={card.front}
-                  frontLanguage={card.frontLanguage}
-                  selectedWord={selectedWord}
-                  onWordSelect={(word) => {
-                    setSelectedWord(word);
-                    setShowYouGlish(true);
-                  }}
-                />
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                <div className="review-page__content review-page__content--small">
+                  <ClickableFrontText
+                    text={card.front}
+                    frontLanguage={card.frontLanguage}
+                    selectedWord={selectedWord}
+                    onWordSelect={(word) => {
+                      setSelectedWord(word);
+                      setShowYouGlish(true);
+                    }}
+                  />
+                </div>
+                <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
               </div>
               <hr className="review-page__divider" />
               <p className="review-page__label">Back</p>
