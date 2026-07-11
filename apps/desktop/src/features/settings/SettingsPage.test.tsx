@@ -35,7 +35,7 @@ test("connects a provider and loads models using only an API key", async () => {
   await user.type(screen.getByLabelText("Search models"), "Gemma");
   const result = await screen.findByRole("button", { name: /Gemma 4 31B/ });
   await user.click(result);
-  expect(screen.getByText("Selected: Gemma 4 31B")).toBeInTheDocument();
+  expect(screen.queryByText("Selected: Gemma 4 31B")).not.toBeInTheDocument();
   expect(result).toHaveTextContent("NVIDIA NIM");
   expect(result).not.toHaveTextContent("google/gemma-4-31b");
   expect(screen.queryByRole("checkbox", { name: /Use this provider/ })).not.toBeInTheDocument();
@@ -186,4 +186,31 @@ test("searches models across connected providers without a translate provider se
   expect(result).toHaveTextContent("Gemma 4 31B");
   expect(result).toHaveTextContent("NVIDIA NIM");
   expect(result).not.toHaveTextContent("google/gemma-4-31b");
+});
+
+test("selects a searched model with arrow keys and Enter", async () => {
+  const user = userEvent.setup();
+  const onDefaultChange = vi.fn();
+  const listModels = vi.fn().mockResolvedValue([
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+    { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+  ]);
+
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-ai-studio"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={listModels}
+      onDefaultChange={onDefaultChange}
+    />,
+  );
+
+  await waitFor(() => expect(listModels).toHaveBeenCalledWith("google-ai-studio"));
+  const search = screen.getByLabelText("Search models");
+  await user.type(search, "Gemini");
+  await user.keyboard("{ArrowDown}{Enter}");
+
+  expect(onDefaultChange).toHaveBeenCalledWith("google-ai-studio", "gemini-2.5-pro");
+  expect(screen.getByRole("button", { name: /Gemini 2\.5 Pro/ })).toHaveAttribute("aria-pressed", "true");
 });

@@ -290,16 +290,6 @@ select {
   margin: 6px 0 0;
 }
 
-.settings-page__default-badge {
-  flex: 0 0 auto;
-  padding: 6px 10px;
-  border-radius: 999px;
-  color: #0a7a3b;
-  background: #e7f7ed;
-  font-size: 12px;
-  font-weight: 700;
-}
-
 .settings-page__add-button {
   padding: 8px 12px;
   border: 1px solid #007aff;
@@ -429,7 +419,8 @@ select {
 }
 
 .settings-page__model-result:hover,
-.settings-page__model-result.is-selected {
+.settings-page__model-result.is-selected,
+.settings-page__model-result.is-highlighted {
   border-color: #8bbcff;
   background: #f4f9ff;
 }
@@ -442,13 +433,6 @@ select {
 .settings-page__model-result small {
   color: #6e6e73;
   font-size: 11px;
-}
-
-.settings-page__selected-model {
-  margin: 10px 0 0;
-  color: #0a7a3b;
-  font-size: 13px;
-  font-weight: 700;
 }
 
 .settings-page__secret-input {

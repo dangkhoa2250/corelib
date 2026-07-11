@@ -77,6 +77,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [modelSearch, setModelSearch] = useState("");
+  const [highlightedModelIndex, setHighlightedModelIndex] = useState(0);
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
   const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
@@ -166,6 +167,15 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     setShowApiKey(false);
     setError(null);
     setShowProviderEditor(true);
+  };
+
+  const selectModel = (model: (typeof filteredModels)[number]) => {
+    setSelectedModel(model.id);
+    setDefaultProvider(model.provider);
+    setPreference(DEFAULT_PROVIDER_KEY, model.provider);
+    setPreference(`${DEFAULT_PROVIDER_KEY}.model`, model.id);
+    onDefaultChange?.(model.provider, model.id);
+    setModelSearch(model.name);
   };
 
   return (
@@ -277,7 +287,29 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
 
         <label className="settings-page__field">
           <span>Search models</span>
-          <input aria-label="Search models" onChange={(event) => setModelSearch(event.target.value)} placeholder="Search by model name…" type="search" value={modelSearch} />
+          <input
+            aria-label="Search models"
+            onChange={(event) => {
+              setModelSearch(event.target.value);
+              setHighlightedModelIndex(0);
+            }}
+            onKeyDown={(event) => {
+              if (!filteredModels.length) return;
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setHighlightedModelIndex((current) => Math.min(current + 1, filteredModels.length - 1));
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setHighlightedModelIndex((current) => Math.max(current - 1, 0));
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                selectModel(filteredModels[highlightedModelIndex]);
+              }
+            }}
+            placeholder="Search by model name…"
+            type="search"
+            value={modelSearch}
+          />
         </label>
 
         {modelSearch.trim() && filteredModels.length > 0 ? (
@@ -285,16 +317,9 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             {filteredModels.map((model) => (
               <button
                 aria-pressed={selectedModel === model.id}
-                className={`settings-page__model-result ${selectedModel === model.id ? "is-selected" : ""}`}
+                className={`settings-page__model-result ${selectedModel === model.id ? "is-selected" : ""} ${filteredModels[highlightedModelIndex] === model ? "is-highlighted" : ""}`}
                 key={`${model.provider}-${model.id}`}
-                onClick={() => {
-                  setSelectedModel(model.id);
-                  setDefaultProvider(model.provider);
-                  setPreference(DEFAULT_PROVIDER_KEY, model.provider);
-                  setPreference(`${DEFAULT_PROVIDER_KEY}.model`, model.id);
-                  onDefaultChange?.(model.provider, model.id);
-                  setModelSearch(model.name);
-                }}
+                onClick={() => selectModel(model)}
                 type="button"
               >
                 <span>{model.name}</span>
@@ -303,8 +328,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             ))}
           </div>
         ) : null}
-
-        {selectedModel ? <p className="settings-page__selected-model">Selected: {searchableModels.find((model) => model.id === selectedModel)?.name ?? selectedModel}</p> : null}
 
         <label className="settings-page__field">
           <span>Translate to</span>
