@@ -241,6 +241,11 @@ select {
   min-height: 0;
   overflow-y: auto;
   padding: 64px clamp(28px, 6vw, 88px);
+  scrollbar-width: none;
+}
+
+.settings-page__main::-webkit-scrollbar {
+  display: none;
 }
 
 .settings-page__header {
