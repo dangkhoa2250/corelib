@@ -232,7 +232,7 @@ impl LibraryDatabase {
                 SUM(CASE WHEN state = 'review' THEN 1 ELSE 0 END) as review_cards,
                 SUM(CASE WHEN state = 'relearning' THEN 1 ELSE 0 END) as relearning_cards,
                 SUM(CASE WHEN state = 'suspended' THEN 1 ELSE 0 END) as suspended_cards,
-                SUM(CASE WHEN state != 'suspended' AND due_at <= ?1 THEN 1 ELSE 0 END) as due_cards
+                SUM(CASE WHEN state NOT IN ('new', 'suspended') AND due_at <= ?1 THEN 1 ELSE 0 END) as due_cards
             FROM cards
             WHERE deck_id = ?2 AND deleted_at IS NULL",
             params![now, deck_id],

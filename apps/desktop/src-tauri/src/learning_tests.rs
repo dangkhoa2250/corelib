@@ -940,7 +940,7 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
     assert_eq!(stats.review_cards, 2);
     assert_eq!(stats.relearning_cards, 1);
     assert_eq!(stats.suspended_cards, 1);
-    assert_eq!(stats.due_cards, 4);
+    assert_eq!(stats.due_cards, 3);
 
     // Get statistics for Chemistry deck
     let chem_stats = db
@@ -948,5 +948,5 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
         .expect("get_deck_statistics");
     assert_eq!(chem_stats.total_cards, 1);
     assert_eq!(chem_stats.new_cards, 1);
-    assert_eq!(chem_stats.due_cards, 1);
+    assert_eq!(chem_stats.due_cards, 0);
 }
