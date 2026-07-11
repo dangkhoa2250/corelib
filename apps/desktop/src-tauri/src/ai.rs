@@ -1,9 +1,10 @@
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::time::Duration;
-
-const KEYCHAIN_SERVICE: &str = "com.library.desktop.ai";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AiModel {
@@ -72,8 +73,31 @@ fn ensure_success(response: reqwest::blocking::Response) -> Result<Value, String
     Ok(json)
 }
 
-fn keychain_entry(provider: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, provider).map_err(|error| error.to_string())
+fn keys_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("com.library.desktop")
+        .join("ai-keys.json")
+}
+
+fn load_keys() -> HashMap<String, String> {
+    let path = keys_path();
+    if !path.exists() {
+        return HashMap::new();
+    }
+    fs::read_to_string(&path)
+        .ok()
+        .and_then(|content| serde_json::from_str(&content).ok())
+        .unwrap_or_default()
+}
+
+fn save_keys(keys: &HashMap<String, String>) -> Result<(), String> {
+    let path = keys_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Cannot create config dir: {e}"))?;
+    }
+    let content = serde_json::to_string_pretty(keys).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| format!("Cannot write API keys: {e}"))
 }
 
 pub fn save_api_key(provider: &str, api_key: &str) -> Result<(), String> {
@@ -81,37 +105,31 @@ pub fn save_api_key(provider: &str, api_key: &str) -> Result<(), String> {
         return Err("API key cannot be empty.".to_owned());
     }
     provider_base_url(provider)?;
-    keychain_entry(provider)?
-        .set_password(api_key.trim())
-        .map_err(|error| error.to_string())
+    let mut keys = load_keys();
+    keys.insert(provider.to_owned(), api_key.trim().to_owned());
+    save_keys(&keys)
 }
 
 pub fn clear_api_key(provider: &str) -> Result<(), String> {
     provider_base_url(provider)?;
-    match keychain_entry(provider)?.delete_password() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(error.to_string()),
-    }
+    let mut keys = load_keys();
+    keys.remove(provider);
+    save_keys(&keys)
 }
 
 pub fn has_api_key(provider: &str) -> Result<bool, String> {
     provider_base_url(provider)?;
-    match keychain_entry(provider)?.get_password() {
-        Ok(value) => Ok(!value.is_empty()),
-        Err(keyring::Error::NoEntry) => Ok(false),
-        Err(error) => Err(error.to_string()),
-    }
+    let keys = load_keys();
+    Ok(keys.get(provider).map_or(false, |v| !v.is_empty()))
 }
 
 fn load_api_key(provider: &str) -> Result<String, String> {
     provider_base_url(provider)?;
-    match keychain_entry(provider)?.get_password() {
-        Ok(value) if !value.trim().is_empty() => Ok(value),
-        Ok(_) | Err(keyring::Error::NoEntry) => {
-            Err("No API key configured for this provider.".to_owned())
-        }
-        Err(error) => Err(error.to_string()),
-    }
+    let keys = load_keys();
+    keys.get(provider)
+        .filter(|v| !v.trim().is_empty())
+        .cloned()
+        .ok_or_else(|| "No API key configured for this provider.".to_owned())
 }
 
 fn parse_openai_models(value: &Value) -> Vec<AiModel> {
