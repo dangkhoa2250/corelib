@@ -200,6 +200,7 @@ impl LibraryDatabase {
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DeckStatistics {
     pub total_cards: i64,
     pub new_cards: i64,
