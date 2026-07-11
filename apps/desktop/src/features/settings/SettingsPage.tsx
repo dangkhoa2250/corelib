@@ -77,7 +77,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [modelSearch, setModelSearch] = useState("");
-  const [highlightedModelIndex, setHighlightedModelIndex] = useState(0);
+  const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
   const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
@@ -176,6 +176,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     setPreference(`${DEFAULT_PROVIDER_KEY}.model`, model.id);
     onDefaultChange?.(model.provider, model.id);
     setModelSearch(model.name);
+    setHighlightedModelIndex(-1);
   };
 
   return (
@@ -291,7 +292,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
             aria-label="Search models"
             onChange={(event) => {
               setModelSearch(event.target.value);
-              setHighlightedModelIndex(0);
+              setHighlightedModelIndex(-1);
             }}
             onKeyDown={(event) => {
               if (!filteredModels.length) return;

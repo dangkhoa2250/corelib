@@ -419,7 +419,6 @@ select {
 }
 
 .settings-page__model-result:hover,
-.settings-page__model-result.is-selected,
 .settings-page__model-result.is-highlighted {
   border-color: #8bbcff;
   background: #f4f9ff;

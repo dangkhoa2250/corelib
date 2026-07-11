@@ -36,6 +36,7 @@ test("connects a provider and loads models using only an API key", async () => {
   const result = await screen.findByRole("button", { name: /Gemma 4 31B/ });
   await user.click(result);
   expect(screen.queryByText("Selected: Gemma 4 31B")).not.toBeInTheDocument();
+  expect(result).not.toHaveClass("is-highlighted");
   expect(result).toHaveTextContent("NVIDIA NIM");
   expect(result).not.toHaveTextContent("google/gemma-4-31b");
   expect(screen.queryByRole("checkbox", { name: /Use this provider/ })).not.toBeInTheDocument();
@@ -209,7 +210,7 @@ test("selects a searched model with arrow keys and Enter", async () => {
   await waitFor(() => expect(listModels).toHaveBeenCalledWith("google-ai-studio"));
   const search = screen.getByLabelText("Search models");
   await user.type(search, "Gemini");
-  await user.keyboard("{ArrowDown}{Enter}");
+  await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
 
   expect(onDefaultChange).toHaveBeenCalledWith("google-ai-studio", "gemini-2.5-pro");
   expect(screen.getByRole("button", { name: /Gemini 2\.5 Pro/ })).toHaveAttribute("aria-pressed", "true");
