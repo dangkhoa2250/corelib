@@ -815,18 +815,15 @@ export function ReaderPage({
           } catch (_) {}
 
           try {
-            // Metadata only (no rendering) — needed up front so the page
-            // stack's layout is correct from the start, before individual
-            // pages have scrolled into view and rendered.
-            const sizes = await Promise.all(
-              Array.from({ length: doc.numPages }, (_, i) =>
-                doc.getPage(i + 1).then((page) => {
-                  const viewport = page.getViewport({ scale: 1.0 });
-                  return { width: viewport.width, height: viewport.height };
-                })
-              )
-            );
-            if (active) setPageSizes(sizes);
+            // Use a uniform page size from the first page instead of
+            // fetching every single page — speeds up loading dramatically
+            // for large PDFs. Individual pages correct their own layout.
+            const page = await doc.getPage(1);
+            const viewport = page.getViewport({ scale: 1.0 });
+            if (active) {
+              const uniform = { width: viewport.width, height: viewport.height };
+              setPageSizes(Array.from({ length: doc.numPages }, () => uniform));
+            }
           } catch (_) {}
         }
       } catch (e) {
