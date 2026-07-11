@@ -221,6 +221,32 @@ impl LibraryDatabase {
             .map_err(Into::into)
     }
 
+    pub fn get_deck_statistics(&self, deck_id: &str) -> Result<DeckStatistics> {
+        let now = learning_timestamp();
+        self.connection.query_row(
+            "SELECT
+                COUNT(*) as total_cards,
+                SUM(CASE WHEN state = 'new' THEN 1 ELSE 0 END) as new_cards,
+                SUM(CASE WHEN state = 'learning' THEN 1 ELSE 0 END) as learning_cards,
+                SUM(CASE WHEN state = 'review' THEN 1 ELSE 0 END) as review_cards,
+                SUM(CASE WHEN state = 'relearning' THEN 1 ELSE 0 END) as relearning_cards,
+                SUM(CASE WHEN state = 'suspended' THEN 1 ELSE 0 END) as suspended_cards,
+                SUM(CASE WHEN state != 'suspended' AND due_at <= ?1 THEN 1 ELSE 0 END) as due_cards
+            FROM cards
+            WHERE deck_id = ?2 AND deleted_at IS NULL",
+            params![now, deck_id],
+            |r| Ok(DeckStatistics {
+                total_cards: r.get(0)?,
+                new_cards: r.get(1)?,
+                learning_cards: r.get(2)?,
+                review_cards: r.get(3)?,
+                relearning_cards: r.get(4)?,
+                suspended_cards: r.get(5)?,
+                due_cards: r.get(6)?,
+            })
+        ).map_err(Into::into)
+    }
+
     /// Deletes a deck along with every card that belongs to it (and, via
     /// their `ON DELETE CASCADE` foreign keys, each card's review logs and
     /// tags). The host UI is expected to warn the user with the card count

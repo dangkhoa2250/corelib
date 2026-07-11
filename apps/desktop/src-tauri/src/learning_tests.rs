@@ -855,3 +855,98 @@ fn trash_and_isolation() {
         .expect("query");
     assert!(!c1_exists);
 }
+
+#[test]
+fn get_deck_statistics_counts_cards_by_state_and_due_status() {
+    let (_dir, mut db) = db();
+
+    let deck_bio = db.create_deck("Biology").expect("deck");
+    let deck_chem = db.create_deck("Chemistry").expect("deck");
+
+    // Create cards in different states for Biology
+    let c_new = db.create_card(card("new card")).expect("new");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='new', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
+            params![c_new.id],
+        )
+        .expect("update");
+
+    let c_learning = db.create_card(card("learning card")).expect("learning");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='learning', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
+            params![c_learning.id],
+        )
+        .expect("update");
+
+    let c_review = db.create_card(card("review card")).expect("review");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='review', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
+            params![c_review.id],
+        )
+        .expect("update");
+
+    let c_relearning = db.create_card(card("relearning card")).expect("relearning");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='relearning', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
+            params![c_relearning.id],
+        )
+        .expect("update");
+
+    let c_suspended = db.create_card(card("suspended card")).expect("suspended");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='suspended', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
+            params![c_suspended.id],
+        )
+        .expect("update");
+
+    let c_not_due = db.create_card(card("not due card")).expect("not due");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='review', due_at='2099-12-31T00:00:00Z' WHERE id=?1",
+            params![c_not_due.id],
+        )
+        .expect("update");
+
+    // Create a card in Chemistry to verify deck filtering
+    let c_chem = card("chemistry card");
+    let c_chem = NewCard {
+        deck_name: "Chemistry".into(),
+        ..c_chem
+    };
+    let _c_chem = db.create_card(c_chem).expect("chemistry");
+
+    // Create a trashed card to verify it's excluded
+    let c_trashed = db.create_card(card("trashed card")).expect("trashed");
+    db.connection
+        .execute(
+            "UPDATE cards SET deleted_at='2026-07-10T00:00:00Z' WHERE id=?1",
+            params![c_trashed.id],
+        )
+        .expect("update");
+
+    // Get statistics for Biology deck
+    let stats = db
+        .get_deck_statistics(&deck_bio.id)
+        .expect("get_deck_statistics");
+
+    assert_eq!(stats.total_cards, 6);
+    assert_eq!(stats.new_cards, 1);
+    assert_eq!(stats.learning_cards, 1);
+    assert_eq!(stats.review_cards, 2);
+    assert_eq!(stats.relearning_cards, 1);
+    assert_eq!(stats.suspended_cards, 1);
+    assert_eq!(stats.due_cards, 4);
+
+    // Get statistics for Chemistry deck
+    let chem_stats = db
+        .get_deck_statistics(&deck_chem.id)
+        .expect("get_deck_statistics");
+    assert_eq!(chem_stats.total_cards, 1);
+    assert_eq!(chem_stats.new_cards, 1);
+    assert_eq!(chem_stats.due_cards, 1);
+}
