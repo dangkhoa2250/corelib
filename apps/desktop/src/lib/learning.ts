@@ -34,6 +34,6 @@ export function deleteCardsPermanently(cardIds: string[], call: Invoke = invoke 
 export function emptyTrash(call: Invoke = invoke as Invoke): Promise<BulkResult> { return call("empty_trash"); }
 export function listActiveTags(deckId: string, call: Invoke = invoke as Invoke): Promise<string[]> { return call("list_active_tags", { deckId }); }
 
-export function getDeckStatistics(deckId: string): Promise<DeckStatistics> {
-  return invoke("get_deck_statistics", { deckId });
+export function getDeckStatistics(deckId: string, call: Invoke = invoke as Invoke): Promise<DeckStatistics> {
+  return call("get_deck_statistics", { deckId });
 }
