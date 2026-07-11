@@ -50,10 +50,15 @@ pub fn index_document_with<F>(
     let extracted = catch_unwind(AssertUnwindSafe(|| extract(path)))
         .unwrap_or_else(|_| Err("PDF text extraction failed".to_owned()));
 
+    let num_pages = lopdf::Document::load(path)
+        .ok()
+        .map(|doc| doc.get_pages().len() as i64)
+        .unwrap_or(0);
+
     if let Ok(mut database) = database.lock() {
         match extracted {
             Ok(text) => {
-                let _ = database.set_index_ready(id, &text, None);
+                let _ = database.set_index_ready(id, &text, None, num_pages);
             }
             Err(_) => {
                 let _ = database.set_index_failed(id);
