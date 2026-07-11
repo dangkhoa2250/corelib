@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
@@ -211,10 +211,37 @@ test("selects a searched model with arrow keys and Enter", async () => {
 
   await waitFor(() => expect(listModels).toHaveBeenCalledWith("google-ai-studio"));
   const search = screen.getByLabelText("Search models");
+  expect(search).toHaveAttribute("spellcheck", "false");
   await user.type(search, "Gemini");
   await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
 
   expect(onDefaultChange).toHaveBeenCalledWith("google-ai-studio", "gemini-2.5-pro");
   expect(screen.getByLabelText("Search models")).toHaveValue("Gemini 2.5 Pro");
   expect(screen.queryByRole("button", { name: /Gemini 2\.5 Pro/ })).not.toBeInTheDocument();
+});
+
+test("defers model search until the user pauses typing", async () => {
+  const listModels = vi.fn().mockResolvedValue([
+    { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
+  ]);
+
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-ai-studio"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={listModels}
+    />,
+  );
+
+  await waitFor(() => expect(listModels).toHaveBeenCalledWith("google-ai-studio"));
+  vi.useFakeTimers();
+  fireEvent.change(screen.getByLabelText("Search models"), { target: { value: "Gemini" } });
+  expect(screen.queryByRole("button", { name: /Gemini 2\.5 Flash/ })).not.toBeInTheDocument();
+
+  await act(async () => {
+    vi.advanceTimersByTime(250);
+  });
+  expect(screen.getByRole("button", { name: /Gemini 2\.5 Flash/ })).toBeInTheDocument();
+  vi.useRealTimers();
 });

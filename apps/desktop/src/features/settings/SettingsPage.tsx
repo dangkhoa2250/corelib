@@ -77,13 +77,19 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [modelSearch, setModelSearch] = useState("");
+  const [deferredModelSearch, setDeferredModelSearch] = useState("");
   const [modelSelectionMade, setModelSelectionMade] = useState(false);
   const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
   const currentProvider = useMemo(() => providerDefinition(provider), [provider]);
   const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase());
   const connectedProviders = AI_PROVIDERS.filter((item) => connected[item.id]);
   const searchableModels = connectedProviders.flatMap((item) => (modelsByProvider[item.id] ?? []).map((model) => ({ ...model, provider: item.id })));
-  const filteredModels = searchableModels.filter((model) => `${model.name} ${providerDefinition(model.provider).name}`.toLowerCase().includes(modelSearch.trim().toLowerCase()));
+  const filteredModels = searchableModels.filter((model) => `${model.name} ${providerDefinition(model.provider).name}`.toLowerCase().includes(deferredModelSearch.trim().toLowerCase()));
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => setDeferredModelSearch(modelSearch), 250);
+    return () => window.clearTimeout(timeoutId);
+  }, [modelSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -292,6 +298,9 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
           <span>Search models</span>
           <input
             aria-label="Search models"
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect="off"
             onChange={(event) => {
               setModelSearch(event.target.value);
               setModelSelectionMade(false);
@@ -311,12 +320,13 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
               }
             }}
             placeholder="Search by model name…"
+            spellCheck={false}
             type="search"
             value={modelSearch}
           />
         </label>
 
-        {modelSearch.trim() && !modelSelectionMade && filteredModels.length > 0 ? (
+        {modelSearch.trim() && modelSearch === deferredModelSearch && !modelSelectionMade && filteredModels.length > 0 ? (
           <div aria-label="Model results" className="settings-page__model-results">
             {filteredModels.map((model) => (
               <button
