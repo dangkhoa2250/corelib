@@ -606,6 +606,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
           onTranslate={handleTranslate}
           onCloseComposer={handleCloseComposer}
           sourceHighlight={sourceHighlight}
+          listPageTags={libraryApi.listPageTags ?? nativeListPageTags}
+          togglePageTag={libraryApi.togglePageTag ?? nativeTogglePageTag}
         />
         {palette}
       </>
