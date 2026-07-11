@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "library-desktop",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "--prefix", "apps/desktop", "dev"],
+      "port": 1420
+    }
+  ]
+}
