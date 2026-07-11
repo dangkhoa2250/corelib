@@ -31,7 +31,6 @@ private struct TranslationHost: View {
             }
             .translationTask(configuration) { session in
                 do {
-                    try await session.prepareTranslation()
                     let response = try await session.translate(text)
                     finish(result: response.targetText, error: nil)
                 } catch {
