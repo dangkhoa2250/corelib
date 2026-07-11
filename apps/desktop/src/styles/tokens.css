@@ -405,7 +405,7 @@ textarea::placeholder {
 }
 
 .settings-page__back {
-  padding: 8px 10px;
+  padding: 6px 10px;
   font-weight: 600;
   font-size: 13px;
 }
@@ -435,6 +435,10 @@ textarea::placeholder {
   color: var(--text-primary);
   background: transparent;
   font-size: 13px;
+}
+
+.settings-page__search input:focus {
+  box-shadow: none;
 }
 
 .settings-page__search input::placeholder {
