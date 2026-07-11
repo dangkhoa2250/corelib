@@ -175,7 +175,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, o
     setPreference(DEFAULT_PROVIDER_KEY, model.provider);
     setPreference(`${DEFAULT_PROVIDER_KEY}.model`, model.id);
     onDefaultChange?.(model.provider, model.id);
-    setModelSearch(model.name);
+    setModelSearch("");
     setHighlightedModelIndex(-1);
   };
 
