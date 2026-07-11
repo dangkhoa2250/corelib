@@ -439,6 +439,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = {
             onBack={() => setRoute({ name: "memora" })}
             onCreateCard={(front, back, tags) => handleCreateCardInDeck(route.deck.name, front, back, tags)}
             onDeleteCard={(id) => handleDeleteCard(id)}
+            previewCardReview={(id) => learning.previewCardReview(id)}
+            onRateCard={(card, rating, elapsedMs) => learning.rateCard(card.id, rating, elapsedMs).then(() => {})}
           />
         ) : route.name === "memora" ? (
           <MemoraPage

@@ -150,10 +150,11 @@ impl LibraryDatabase {
             .query_row(
                 "SELECT memory_state_json FROM cards WHERE id=?1",
                 params![id],
-                |r| r.get(0),
+                |r| r.get::<_, Option<String>>(0),
             )
             .optional()
             .map_err(Into::into)
+            .map(|opt| opt.flatten())
     }
 }
 
