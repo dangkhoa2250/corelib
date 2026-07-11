@@ -550,6 +550,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
             }}
             onStudyDeck={handleStudyDeck}
             onDirtyStateChange={setIsBrowserDirty}
+            getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
           />
         ) : route.name === "cardBrowser" ? (
           <CardBrowser
