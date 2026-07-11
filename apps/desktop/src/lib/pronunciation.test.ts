@@ -2,7 +2,11 @@ import { act, renderHook } from "@testing-library/react";
 import { expect, test, vi, beforeEach, afterEach } from "vitest";
 import { usePronunciation } from "./pronunciation";
 
+/** Tracks callbacks set on the last-created SpeechSynthesisUtterance mock. */
+let utteranceCallbacks: Record<string, (() => void) | null> = {};
+
 beforeEach(() => {
+  utteranceCallbacks = {};
   const mockSynth = {
     cancel: vi.fn(),
     speak: vi.fn(),
@@ -21,7 +25,24 @@ beforeEach(() => {
     configurable: true,
   });
   window.SpeechSynthesisUtterance = vi.fn().mockImplementation(
-    function (this: any, text: string) { this.text = text; this.lang = ""; }
+    function (this: any, text: string) {
+      this.text = text;
+      this.lang = "";
+      Object.defineProperties(this, {
+        onstart: {
+          set(fn: () => void) { utteranceCallbacks.onstart = fn; },
+          get() { return utteranceCallbacks.onstart ?? null; },
+        },
+        onend: {
+          set(fn: () => void) { utteranceCallbacks.onend = fn; },
+          get() { return utteranceCallbacks.onend ?? null; },
+        },
+        onerror: {
+          set(fn: () => void) { utteranceCallbacks.onerror = fn; },
+          get() { return utteranceCallbacks.onerror ?? null; },
+        },
+      });
+    }
   ) as unknown as typeof SpeechSynthesisUtterance;
 });
 
@@ -86,4 +107,40 @@ test("ignores empty text", () => {
   expect(speak).not.toHaveBeenCalled();
   act(() => result.current.play("   "));
   expect(speak).not.toHaveBeenCalled();
+});
+
+test("isPlaying becomes true on onstart and false on onend", () => {
+  const speak = vi.fn((utterance: SpeechSynthesisUtterance) => {
+    utterance.onstart?.();
+  });
+  window.speechSynthesis = { ...window.speechSynthesis, speak } as unknown as SpeechSynthesis;
+  const { result } = renderHook(() => usePronunciation());
+  act(() => result.current.play("Hello"));
+  expect(result.current.isPlaying).toBe(true);
+  act(() => { utteranceCallbacks.onend?.(); });
+  expect(result.current.isPlaying).toBe(false);
+});
+
+test("isPlaying resets to false on onerror", () => {
+  const speak = vi.fn((utterance: SpeechSynthesisUtterance) => {
+    utterance.onstart?.();
+  });
+  window.speechSynthesis = { ...window.speechSynthesis, speak } as unknown as SpeechSynthesis;
+  const { result } = renderHook(() => usePronunciation());
+  act(() => result.current.play("Hello"));
+  expect(result.current.isPlaying).toBe(true);
+  act(() => { utteranceCallbacks.onerror?.(); });
+  expect(result.current.isPlaying).toBe(false);
+});
+
+test("stop resets isPlaying to false", () => {
+  const speak = vi.fn((utterance: SpeechSynthesisUtterance) => {
+    utterance.onstart?.();
+  });
+  window.speechSynthesis = { ...window.speechSynthesis, speak } as unknown as SpeechSynthesis;
+  const { result } = renderHook(() => usePronunciation());
+  act(() => result.current.play("Hello"));
+  expect(result.current.isPlaying).toBe(true);
+  act(() => result.current.stop());
+  expect(result.current.isPlaying).toBe(false);
 });
