@@ -8,7 +8,13 @@ import { saveCover as saveCoverApi } from "../../lib/desktop";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-const coverCache = new Map<string, string>();
+interface CachedCover {
+  url: string;
+  width: number;
+  height: number;
+}
+
+const coverCache = new Map<string, CachedCover>();
 
 interface DocumentCardProps {
   document: LibraryDocument;
@@ -23,16 +29,24 @@ interface DocumentCardProps {
 function DynamicCover({
   document,
   getDocumentFileUrl,
+  fallbackUrl,
 }: {
   document: LibraryDocument;
   getDocumentFileUrl: (id: string) => Promise<string>;
+  fallbackUrl?: string;
 }) {
   const coverRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [visible, setVisible] = useState(false);
   const [rendered, setRendered] = useState(false);
+  const [coverSize, setCoverSize] = useState<{ width: number; height: number } | null>(null);
 
-  const cachedUrl = coverCache.get(document.id);
+  const dpr = window.devicePixelRatio || 1;
+  const targetWidth = coverSize ? Math.ceil(coverSize.width * dpr) : 0;
+  const targetHeight = coverSize ? Math.ceil(coverSize.height * dpr) : 0;
+  const cachedCover = coverCache.get(document.id);
+  const cachedUrl = cachedCover?.url;
+  const cachedAtTargetResolution = Boolean(cachedCover && cachedCover.width >= targetWidth && cachedCover.height >= targetHeight);
 
   useEffect(() => {
     const element = coverRef.current;
@@ -45,7 +59,25 @@ function DynamicCover({
   }, []);
 
   useEffect(() => {
-    if (!visible || cachedUrl) return;
+    const element = coverRef.current;
+    if (!element) return;
+    const updateSize = (rect: Pick<DOMRectReadOnly, "width" | "height">) => {
+      const width = Math.round(rect.width);
+      const height = Math.round(rect.height);
+      if (width <= 0 || height <= 0) return;
+      setCoverSize((current) => current?.width === width && current.height === height ? current : { width, height });
+    };
+    updateSize(element.getBoundingClientRect());
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (entry) updateSize(entry.contentRect);
+    });
+    observer?.observe(element);
+    return () => observer?.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible || !coverSize || cachedAtTargetResolution) return;
     let active = true;
     let loadingTask: ReturnType<typeof pdfjs.getDocument> | undefined;
     let renderTask: { promise: Promise<unknown>; cancel: () => void } | undefined;
@@ -62,34 +94,34 @@ function DynamicCover({
         if (!active) return;
         const page = await pdf.getPage(1);
         if (!active) return;
-        const viewport = page.getViewport({ scale: 0.15 });
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = Math.max(targetWidth / baseViewport.width, targetHeight / baseViewport.height);
+        const viewport = page.getViewport({ scale });
         const canvas = canvasRef.current;
         if (!canvas) return;
         const context = canvas.getContext("2d");
         if (!context) return;
-        const dpr = window.devicePixelRatio || 1;
-        canvas.width = viewport.width * dpr;
-        canvas.height = viewport.height * dpr;
-        context.scale(dpr, dpr);
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
         renderTask = page.render({ canvasContext: context, viewport });
         await renderTask.promise;
         if (!active) return;
 
         setRendered(true);
 
-        if (!coverCache.has(document.id)) {
-          canvas.toBlob(async (blob) => {
-            if (!blob) return;
+        canvas.toBlob(async (blob) => {
+          if (!blob || !active) return;
             const blobUrl = URL.createObjectURL(blob);
-            coverCache.set(document.id, blobUrl);
+            const previous = coverCache.get(document.id);
+            coverCache.set(document.id, { url: blobUrl, width: canvas.width, height: canvas.height });
+            if (previous) URL.revokeObjectURL(previous.url);
 
             const buffer = await blob.arrayBuffer();
             const data = Array.from(new Uint8Array(buffer));
             try {
               await saveCoverApi(document.id, data);
             } catch (_) {}
-          }, "image/png");
-        }
+        }, "image/png");
       } catch (_) {}
     };
     void renderCover();
@@ -100,20 +132,14 @@ function DynamicCover({
         void loadingTask.destroy();
       }
     };
-  }, [visible, document.id, document.source, document.status, getDocumentFileUrl, cachedUrl]);
-
-  if (cachedUrl) {
-    return (
-      <div ref={coverRef} style={{ width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
-        <img src={cachedUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-      </div>
-    );
-  }
+  }, [visible, coverSize, cachedAtTargetResolution, targetWidth, targetHeight, document.id, document.source, document.status, getDocumentFileUrl]);
 
   return (
     <div ref={coverRef} style={{ width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center", position: "relative" }}>
       <canvas ref={canvasRef} style={{ width: "100%", height: "100%", objectFit: "cover", display: rendered ? "block" : "none" }} />
-      {!rendered && (
+      {!rendered && cachedUrl ? <img src={cachedUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+      {!rendered && !cachedUrl && fallbackUrl ? <img src={fallbackUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : null}
+      {!rendered && !cachedUrl && !fallbackUrl && (
         document.status === "processing" ? (
           <div className="cover-loading" aria-label="Preparing cover">
             <div className="cover-loading__bar" />
@@ -146,10 +172,10 @@ export function DocumentCard({
         onClick={() => onOpen()}
       >
         <div className="document-card__cover">
-          {document.coverUrl ? (
+          {getDocumentFileUrl ? (
+            <DynamicCover document={document} getDocumentFileUrl={getDocumentFileUrl} fallbackUrl={document.coverUrl ? convertFileSrc(document.coverUrl) : undefined} />
+          ) : document.coverUrl ? (
             <img src={convertFileSrc(document.coverUrl)} alt="" />
-          ) : getDocumentFileUrl ? (
-            <DynamicCover document={document} getDocumentFileUrl={getDocumentFileUrl} />
           ) : (
             <span aria-hidden="true">{document.title.charAt(0)}</span>
           )}
