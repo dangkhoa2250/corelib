@@ -118,7 +118,7 @@ it("caps canvas raster density to avoid unnecessary Retina over-rendering", () =
 it("shrinks raster density when zoom x Retina would exceed the canvas pixel budget", () => {
   // A4 at scale 1 fits the budget at full Retina density
   expect(getCanvasPixelRatio(2, 612, 792)).toBe(2);
-  // A4 at 3x zoom: dpr 2 would produce a ~17.4MP canvas, above the 16MP budget
+  // A4 at 3x zoom: dpr 2 would produce a ~17.4MP canvas, above the 16MP budget.
   const ratio = getCanvasPixelRatio(2, 612 * 3, 792 * 3);
   expect(ratio).toBeLessThan(2);
   expect(612 * 3 * ratio * (792 * 3 * ratio)).toBeLessThanOrEqual(16_777_216);

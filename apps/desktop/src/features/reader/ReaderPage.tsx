@@ -42,8 +42,8 @@ function setCachedPdfDoc(key: string, doc: pdfjs.PDFDocumentProxy): void {
 const MIN_ZOOM_SCALE = 0.5;
 const MAX_ZOOM_SCALE = 3;
 const MAX_CANVAS_PIXEL_RATIO = 3.0;
-// Hard budget per page canvas (~16MP, pdf.js viewer default). Zoom × Retina can
-// otherwise multiply to 36x the page's pixels and rasterization heats the CPU.
+// Bound each whole-page raster while zooming. Viewport tiling can raise this
+// limit later without making the settled full-page render stall the UI.
 const MAX_CANVAS_PIXELS = 16_777_216;
 
 export function clampZoomScale(scale: number) {
@@ -274,7 +274,10 @@ const PdfPage = React.memo(
         },
         {
           root: pagesContainerRef?.current || null,
-          rootMargin: "360px",
+          // Keep only the current page and its immediate neighbour warm. A
+          // larger margin starts several full raster/text/annotation jobs at
+          // once and makes opening or scrolling a long PDF feel blocked.
+          rootMargin: "120px",
         }
       );
       observer.observe(container);
@@ -648,6 +651,7 @@ export function ReaderPage({
   const [pageSizes, setPageSizes] = useState<{ width: number; height: number }[] | null>(null);
 
   const pagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const thumbnailListRef = useRef<HTMLDivElement | null>(null);
   const zoomLayoutRef = useRef<HTMLDivElement | null>(null);
   const scalingDivRef = useRef<HTMLDivElement | null>(null);
   const zoomLabelRef = useRef<HTMLSpanElement | null>(null);
@@ -655,6 +659,8 @@ export function ReaderPage({
   const scaleRef = useRef(1.0);
   const isZoomingRef = useRef(false);
   const zoomDebounceRef = useRef<any>(null);
+  const zoomFrameRef = useRef(0);
+  const pendingZoomRef = useRef<{ scale: number; scrollLeft: number; scrollTop: number } | null>(null);
   // Set while a programmatic scrollToPage animation is in flight. Pages
   // neighboring the target also enter the 360px IntersectionObserver margin
   // as the scroll passes them, and each fires onVisible — without this guard
@@ -665,6 +671,12 @@ export function ReaderPage({
 
   const [pageTags, setPageTags] = useState<PageTag[]>([]);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (sidebarTab !== "pages") return;
+    const thumbnail = thumbnailListRef.current?.querySelector<HTMLButtonElement>(`[aria-label="Go to page ${currentPage}"]`);
+    thumbnail?.scrollIntoView({ block: "center" });
+  }, [currentPage, sidebarTab]);
 
   useEffect(() => {
     if (!listPageTags) return;
@@ -706,6 +718,7 @@ export function ReaderPage({
       if (zoomDebounceRef.current) {
         clearTimeout(zoomDebounceRef.current);
       }
+      if (zoomFrameRef.current) cancelAnimationFrame(zoomFrameRef.current);
       if (navigateSettleTimeoutRef.current) {
         clearTimeout(navigateSettleTimeoutRef.current);
       }
@@ -740,7 +753,9 @@ export function ReaderPage({
     if (scalingDivRef.current) {
       scalingDivRef.current.style.transform = `scale(${scale})`;
       const viewportWidth = pagesContainerRef.current?.clientWidth ?? 0;
-      scalingDivRef.current.style.left = `${getCenteredPageOffset(viewportWidth, baseWidth * scale)}px`;
+      const contentWidth = baseWidth * scale;
+      scalingDivRef.current.style.left = `${getCenteredPageOffset(viewportWidth, contentWidth)}px`;
+      if (pagesContainerRef.current && contentWidth <= viewportWidth) pagesContainerRef.current.scrollLeft = 0;
     }
     if (zoomLabelRef.current) {
       zoomLabelRef.current.textContent = `${Math.round(scale * 100)}%`;
@@ -756,6 +771,7 @@ export function ReaderPage({
       const baseWidth = stackContentSize.width + 48;
       const contentWidth = baseWidth * scaleRef.current;
       scalingDivRef.current.style.left = `${getCenteredPageOffset(container.clientWidth, contentWidth)}px`;
+      if (contentWidth <= container.clientWidth) container.scrollLeft = 0;
     };
 
     updatePageStackPosition();
@@ -780,7 +796,8 @@ export function ReaderPage({
 
   const zoomAtViewportPoint = useCallback((requestedScale: number, pointerX: number, pointerY: number) => {
     const container = pagesContainerRef.current;
-    const previousScale = scaleRef.current;
+    const pending = pendingZoomRef.current;
+    const previousScale = pending?.scale ?? scaleRef.current;
     const nextScale = clampZoomScale(requestedScale);
     if (!container || nextScale === previousScale) {
       isZoomingRef.current = false;
@@ -788,8 +805,8 @@ export function ReaderPage({
     }
 
     const nextScrollPosition = getZoomAnchorScrollPosition({
-      scrollLeft: container.scrollLeft,
-      scrollTop: container.scrollTop,
+      scrollLeft: pending?.scrollLeft ?? container.scrollLeft,
+      scrollTop: pending?.scrollTop ?? container.scrollTop,
       pointerX,
       pointerY,
       previousScale,
@@ -797,12 +814,21 @@ export function ReaderPage({
     });
 
     isZoomingRef.current = true;
-    scaleRef.current = nextScale;
-    applyScaleToDOM(nextScale);
-    container.scrollLeft = nextScrollPosition.scrollLeft;
-    container.scrollTop = nextScrollPosition.scrollTop;
-    scheduleRenderScaleSync(nextScale);
-  }, [applyScaleToDOM, scheduleRenderScaleSync]);
+    pendingZoomRef.current = { scale: nextScale, ...nextScrollPosition };
+    if (zoomFrameRef.current) return;
+    zoomFrameRef.current = requestAnimationFrame(() => {
+      zoomFrameRef.current = 0;
+      const next = pendingZoomRef.current;
+      pendingZoomRef.current = null;
+      if (!next) return;
+      scaleRef.current = next.scale;
+      applyScaleToDOM(next.scale);
+      const contentWidth = (stackContentSize.width + 48) * next.scale;
+      container.scrollLeft = contentWidth <= container.clientWidth ? 0 : next.scrollLeft;
+      container.scrollTop = next.scrollTop;
+      scheduleRenderScaleSync(next.scale);
+    });
+  }, [applyScaleToDOM, scheduleRenderScaleSync, stackContentSize.width]);
 
   useEffect(() => {
     let active = true;
@@ -882,10 +908,16 @@ export function ReaderPage({
   }, [pdfDoc]);
 
   const scrollToPage = useCallback((pageNo: number) => {
-    const element = window.document.getElementById(`pdf-page-${pageNo}`);
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+    const container = pagesContainerRef.current;
+    const scroll = () => {
+      const element = window.document.getElementById(`pdf-page-${pageNo}`);
+      if (!element || !container) return;
+      // Page offsets are measured inside the unscaled column, while the
+      // scroll layout reserves scaled dimensions.
+      container.scrollTop = element.offsetTop * scaleRef.current;
+    };
+    scroll();
+    requestAnimationFrame(scroll);
   }, []);
 
   const handlePageSelect = (pageNo: number) => {
@@ -1043,7 +1075,7 @@ export function ReaderPage({
         {/* Content */}
         <div className="reader-sidebar__content">
           {sidebarTab === "pages" ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div ref={thumbnailListRef} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {pagesArray.map((pageNumber) => (
                 <ThumbnailPage
                   key={pageNumber}
