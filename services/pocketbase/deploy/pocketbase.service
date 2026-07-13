@@ -1,0 +1,22 @@
+[Unit]
+Description=PocketBase account service for Library
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=corelib
+Group=corelib
+WorkingDirectory=/opt/corelib-pocketbase
+UMask=0077
+ExecStart=/opt/corelib-pocketbase/pocketbase serve --http=127.0.0.1:8090 --dir /var/lib/corelib-pocketbase/pb_data
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/corelib-pocketbase
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

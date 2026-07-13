@@ -1,0 +1,21 @@
+# Replace LIBRARY_HOME with your DuckDNS subdomain (e.g. library-home).
+# Caddy obtains and renews the Let's Encrypt certificate automatically.
+
+LIBRARY_HOME.duckdns.org {
+	encode zstd gzip
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+
+	# Reverse proxy to the local PocketBase instance.
+	# PocketBase must listen only on 127.0.0.1:8090 — never on 0.0.0.0.
+	reverse_proxy 127.0.0.1:8090 {
+		header_up X-Real-IP {remote_host}
+		header_up X-Forwarded-For {remote_host}
+	}
+}

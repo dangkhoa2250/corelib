@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh DuckDNS record for Library
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/corelib-pocketbase/duckdns-update.sh
+
+# Never log the token: the script reads it from an env file and never echoes it.
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
