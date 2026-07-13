@@ -4,7 +4,6 @@ import {
   getViewportTiles,
   normalizeTileScale,
   planViewportTiles,
-  type PlannedTileKind,
   type PlannedViewportTile,
 } from "./viewportTiles";
 
@@ -66,21 +65,20 @@ it("orders exact visible tiles from the viewport center outward", () => {
   expect(distance(visible[0])).toBeLessThanOrEqual(distance(visible[visible.length - 1]));
 });
 
-it("places adjacent-scale work before the scroll ring only while zooming", () => {
+it("bounds interaction-specific prefetch work", () => {
   const base = {
     pageWidth: 900,
     pageHeight: 1200,
     viewport: { x: 200, y: 200, width: 450, height: 450 },
     scale: 2,
   };
-  const priority = (plan: PlannedViewportTile[], kind: PlannedTileKind) =>
-    Math.max(...plan.filter((tile) => tile.kind === kind).map((tile) => tile.priority));
-
   const zoomPlan = planViewportTiles({ ...base, zoomDirection: 1 });
   const scrollPlan = planViewportTiles({ ...base, zoomDirection: 0 });
 
-  expect(priority(zoomPlan, "adjacent")).toBeGreaterThan(priority(zoomPlan, "ring"));
-  expect(priority(scrollPlan, "ring")).toBeGreaterThan(priority(scrollPlan, "adjacent"));
+  expect(zoomPlan.filter((tile) => tile.kind === "adjacent")).toHaveLength(1);
+  expect(zoomPlan.some((tile) => tile.kind === "ring")).toBe(false);
+  expect(scrollPlan.filter((tile) => tile.kind === "ring").length).toBeLessThanOrEqual(2);
+  expect(scrollPlan.some((tile) => tile.kind === "adjacent")).toBe(false);
 });
 
 it("deduplicates visible tiles from the one-tile scroll ring", () => {

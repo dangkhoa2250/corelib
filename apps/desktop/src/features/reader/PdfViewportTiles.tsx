@@ -12,6 +12,10 @@ import {
 } from "./viewportTiles";
 
 const HIGH_ZOOM_SCALE = 1.5;
+// WebKit commonly keeps both a CPU bitmap and a GPU surface for a canvas.
+// Account for both so the 64 MiB budget bounds resident pressure instead of
+// merely counting the JavaScript-visible RGBA backing store.
+const CANVAS_RESIDENT_COST_MULTIPLIER = 2;
 
 type PageRenderQueue = ReturnType<typeof createPageRenderQueue>;
 
@@ -106,7 +110,10 @@ function PdfRasterTile({
         transform: [pixelRatio, 0, 0, pixelRatio, -tile.x * pixelRatio, -tile.y * pixelRatio],
       });
       await renderTask.promise;
-      if (active) onRendered(cacheKey, canvas.width * canvas.height * 4);
+      if (active) onRendered(
+        cacheKey,
+        canvas.width * canvas.height * 4 * CANVAS_RESIDENT_COST_MULTIPLIER,
+      );
     }, { priority: priorityRef.current });
 
     void token.promise.catch((error) => {
@@ -432,7 +439,16 @@ export function PdfViewportTiles({
         );
       })}
       {import.meta.env.DEV && (
-        <output aria-label="PDF tile benchmark metrics" style={{ display: "none" }}>
+        <output
+          aria-label="PDF tile benchmark metrics"
+          style={{
+            position: "absolute",
+            width: "1px",
+            height: "1px",
+            overflow: "hidden",
+            clipPath: "inset(50%)",
+          }}
+        >
           {JSON.stringify(benchmarkSnapshot)}
         </output>
       )}

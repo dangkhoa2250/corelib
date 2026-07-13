@@ -3,6 +3,8 @@ export const HIGH_ZOOM_TILE_PADDING = 128;
 export const TILE_SCALE_STEP = 0.05;
 export const MIN_TILE_SCALE = 0.5;
 export const MAX_TILE_SCALE = 3;
+export const MAX_ADJACENT_PREFETCH_TILES = 1;
+export const MAX_RING_PREFETCH_TILES = 2;
 
 export interface ViewportTile {
   key: string;
@@ -122,16 +124,17 @@ export function planViewportTiles(input: PlanViewportTilesInput): PlannedViewpor
   const scale = normalizeTileScale(input.scale);
   const visible = planScale(input, scale, "visible", 30, 0);
   const visibleKeys = new Set(visible.map((tile) => tile.key));
-  const ringPriority = input.zoomDirection === 0 ? 20 : 10;
-  const ring = planScale(input, scale, "ring", ringPriority, HIGH_ZOOM_TILE_SIZE)
-    .filter((tile) => !visibleKeys.has(tile.key));
+  const ring = input.zoomDirection === 0
+    ? planScale(input, scale, "ring", 20, HIGH_ZOOM_TILE_SIZE)
+      .filter((tile) => !visibleKeys.has(tile.key))
+      .slice(0, MAX_RING_PREFETCH_TILES)
+    : [];
 
-  let adjacentDirection = input.zoomDirection;
-  if (adjacentDirection === 0) adjacentDirection = scale < MAX_TILE_SCALE ? 1 : -1;
-  const adjacentScale = normalizeTileScale(scale + adjacentDirection * TILE_SCALE_STEP);
-  const adjacent = adjacentScale === scale
+  const adjacentScale = normalizeTileScale(scale + input.zoomDirection * TILE_SCALE_STEP);
+  const adjacent = input.zoomDirection === 0 || adjacentScale === scale
     ? []
-    : planScale(input, adjacentScale, "adjacent", input.zoomDirection === 0 ? 5 : 20, 0);
+    : planScale(input, adjacentScale, "adjacent", 20, 0)
+      .slice(0, MAX_ADJACENT_PREFETCH_TILES);
 
   return [...visible, ...adjacent, ...ring].sort((left, right) => right.priority - left.priority);
 }
