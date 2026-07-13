@@ -18,6 +18,9 @@ import { IconEye, IconEyeOff } from "../../app/icons";
 import { IconArrowLeft, IconMemora, IconSearch, IconAppearance, IconCloud } from "../../app/icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { Combobox } from "../../components/Combobox";
+import { useContext } from "react";
+import { AccountContext } from "../account/AccountGate";
+import { AccountSettingsSection } from "../account/AccountSettingsSection";
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
@@ -113,9 +116,12 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveSuccess, setDriveSuccess] = useState(false);
 
+  const showAccountSettings = searchQuery.trim().toLowerCase().includes("account");
   const showAppearanceSettings = searchQuery.trim().toLowerCase().includes("appearance");
   const showDriveSettings = searchQuery.trim().toLowerCase().includes("drive");
-  const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase()) && !showDriveSettings && !showAppearanceSettings;
+  const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase()) && !showDriveSettings && !showAppearanceSettings && !showAccountSettings;
+
+  const accountContext = useContext(AccountContext);
 
   useEffect(() => {
     if (!loadDriveCredentials) return;
@@ -340,6 +346,21 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           <input aria-label="Search settings" onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings…" value={searchQuery} />
         </label>
         <p className="settings-page__nav-label">General</p>
+        {accountContext && (
+          <button 
+            className={`settings-page__nav-item ${showAccountSettings ? "is-active" : ""}`}
+            onClick={() => setSearchQuery("account")}
+            type="button"
+          >
+            <span className="settings-page__nav-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </span>
+            Account
+          </button>
+        )}
         <button 
           className={`settings-page__nav-item ${showAppearanceSettings ? "is-active" : ""}`}
           onClick={() => setSearchQuery("appearance")}
@@ -370,21 +391,32 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
       <section className="settings-page__main">
         <header className="settings-page__header">
           <p className="settings-page__eyebrow">
-            {showAppearanceSettings ? "General" : showDriveSettings ? "General" : "Models"}
+            {showAccountSettings ? "Account" : showAppearanceSettings ? "General" : showDriveSettings ? "General" : "Models"}
           </p>
           <h1>
-            {showAppearanceSettings ? "Appearance" : showDriveSettings ? "Google Drive" : "Model"}
+            {showAccountSettings ? "Account" : showAppearanceSettings ? "Appearance" : showDriveSettings ? "Google Drive" : "Model"}
           </h1>
           <p>
-            {showAppearanceSettings 
-              ? "Customize how Memora looks." 
-              : showDriveSettings 
-                ? "Configure Google Drive OAuth client credentials." 
-                : "Choose the providers and model used by Memora."}
+            {showAccountSettings
+              ? "Manage your account settings."
+              : showAppearanceSettings 
+                ? "Customize how Memora looks." 
+                : showDriveSettings 
+                  ? "Configure Google Drive OAuth client credentials." 
+                  : "Choose the providers and model used by Memora."}
           </p>
         </header>
 
-        {showAppearanceSettings ? (
+        {showAccountSettings && accountContext ? (
+          <AccountSettingsSection
+            session={accountContext.session!}
+            onUpdateAnalytics={accountContext.updateAnalytics}
+            onSignOut={() => {
+              void accountContext.signOut();
+              if (onBack) onBack();
+            }}
+          />
+        ) : showAppearanceSettings ? (
         <>
         <section className="settings-page__section" aria-labelledby="appearance-heading">
           <div className="settings-page__section-heading">

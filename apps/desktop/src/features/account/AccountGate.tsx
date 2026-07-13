@@ -1,5 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import type { AccountApi, SessionSnapshot } from "../../domain/account";
+import { SignInPage } from "./SignInPage";
+import { RegisterPage } from "./RegisterPage";
+import { PendingAccountPage } from "./PendingAccountPage";
+import { RejectedAccountPage } from "./RejectedAccountPage";
 
 export type GateState =
   | { kind: "loading" }
@@ -14,7 +18,7 @@ interface AccountContextType {
   updateAnalytics: (enabled: boolean) => Promise<void>;
 }
 
-const AccountContext = createContext<AccountContextType | null>(null);
+export const AccountContext = createContext<AccountContextType | null>(null);
 
 export function useAccount() {
   const context = useContext(AccountContext);
@@ -57,13 +61,6 @@ export function AccountGate({
   });
   
   const [activeTab, setActiveTab] = useState<"signin" | "register">("signin");
-  
-  // Form states
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -106,14 +103,13 @@ export function AccountGate({
     });
   };
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignIn = async (emailVal: string, passwordVal: string) => {
     if (submitting) return;
     setError(null);
     setSubmitting(true);
 
     try {
-      const res = await api.signIn(email, password);
+      const res = await api.signIn(emailVal, passwordVal);
       if (res === "pending") {
         setState({ kind: "pending" });
       } else if (res === "rejected") {
@@ -130,19 +126,13 @@ export function AccountGate({
     }
   };
 
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRegister = async (displayNameVal: string, emailVal: string, passwordVal: string) => {
     if (submitting) return;
     setError(null);
-
-    if (password !== confirmPassword) {
-      setError("passwords_do_not_match");
-      return;
-    }
-
     setSubmitting(true);
+
     try {
-      const res = await api.register(displayName, email, password);
+      const res = await api.register(displayNameVal, emailVal, passwordVal);
       if (res === "pending") {
         setState({ kind: "pending" });
       } else if (res === "rejected") {
@@ -426,149 +416,29 @@ export function AccountGate({
       )}
 
       {state.kind === "anonymous" && (
-        <div className="account-gate-card">
-          <div className="account-gate-logo">
-            <h1>Antigravity Library</h1>
-            <p>Your ultimate reading & learning companion</p>
-          </div>
-
-          <div className="account-gate-tabs">
-            <button
-              type="button"
-              className={`account-gate-tab ${activeTab === "signin" ? "active" : ""}`}
-              onClick={() => { setActiveTab("signin"); setError(null); }}
-            >
-              Sign In
-            </button>
-            <button
-              type="button"
-              className={`account-gate-tab ${activeTab === "register" ? "active" : ""}`}
-              onClick={() => { setActiveTab("register"); setError(null); }}
-            >
-              Register
-            </button>
-          </div>
-
-          {error && <div className="account-gate-error">{error}</div>}
-
-          {activeTab === "signin" ? (
-            <form className="account-gate-form" onSubmit={handleSignIn}>
-              <div className="form-group">
-                <label htmlFor="signin-email">Email Address</label>
-                <input
-                  id="signin-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@domain.com"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="signin-password">Password</label>
-                <input
-                  id="signin-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  required
-                />
-              </div>
-              <button className="account-gate-btn" type="submit" disabled={submitting}>
-                {submitting ? <div className="spinner" /> : "Sign In"}
-              </button>
-            </form>
-          ) : (
-            <form className="account-gate-form" onSubmit={handleRegister}>
-              <div className="form-group">
-                <label htmlFor="register-name">Display Name</label>
-                <input
-                  id="register-name"
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Jane Doe"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="register-email">Email Address</label>
-                <input
-                  id="register-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@domain.com"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="register-password">Password (min 12 chars)</label>
-                <input
-                  id="register-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="register-confirm">Confirm Password</label>
-                <input
-                  id="register-confirm"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="••••••••••••"
-                  required
-                />
-              </div>
-              <button className="account-gate-btn" type="submit" disabled={submitting}>
-                {submitting ? <div className="spinner" /> : "Register"}
-              </button>
-            </form>
-          )}
-        </div>
+        activeTab === "signin" ? (
+          <SignInPage
+            onSubmit={handleSignIn}
+            onToggleTab={() => { setActiveTab("register"); setError(null); }}
+            loading={submitting}
+            error={error}
+          />
+        ) : (
+          <RegisterPage
+            onSubmit={handleRegister}
+            onToggleTab={() => { setActiveTab("signin"); setError(null); }}
+            loading={submitting}
+            error={error}
+          />
+        )
       )}
 
       {state.kind === "pending" && (
-        <div className="account-gate-card account-gate-state-view">
-          <div className="state-icon pending">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </div>
-          <h2>Approval Pending</h2>
-          <p>
-            Your account has been registered and is currently waiting for administrator approval. 
-            Please check back later once an administrator has approved your access.
-          </p>
-          <button className="account-gate-btn" type="button" onClick={handleSignOut}>
-            Back to Sign In
-          </button>
-        </div>
+        <PendingAccountPage onSignOut={handleSignOut} />
       )}
 
       {state.kind === "rejected" && (
-        <div className="account-gate-card account-gate-state-view">
-          <div className="state-icon rejected">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="15" y1="9" x2="9" y2="15" />
-              <line x1="9" y1="9" x2="15" y2="15" />
-            </svg>
-          </div>
-          <h2>Access Denied</h2>
-          <p>
-            Your account request was rejected by an administrator. You do not have permission to access the library.
-          </p>
-          <button className="account-gate-btn" type="button" onClick={handleSignOut}>
-            Sign Out
-          </button>
-        </div>
+        <RejectedAccountPage onSignOut={handleSignOut} />
       )}
     </div>
   );
