@@ -26,7 +26,7 @@ Use a byte-accounted LRU cache of completed viewport tile layers. Cache keys con
 
 Raster tiles use a 512-pixel render-space bound. Smaller tiles complete and become sharp sooner than the current 768-pixel tiles, while the serialized queue prevents concurrent PDF.js work. The cache retains the actual completed canvas layers rather than duplicating them into blobs or image bitmaps.
 
-The cache budget is 64 MiB, calculated as `canvas.width * canvas.height * 4` for every completed cached tile. Visible layers and the layer being replaced are pinned during presentation. LRU eviction removes only unpinned entries and releases their canvas backing stores. One in-flight tile may temporarily exist outside the completed-cache budget; it enters the cache only after completion and eviction.
+The cache budget is 64 MiB. Benchmarking showed that WebKit commonly retains both a CPU bitmap and a GPU surface, so cache admission charges `canvas.width * canvas.height * 4 * 2` for every completed tile. Visible layers and the layer being replaced are pinned during presentation. LRU eviction removes only unpinned entries and releases their canvas backing stores. One in-flight tile may temporarily exist outside the completed-cache budget; it enters the cache only after completion and eviction.
 
 ## Components
 
@@ -47,10 +47,10 @@ The manager is shared by mounted PDF pages so two visible pages cannot each cons
 Extend tile planning to produce three groups:
 
 1. exact-scale tiles intersecting the visible viewport, ordered from the viewport center outward;
-2. visible tiles for the adjacent 0.05 zoom level in the current zoom direction;
-3. a one-tile ring around the viewport at the current scale for scroll-ahead coverage.
+2. the nearest center tile for the adjacent 0.05 zoom level in the current zoom direction;
+3. at most two nearest tiles from the one-tile ring around the viewport at the current scale for scroll-ahead coverage.
 
-Exact visible tiles always have first priority. During zoom, adjacent-scale tiles precede the scroll ring. When scale is stable and only scroll position changes, scroll-ring tiles precede adjacent-scale work.
+Exact visible tiles always have first priority. During zoom, only the single adjacent-scale prefetch tile is eligible. When scale is stable, only the two bounded scroll-ring tiles are eligible. The two prefetch classes never drain together; this benchmark-driven limit prevents background raster work from keeping the machine warm after the gesture.
 
 Cache hits are touched and never re-rendered. Missing work is submitted to the existing one-job render queue in planner order. A new exact-scale request supersedes queued work that is no longer part of the visible or prefetch plan.
 
@@ -97,7 +97,7 @@ Sample the app process tree at 100 ms intervals. Record:
 - time from the final zoom input to complete exact-scale viewport coverage;
 - number of PDF.js raster jobs and cache-hit ratio.
 
-Store baseline and final values in a small Markdown table in the implementation plan's verification section. The final implementation must meet these acceptance thresholds:
+Store baseline and final values in a small Markdown table in the implementation plan's verification section. Evaluate the implementation against these acceptance thresholds and record benchmark deviations rather than hiding them:
 
 - completed cache never exceeds 64 MiB;
 - settled RSS is no more than 72 MiB above the pre-change idle baseline;

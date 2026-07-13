@@ -425,3 +425,16 @@ On page 225 of `mml-book`, perform rapid zoom, reverse zoom, continuous scroll, 
 git add apps/desktop/tmp/pdf-benchmarks/README.md docs/superpowers/plans/2026-07-13-pdf-tile-cache-prefetch.md
 git commit -m "perf: verify cached PDF tile rendering"
 ```
+
+## Verification results
+
+- `npm test`: 30 test files, 197 tests passed.
+- `npm run build`: TypeScript and Vite production build passed.
+- `git diff --check`: passed.
+- Source process verified by cwd in `.worktrees/pdf-zoom-render-revision/apps/desktop/src-tauri`; the final run used dedicated port 1421 because another worktree owned port 1420.
+- Final interaction sample: mean CPU 27.70%, peak CPU 137.50%, peak RSS 500.73 MiB, end-of-run RSS 427.89 MiB.
+- Final one-second recovery window: mean CPU 0.01%, peak CPU 0.10%.
+- Clean settled sample after resident accounting: mean CPU 0.00%, settled RSS 129.17 MiB.
+- Initial unrestricted prefetch kept CPU at 47.18% after interaction. Restricting work to one adjacent tile or two ring tiles reduced clean idle CPU to 0.00%.
+- Cache byte limit and reuse are deterministic-test verified. Real first-exact/full-coverage and hit-ratio values remain available in the development-only benchmark output but are not inferred from the external process sampler.
+- The original mean-interaction-CPU and settled-RSS thresholds are not met by the aggressive stress sample. This is an explicit tradeoff of continuous exact rasterization; the thermal recovery requirement is met because the queue drains and CPU returns to idle.

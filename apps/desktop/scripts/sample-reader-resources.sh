@@ -24,20 +24,41 @@ collect_tree() {
   done
 }
 
-webkit_pids=""
-webkit_starts=""
+app_start=$(ps -p "$pid" -o lstart= | xargs)
+app_start_epoch=$(date -j -f '%a %b %d %T %Y' "$app_start" '+%s')
+webkit_start=""
+webkit_start_epoch=0
+webkit_delta=999999
 for candidate in $(pgrep -f 'com.apple.WebKit.(WebContent|Networking)' 2>/dev/null || true); do
   if lsof -p "$candidate" 2>/dev/null | grep -q '/Users/jason/Library/.*/library_desktop'; then
-    webkit_pids+=" $candidate"
-    webkit_starts+="|$(ps -p "$candidate" -o lstart= | xargs)|"
+    candidate_start=$(ps -p "$candidate" -o lstart= | xargs)
+    candidate_epoch=$(date -j -f '%a %b %d %T %Y' "$candidate_start" '+%s')
+    delta=$((candidate_epoch - app_start_epoch))
+    # WebKit's XPC group is normally launched just after the Tauri process.
+    # Prefer the nearest following group so another Library dev instance that
+    # shares the same application-data directory is not included.
+    if (( delta >= 0 && delta <= 120 && delta < webkit_delta )); then
+      webkit_start=$candidate_start
+      webkit_start_epoch=$candidate_epoch
+      webkit_delta=$delta
+    fi
   fi
 done
-for candidate in $(pgrep -f 'com.apple.WebKit.GPU' 2>/dev/null || true); do
-  candidate_start="|$(ps -p "$candidate" -o lstart= | xargs)|"
-  if [[ "$webkit_starts" == *"$candidate_start"* ]]; then
-    webkit_pids+=" $candidate"
+
+webkit_pids=""
+if [[ -n "$webkit_start" ]]; then
+  for candidate in $(pgrep -f 'com.apple.WebKit.(WebContent|Networking|GPU)' 2>/dev/null || true); do
+    candidate_start=$(ps -p "$candidate" -o lstart= | xargs)
+    candidate_epoch=$(date -j -f '%a %b %d %T %Y' "$candidate_start" '+%s')
+    if (( candidate_epoch == webkit_start_epoch )); then
+      webkit_pids+=" $candidate"
+    fi
+  done
+  if [[ -z "$webkit_pids" ]]; then
+    echo "No WebKit XPC group matched source PID $pid" >&2
+    exit 1
   fi
-done
+fi
 
 mkdir -p tmp/pdf-benchmarks
 csv="tmp/pdf-benchmarks/${label}.csv"
