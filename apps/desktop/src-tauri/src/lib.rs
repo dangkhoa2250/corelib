@@ -12,6 +12,10 @@ pub mod library_store;
 pub mod model;
 pub mod scheduler;
 pub mod translation;
+pub mod account;
+
+#[cfg(test)]
+mod account_tests;
 
 #[cfg(test)]
 mod drive_tests;
@@ -47,6 +51,16 @@ pub fn run() {
             app.manage(
                 commands::LibraryStore::open(app_data_directory).map_err(std::io::Error::other)?,
             );
+
+            let base_url = option_env!("ACCOUNT_API_BASE_URL")
+                .unwrap_or("")
+                .to_string();
+            let account_api = crate::account::PocketBaseAccountApi::new_with_deps(
+                base_url,
+                crate::account::KeyringSessionStore,
+                crate::account::ReqwestHttpClient::new(),
+            );
+            app.manage(commands::AccountServiceState { api: account_api });
 
             #[cfg(target_os = "macos")]
             {
@@ -114,6 +128,21 @@ pub fn run() {
             ai::translate_with_ai,
             translation::translate_text,
             translation::apple_translation_available,
+            commands::account_register,
+            commands::account_sign_in,
+            commands::account_session,
+            commands::account_sign_out,
+            commands::account_set_analytics_enabled,
+            commands::account_track_event,
+            commands::admin_list_users,
+            commands::admin_set_user_status,
+            commands::admin_set_user_groups,
+            commands::admin_list_groups,
+            commands::admin_create_group,
+            commands::admin_list_features,
+            commands::admin_create_feature,
+            commands::admin_set_feature_assignment,
+            commands::admin_get_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

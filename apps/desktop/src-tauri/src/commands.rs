@@ -1159,6 +1159,156 @@ pub fn empty_trash(
     })
 }
 
+pub struct AccountServiceState {
+    pub api: crate::account::PocketBaseAccountApi<crate::account::KeyringSessionStore, crate::account::ReqwestHttpClient>,
+}
+
+use crate::account::{
+    AccountApi, AccountGroup, AccountProfile, AccountStatus, AccountStatusResponse,
+    FeatureAssignment, FeatureAssignmentInput, FeatureDefinition, SessionSnapshot,
+    AdminMetrics, AnalyticsEventInput,
+};
+
+#[tauri::command]
+pub fn account_register(
+    display_name: String,
+    email: String,
+    password: String,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<AccountStatusResponse, String> {
+    state.api.register(&display_name, &email, &password).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn account_sign_in(
+    email: String,
+    password: String,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<AccountStatusResponse, String> {
+    state.api.sign_in(&email, &password).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn account_session(
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<SessionSnapshot, String> {
+    state.api.current_session().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn account_sign_out(
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<(), String> {
+    state.api.sign_out().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn account_set_analytics_enabled(
+    enabled: bool,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<AccountProfile, String> {
+    state.api.set_analytics_enabled(enabled).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn account_track_event(
+    installation_id: String,
+    name: String,
+    app_version: String,
+    occurred_at: String,
+    payload: serde_json::Value,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<(), String> {
+    state.api.send_analytics(AnalyticsEventInput {
+        installation_id,
+        name,
+        app_version,
+        occurred_at,
+        payload,
+    }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_list_users(
+    status: Option<AccountStatus>,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<Vec<AccountProfile>, String> {
+    state.api.admin_list_users(status).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_set_user_status(
+    user_id: String,
+    status: AccountStatus,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<AccountProfile, String> {
+    state.api.admin_set_status(&user_id, status).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_set_user_groups(
+    user_id: String,
+    group_ids: Vec<String>,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<(), String> {
+    state.api.admin_set_groups(&user_id, group_ids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_list_groups(
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<Vec<AccountGroup>, String> {
+    state.api.admin_list_groups().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_create_group(
+    name: String,
+    description: String,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<AccountGroup, String> {
+    state.api.admin_create_group(&name, &description).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_list_features(
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<Vec<FeatureDefinition>, String> {
+    state.api.admin_list_features().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_create_feature(
+    key: String,
+    description: String,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<FeatureDefinition, String> {
+    state.api.admin_create_feature(&key, &description).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_set_feature_assignment(
+    feature_key: String,
+    subject_type: String,
+    subject_id: String,
+    enabled: bool,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<FeatureAssignment, String> {
+    state.api.admin_set_feature_assignment(FeatureAssignmentInput {
+        feature_key,
+        subject_type,
+        subject_id,
+        enabled,
+    }).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_get_metrics(
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<AdminMetrics, String> {
+    state.api.admin_metrics().map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod learning_command_tests {
     use super::{elapsed_days, interval_label, parse_now};
