@@ -46,6 +46,7 @@ export function signInAccount(
 ): Promise<AccountStatusResponse> {
   const email = payload.email || "";
   const password = payload.password || "";
+  const remember = Boolean(payload.remember);
 
   if (typeof email !== "string" || email.trim().length === 0) {
     return Promise.reject(new Error("invalid_credentials"));
@@ -54,7 +55,7 @@ export function signInAccount(
     return Promise.reject(new Error("invalid_credentials"));
   }
 
-  return call<AccountStatusResponse>("account_sign_in", { email, password });
+  return call<AccountStatusResponse>("account_sign_in", { email, password, remember });
 }
 
 export function loadAccountSession(call: Invoke = invoke as Invoke): Promise<SessionSnapshot> {
@@ -145,8 +146,8 @@ export class PocketBaseAccountApiClient implements AccountApi {
     return registerAccount({ displayName, email, password }, this.call);
   }
 
-  signIn(email: string, password: string): Promise<AccountStatusResponse> {
-    return signInAccount({ email, password }, this.call);
+  signIn(email: string, password: string, remember: boolean): Promise<AccountStatusResponse> {
+    return signInAccount({ email, password, remember }, this.call);
   }
 
   currentSession(): Promise<SessionSnapshot> {
@@ -204,5 +205,9 @@ export class PocketBaseAccountApiClient implements AccountApi {
 
   adminMetrics(): Promise<AdminMetrics> {
     return this.call<AdminMetrics>("admin_get_metrics");
+  }
+
+  adminDeleteUser(userId: string): Promise<void> {
+    return this.call<void>("admin_delete_user", { userId });
   }
 }

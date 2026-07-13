@@ -246,6 +246,7 @@ impl SessionStore for MemorySessionStore {
 pub trait HttpClient {
     fn post(&self, url: &str, body: serde_json::Value, token: Option<&str>) -> Result<(u16, serde_json::Value), String>;
     fn get(&self, url: &str, token: Option<&str>) -> Result<(u16, serde_json::Value), String>;
+    fn delete(&self, url: &str, token: Option<&str>) -> Result<(u16, serde_json::Value), String>;
 }
 
 pub struct ReqwestHttpClient {
@@ -288,11 +289,22 @@ impl HttpClient for ReqwestHttpClient {
         let val = resp.json().unwrap_or(serde_json::Value::Null);
         Ok((status, val))
     }
+
+    fn delete(&self, url: &str, token: Option<&str>) -> Result<(u16, serde_json::Value), String> {
+        let mut req = self.client.delete(url);
+        if let Some(tok) = token {
+            req = req.header("Authorization", format!("Bearer {}", tok));
+        }
+        let resp = req.send().map_err(|e| e.to_string())?;
+        let status = resp.status().as_u16();
+        let val = resp.json().unwrap_or(serde_json::Value::Null);
+        Ok((status, val))
+    }
 }
 
 pub trait AccountApi {
     fn register(&self, display_name: &str, email: &str, password: &str) -> Result<AccountStatusResponse, AccountError>;
-    fn sign_in(&self, email: &str, password: &str) -> Result<AccountStatusResponse, AccountError>;
+    fn sign_in(&self, email: &str, password: &str, remember: bool) -> Result<AccountStatusResponse, AccountError>;
     fn current_session(&self) -> Result<SessionSnapshot, AccountError>;
     fn sign_out(&self) -> Result<(), AccountError>;
     fn set_analytics_enabled(&self, enabled: bool) -> Result<AccountProfile, AccountError>;
@@ -306,17 +318,34 @@ pub trait AccountApi {
     fn admin_create_feature(&self, key: &str, description: &str) -> Result<FeatureDefinition, AccountError>;
     fn admin_set_feature_assignment(&self, input: FeatureAssignmentInput) -> Result<FeatureAssignment, AccountError>;
     fn admin_metrics(&self) -> Result<AdminMetrics, AccountError>;
+    fn admin_delete_user(&self, user_id: &str) -> Result<(), AccountError>;
 }
 
 pub struct PocketBaseAccountApi<S: SessionStore, H: HttpClient> {
     pub base_url: String,
     pub store: S,
     pub http: H,
+    pub ephemeral_token: Mutex<Option<String>>,
 }
 
 impl<S: SessionStore, H: HttpClient> PocketBaseAccountApi<S, H> {
     pub fn new_with_deps(base_url: String, store: S, http: H) -> Self {
-        Self { base_url, store, http }
+        Self { base_url, store, http, ephemeral_token: Mutex::new(None) }
+    }
+
+    fn get_active_token(&self) -> Result<String, AccountError> {
+        if let Some(t) = self.ephemeral_token.lock().unwrap().as_ref() {
+            return Ok(t.clone());
+        }
+        self.store
+            .get_token()
+            .map_err(AccountError::Internal)?
+            .ok_or(AccountError::SessionExpired)
+    }
+
+    fn clear_all_tokens(&self) {
+        *self.ephemeral_token.lock().unwrap() = None;
+        let _ = self.store.delete_token();
     }
 
     fn handle_error_response(&self, status: u16, body: &serde_json::Value) -> AccountError {
@@ -324,7 +353,7 @@ impl<S: SessionStore, H: HttpClient> PocketBaseAccountApi<S, H> {
         match status {
             400 => AccountError::InvalidInput,
             401 => {
-                let _ = self.store.delete_token();
+                self.clear_all_tokens();
                 if msg.contains("invalid_credentials") {
                     AccountError::InvalidCredentials
                 } else {
@@ -337,7 +366,7 @@ impl<S: SessionStore, H: HttpClient> PocketBaseAccountApi<S, H> {
                 } else if msg.contains("analytics_disabled") {
                     AccountError::AnalyticsDisabled
                 } else {
-                    let _ = self.store.delete_token();
+                    self.clear_all_tokens();
                     AccountError::AccountNotApproved
                 }
             }
@@ -373,7 +402,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         }
     }
 
-    fn sign_in(&self, email: &str, password: &str) -> Result<AccountStatusResponse, AccountError> {
+    fn sign_in(&self, email: &str, password: &str, remember: bool) -> Result<AccountStatusResponse, AccountError> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
@@ -391,7 +420,11 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
                     let profile_val = res.get("profile").cloned().unwrap_or(serde_json::Value::Null);
                     let profile: AccountProfile = serde_json::from_value(profile_val)
                         .map_err(|e| AccountError::Internal(e.to_string()))?;
-                    self.store.set_token(token).map_err(AccountError::Internal)?;
+                    if remember {
+                        self.store.set_token(token).map_err(AccountError::Internal)?;
+                    } else {
+                        *self.ephemeral_token.lock().unwrap() = Some(token.to_string());
+                    }
                     Ok(AccountStatusResponse::Approved(SessionSnapshot {
                         profile,
                         entitlements: Entitlements {
@@ -412,11 +445,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/me", self.base_url);
         let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
@@ -429,7 +458,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
     }
 
     fn sign_out(&self) -> Result<(), AccountError> {
-        let _ = self.store.delete_token();
+        self.clear_all_tokens();
         Ok(())
     }
 
@@ -437,11 +466,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/me/analytics", self.base_url);
         let body = serde_json::json!({ "enabled": enabled });
         let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
@@ -505,11 +530,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
             return Err(AccountError::InvalidEvent);
         }
 
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
 
         let url = format!("{}/api/corelib/analytics", self.base_url);
         let body = serde_json::json!({
@@ -534,11 +555,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/users", self.base_url);
         let (http_status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
         if http_status == 200 {
@@ -566,11 +583,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/users/{}/status", self.base_url, user_id);
         let body = serde_json::json!({ "status": status.as_str() });
         let (http_status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
@@ -587,11 +600,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/users/{}/groups", self.base_url, user_id);
         let body = serde_json::json!({ "groupIds": group_ids });
         let (http_status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
@@ -606,11 +615,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/groups", self.base_url);
         let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
@@ -630,11 +635,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/groups", self.base_url);
         let body = serde_json::json!({ "name": name, "description": description });
         let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
@@ -651,11 +652,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/features", self.base_url);
         let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
@@ -675,11 +672,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/features", self.base_url);
         let body = serde_json::json!({ "key": key, "description": description });
         let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
@@ -696,11 +689,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/assignments", self.base_url);
         let body = serde_json::json!({
             "featureKey": input.feature_key,
@@ -722,17 +711,27 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token_opt = self.store.get_token().map_err(AccountError::Internal)?;
-        let token = match token_opt {
-            Some(t) => t,
-            None => return Err(AccountError::SessionExpired),
-        };
+        let token = self.get_active_token()?;
         let url = format!("{}/api/corelib/admin/metrics", self.base_url);
         let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             let metrics: AdminMetrics = serde_json::from_value(res)
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(metrics)
+        } else {
+            Err(self.handle_error_response(status, &res))
+        }
+    }
+
+    fn admin_delete_user(&self, user_id: &str) -> Result<(), AccountError> {
+        if self.base_url.is_empty() {
+            return Err(AccountError::AccountServiceNotConfigured);
+        }
+        let token = self.get_active_token()?;
+        let url = format!("{}/api/corelib/admin/users/{}", self.base_url, user_id);
+        let (status, res) = self.http.delete(&url, Some(&token)).map_err(AccountError::NetworkError)?;
+        if status == 200 {
+            Ok(())
         } else {
             Err(self.handle_error_response(status, &res))
         }

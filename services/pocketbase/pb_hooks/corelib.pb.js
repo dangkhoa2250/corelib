@@ -497,6 +497,59 @@ routerAdd("POST", "/api/corelib/admin/users/{id}/groups", (e) => {
   }
 });
 
+// Admin-only: Delete target user
+routerAdd("DELETE", "/api/corelib/admin/users/{id}", (e) => {
+  if (!e.auth) return e.json(401, { message: "invalid_session" });
+  if (e.auth.getString("status") !== "approved") return e.json(403, { message: "account_not_approved" });
+  if (e.auth.getString("role") !== "admin") return e.json(403, { message: "admin_required" });
+
+  const targetId = e.request.pathValue("id");
+
+  if (targetId === e.auth.id) {
+    return e.json(400, { message: "cannot_delete_self" });
+  }
+
+  try {
+    const target = e.app.findRecordById("users", targetId);
+    const beforeProfile = {
+      displayName: target.getString("displayName"),
+      email: target.getString("email"),
+      status: target.getString("status"),
+      role: target.getString("role"),
+    };
+
+    // Delete related records
+    const relatedGM = e.app.findRecordsByFilter("group_members", "user = {:userId}", "", 0, 0, { userId: targetId });
+    for (const gm of relatedGM) { e.app.delete(gm); }
+
+    const relatedEvents = e.app.findRecordsByFilter("analytics_events", "user = {:userId}", "", 0, 0, { userId: targetId });
+    for (const ev of relatedEvents) { e.app.delete(ev); }
+
+    // Delete audit logs where this user is the actor, otherwise the required
+    // relation would block deletion of the user record.
+    const relatedAudit = e.app.findRecordsByFilter("admin_audit_logs", "actor = {:userId}", "", 0, 0, { userId: targetId });
+    for (const al of relatedAudit) { e.app.delete(al); }
+
+    // Delete the user record
+    e.app.delete(target);
+
+    // Audit log
+    const auditCollection = e.app.findCollectionByNameOrId("admin_audit_logs");
+    const log = new Record(auditCollection);
+    log.set("actor", e.auth.id);
+    log.set("action", "user_deleted");
+    log.set("targetType", "user");
+    log.set("targetId", targetId);
+    log.set("before", beforeProfile);
+    log.set("after", null);
+    e.app.save(log);
+
+    return e.json(200, { deleted: true });
+  } catch (err) {
+    return e.json(400, { message: "invalid_input" });
+  }
+});
+
 // Admin-only: List groups
 routerAdd("GET", "/api/corelib/admin/groups", (e) => {
   if (!e.auth) return e.json(401, { message: "invalid_session" });

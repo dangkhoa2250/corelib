@@ -116,6 +116,17 @@ export function AdminPage({ api }: { api: AccountApi }) {
     }
   };
 
+  const handleDelete = async (userId: string, displayName: string) => {
+    if (!window.confirm(`Are you sure you want to permanently delete ${displayName}? This cannot be undone.`)) return;
+    try {
+      await api.adminDeleteUser(userId);
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+      updateRowStatus(userId, "User deleted successfully!");
+    } catch (err: any) {
+      updateRowStatus(userId, undefined, err?.message || "Failed to delete user");
+    }
+  };
+
   const handleSetGroups = async (userId: string, groupIdsStr: string) => {
     const groupIds = groupIdsStr.split(",").map((g) => g.trim()).filter((g) => g.length > 0);
     try {
@@ -304,6 +315,22 @@ export function AdminPage({ api }: { api: AccountApi }) {
           cursor: pointer;
         }
 
+        .btn-delete {
+          background: rgba(139, 0, 0, 0.15);
+          color: #fca5a5;
+          border: 1px solid rgba(220, 38, 38, 0.35);
+          padding: 6px 12px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          margin-left: 8px;
+        }
+
+        .btn-delete:hover {
+          background: rgba(220, 38, 38, 0.25);
+        }
+
         .group-input {
           background: rgba(255, 255, 255, 0.04);
           border: 1px solid rgba(255, 255, 255, 0.08);
@@ -429,6 +456,7 @@ export function AdminPage({ api }: { api: AccountApi }) {
                   <td>
                     <button className="btn-approve" type="button" onClick={() => handleApprove(user.id)}>Approve</button>
                     <button className="btn-reject" type="button" onClick={() => handleReject(user.id)}>Reject</button>
+                    <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
                     {rowStatus[user.id]?.success && (
                       <span className="row-status success">{rowStatus[user.id].success}</span>
                     )}
@@ -448,12 +476,13 @@ export function AdminPage({ api }: { api: AccountApi }) {
         <h2>Approved / Rejected Accounts</h2>
         <table className="admin-table">
           <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Status</th>
-              <th>Groups (comma separated)</th>
-            </tr>
+               <tr>
+                 <th>Name</th>
+                 <th>Email</th>
+                 <th>Status</th>
+                 <th>Groups (comma separated)</th>
+                 <th>Actions</th>
+               </tr>
           </thead>
           <tbody>
             {processedUsers.map((user) => (
@@ -484,6 +513,9 @@ export function AdminPage({ api }: { api: AccountApi }) {
                   {rowStatus[user.id]?.error && (
                     <span className="row-status error">{rowStatus[user.id].error}</span>
                   )}
+                </td>
+                <td>
+                  <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
                 </td>
               </tr>
             ))}

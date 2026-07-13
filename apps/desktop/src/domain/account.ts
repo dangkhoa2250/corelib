@@ -83,7 +83,7 @@ export interface AdminMetrics {
 
 export interface AccountApi {
   register(displayName: string, email: string, password: string): Promise<AccountStatusResponse>;
-  signIn(email: string, password: string): Promise<AccountStatusResponse>;
+  signIn(email: string, password: string, remember: boolean): Promise<AccountStatusResponse>;
   currentSession(): Promise<SessionSnapshot>;
   signOut(): Promise<void>;
   setAnalyticsEnabled(enabled: boolean): Promise<AccountProfile>;
@@ -97,6 +97,7 @@ export interface AccountApi {
   adminCreateFeature(key: string, description: string): Promise<FeatureDefinition>;
   adminSetFeatureAssignment(input: FeatureAssignmentInput): Promise<FeatureAssignment>;
   adminMetrics(): Promise<AdminMetrics>;
+  adminDeleteUser(userId: string): Promise<void>;
 }
 
 export function hasFeature(entitlements: Entitlements | null | undefined, key: string): boolean {

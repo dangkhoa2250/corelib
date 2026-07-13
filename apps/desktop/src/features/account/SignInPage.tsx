@@ -6,17 +6,18 @@ export function SignInPage({
   loading,
   error,
 }: {
-  onSubmit: (email: string, password: string) => void;
+  onSubmit: (email: string, password: string, remember: boolean) => void;
   onToggleTab: () => void;
   loading: boolean;
   error: string | null;
 }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [remember, setRemember] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(email, password);
+    onSubmit(email, password, remember);
   };
 
   return (
@@ -59,6 +60,17 @@ export function SignInPage({
             placeholder="••••••••••••"
             required
           />
+        </div>
+        <div className="form-group-row">
+          <label className="remember-me">
+            <input
+              id="signin-remember"
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => setRemember(e.target.checked)}
+            />
+            <span>Remember me</span>
+          </label>
         </div>
         <button className="account-gate-btn" type="submit" disabled={loading}>
           {loading ? <div className="spinner" /> : "Sign In"}

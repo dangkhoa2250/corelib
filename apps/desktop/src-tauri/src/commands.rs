@@ -1183,9 +1183,10 @@ pub fn account_register(
 pub fn account_sign_in(
     email: String,
     password: String,
+    remember: bool,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<AccountStatusResponse, String> {
-    state.api.sign_in(&email, &password).map_err(|e| e.to_string())
+    state.api.sign_in(&email, &password, remember).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1307,6 +1308,14 @@ pub fn admin_get_metrics(
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<AdminMetrics, String> {
     state.api.admin_metrics().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_delete_user(
+    user_id: String,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<(), String> {
+    state.api.admin_delete_user(&user_id).map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

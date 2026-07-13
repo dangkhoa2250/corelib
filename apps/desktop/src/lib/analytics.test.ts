@@ -35,6 +35,7 @@ describe("AnalyticsClient", () => {
       adminCreateFeature: vi.fn(),
       adminSetFeatureAssignment: vi.fn(),
       adminMetrics: vi.fn(),
+      adminDeleteUser: vi.fn(),
     };
   });
 

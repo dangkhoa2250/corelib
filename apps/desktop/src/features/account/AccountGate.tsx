@@ -103,13 +103,13 @@ export function AccountGate({
     });
   };
 
-  const handleSignIn = async (emailVal: string, passwordVal: string) => {
+  const handleSignIn = async (emailVal: string, passwordVal: string, rememberVal: boolean) => {
     if (submitting) return;
     setError(null);
     setSubmitting(true);
 
     try {
-      const res = await api.signIn(emailVal, passwordVal);
+      const res = await api.signIn(emailVal, passwordVal, rememberVal);
       if (res === "pending") {
         setState({ kind: "pending" });
       } else if (res === "rejected") {
@@ -299,6 +299,32 @@ export function AccountGate({
           border-color: #a78bfa;
           background: rgba(255, 255, 255, 0.08);
           box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
+        }
+
+        .form-group-row {
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          margin-top: -4px;
+        }
+
+        .remember-me {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 14px;
+          color: #d1d5db;
+          cursor: pointer;
+          text-transform: none;
+          letter-spacing: 0;
+          font-weight: 400;
+        }
+
+        .remember-me input {
+          width: 16px;
+          height: 16px;
+          accent-color: #a78bfa;
+          cursor: pointer;
         }
 
         .account-gate-error {

@@ -56,6 +56,20 @@ mod tests {
             }
             Ok(resps.remove(0))
         }
+
+        fn delete(&self, url: &str, token: Option<&str>) -> Result<(u16, serde_json::Value), String> {
+            self.requests.lock().unwrap().push((
+                "DELETE".to_string(),
+                url.to_string(),
+                serde_json::Value::Null,
+                token.map(|s| s.to_string()),
+            ));
+            let mut resps = self.responses.lock().unwrap();
+            if resps.is_empty() {
+                return Err("No mock response configured".to_string());
+            }
+            Ok(resps.remove(0))
+        }
     }
 
     #[test]
@@ -74,7 +88,7 @@ mod tests {
             http,
         );
 
-        let res = api.sign_in("pending@example.test", "password12345");
+        let res = api.sign_in("pending@example.test", "password12345", true);
         assert!(res.is_ok());
         assert_eq!(res.unwrap(), AccountStatusResponse::Pending);
 
@@ -108,7 +122,7 @@ mod tests {
             http,
         );
 
-        let res = api.sign_in("approved@example.test", "password12345");
+        let res = api.sign_in("approved@example.test", "password12345", true);
         assert!(res.is_ok());
 
         let expected_profile = AccountProfile {

@@ -13,6 +13,17 @@ describe("SignInPage", () => {
     if (!submitBtn) throw new Error("Submit button not found");
     fireEvent.click(submitBtn);
 
-    expect(onSubmit).toHaveBeenCalledWith("test@example.com", "password123");
+    expect(onSubmit).toHaveBeenCalledWith("test@example.com", "password123", false);
+  });
+
+  it("submits with remember=true when the checkbox is checked", () => {
+    const onSubmit = vi.fn();
+    const { container } = render(<SignInPage onSubmit={onSubmit} onToggleTab={vi.fn()} loading={false} error={null} />);
+    fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "test@example.com" } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
+    fireEvent.click(screen.getByLabelText("Remember me"));
+    fireEvent.click(container.querySelector('button[type="submit"]')!);
+
+    expect(onSubmit).toHaveBeenCalledWith("test@example.com", "password123", true);
   });
 });
