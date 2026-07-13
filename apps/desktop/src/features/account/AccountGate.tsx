@@ -165,6 +165,16 @@ export function AccountGate({
 
   return (
     <div className="account-gate-container">
+      <video
+        className="account-gate-video"
+        src="/corelib-login-page.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        aria-hidden="true"
+      />
+      <div className="account-gate-video-overlay" aria-hidden="true" />
       <style>{`
         .account-gate-container {
           display: flex;
