@@ -32,8 +32,9 @@ export function RegisterPage({
   return (
     <div className="account-gate-card">
       <div className="account-gate-logo">
-        <h1>Antigravity Library</h1>
-        <p>Your ultimate reading & learning companion</p>
+        <span className="account-gate-mark" aria-hidden="true">C</span>
+        <h1>Corelib</h1>
+        <p>Create your Corelib account</p>
       </div>
 
       <div className="account-gate-tabs">
