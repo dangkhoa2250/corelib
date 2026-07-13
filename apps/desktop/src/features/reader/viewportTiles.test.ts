@@ -63,7 +63,7 @@ it("orders exact visible tiles from the viewport center outward", () => {
     (tile.x + tile.width / 2 - viewportCenter.x) ** 2
     + (tile.y + tile.height / 2 - viewportCenter.y) ** 2
   );
-  expect(distance(visible[0])).toBeLessThanOrEqual(distance(visible.at(-1)!));
+  expect(distance(visible[0])).toBeLessThanOrEqual(distance(visible[visible.length - 1]));
 });
 
 it("places adjacent-scale work before the scroll ring only while zooming", () => {
