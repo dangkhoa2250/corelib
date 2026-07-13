@@ -207,6 +207,76 @@ status="$(curl --silent --output /tmp/corelib-me-prop-fail.json --write-out '%{h
 test "${status}" = "403"
 grep -q '"account_not_approved"' /tmp/corelib-me-prop-fail.json
 
+# 6. Analytics Ingestion and Aggregate Metrics
+# Check analytics endpoint with approved user token: should return 403 analytics_disabled
+status="$(curl --silent --output /tmp/corelib-analytics-discard.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"installationId":"inst-1","name":"app_opened","appVersion":"1.0.0","occurredAt":"2026-07-13T21:00:00Z","payload":{"source":"manual"}}')"
+test "${status}" = "403"
+grep -q '"analytics_disabled"' /tmp/corelib-analytics-discard.json
+
+# Opt in to analytics: returns 200
+status="$(curl --silent --output /tmp/corelib-optin.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/me/analytics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"enabled":true}')"
+test "${status}" = "200"
+grep -q '"analyticsEnabled":true' /tmp/corelib-optin.json
+
+# Send valid analytics event -> returns 204
+status="$(curl --silent --output /tmp/corelib-analytics-save.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"installationId":"inst-1","name":"app_opened","appVersion":"1.0.0","occurredAt":"2026-07-13T21:00:00Z","payload":{"source":"manual"}}')"
+test "${status}" = "204"
+
+# Send prohibited event name "pdf_content" -> returns 400
+status="$(curl --silent --output /tmp/corelib-analytics-invalid-name.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"installationId":"inst-1","name":"pdf_content","appVersion":"1.0.0","occurredAt":"2026-07-13T21:00:00Z","payload":{}}')"
+test "${status}" = "400"
+grep -q '"invalid_event"' /tmp/corelib-analytics-invalid-name.json
+
+# Send prohibited payload key "query" -> returns 400
+status="$(curl --silent --output /tmp/corelib-analytics-prohibited.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"installationId":"inst-1","name":"app_opened","appVersion":"1.0.0","occurredAt":"2026-07-13T21:00:00Z","payload":{"query":"select"}}')"
+test "${status}" = "400"
+grep -q '"invalid_event"' /tmp/corelib-analytics-prohibited.json
+
+# Send second valid event (handled_error) -> returns 204
+status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"installationId":"inst-1","name":"handled_error","appVersion":"1.0.0","occurredAt":"2026-07-13T21:05:00Z","payload":{"code":"network_unavailable"}}')"
+test "${status}" = "204"
+
+# Call admin metrics endpoint -> returns 200 with aggregate shape
+status="$(curl --silent --output /tmp/corelib-admin-metrics.json --write-out '%{http_code}' \
+  --request GET "${base_url}/api/corelib/admin/metrics" \
+  --header "Authorization: Bearer ${admin_token}")"
+test "${status}" = "200"
+
+# Verify metrics aggregate counters and arrays
+grep -q '"approvedUsers":3' /tmp/corelib-admin-metrics.json
+grep -q '"pendingUsers":1' /tmp/corelib-admin-metrics.json
+grep -q '"activeUsersLast30Days":1' /tmp/corelib-admin-metrics.json
+grep -q '"name":"app_opened"' /tmp/corelib-admin-metrics.json
+grep -q '"name":"handled_error"' /tmp/corelib-admin-metrics.json
+grep -q '"appVersion":"1.0.0"' /tmp/corelib-admin-metrics.json
+grep -q '"code":"network_unavailable"' /tmp/corelib-admin-metrics.json
+
+
+
 
 
 

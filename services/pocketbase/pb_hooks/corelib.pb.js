@@ -199,6 +199,159 @@ routerAdd("GET", "/api/corelib/me", (e) => {
   }
 });
 
+// Approved token: Set analytics preference
+routerAdd("POST", "/api/corelib/me/analytics", (e) => {
+  const safeProfile = (rec) => {
+    return {
+      id: rec.id,
+      displayName: rec.getString("displayName"),
+      email: rec.getString("email"),
+      status: rec.getString("status"),
+      role: rec.getString("role"),
+      analyticsEnabled: rec.getBool("analyticsEnabled"),
+    };
+  };
+
+  if (!e.auth) {
+    return e.json(401, { message: "invalid_session" });
+  }
+
+  if (e.auth.getString("status") !== "approved") {
+    return e.json(403, { message: "account_not_approved" });
+  }
+
+  const data = e.requestInfo().body;
+  const enabled = data.enabled === true;
+
+  try {
+    const before = safeProfile(e.auth);
+    e.auth.set("analyticsEnabled", enabled);
+    e.app.save(e.auth);
+    const after = safeProfile(e.auth);
+
+    // Audit log
+    const auditCollection = e.app.findCollectionByNameOrId("admin_audit_logs");
+    const log = new Record(auditCollection);
+    log.set("actor", e.auth.id);
+    log.set("action", "analytics_preference_changed");
+    log.set("targetType", "user");
+    log.set("targetId", e.auth.id);
+    log.set("before", before);
+    log.set("after", after);
+    e.app.save(log);
+
+    return e.json(200, after);
+  } catch (err) {
+    return e.json(400, { message: err.toString() });
+  }
+});
+
+// Approved token: Analytics route
+routerAdd("POST", "/api/corelib/analytics", (e) => {
+  if (!e.auth) return e.json(401, { message: "invalid_session" });
+  if (e.auth.getString("status") !== "approved") return e.json(403, { message: "account_not_approved" });
+
+  // Check if analyticsEnabled is true
+  if (!e.auth.getBool("analyticsEnabled")) {
+    return e.json(403, { message: "analytics_disabled" });
+  }
+
+  const data = e.requestInfo().body;
+  const installationId = data.installationId || "";
+  const name = data.name || "";
+  const appVersion = data.appVersion || "";
+  const occurredAtStr = data.occurredAt || "";
+  const payload = data.payload || {};
+
+  // Enforce maximum 80-character installation IDs
+  if (typeof installationId !== "string" || installationId.length === 0 || installationId.length > 80) {
+    return e.json(400, { message: "invalid_event" });
+  }
+
+  // Enforce maximum 40-character app versions
+  if (typeof appVersion !== "string" || appVersion.length === 0 || appVersion.length > 40) {
+    return e.json(400, { message: "invalid_event" });
+  }
+
+  // Use this exact allowlist and payload keys
+  const ANALYTICS_SCHEMA = {
+    app_opened: ["source"],
+    feature_opened: ["featureKey"],
+    feature_completed: ["featureKey"],
+    handled_error: ["code"],
+    updater_state: ["state", "targetVersion"],
+  };
+
+  const allowedNames = Object.keys(ANALYTICS_SCHEMA);
+  if (typeof name !== "string" || !allowedNames.includes(name)) {
+    return e.json(400, { message: "invalid_event" });
+  }
+
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+    return e.json(400, { message: "invalid_event" });
+  }
+
+  // Enforce maximum 20 payload keys
+  const payloadKeys = Object.keys(payload);
+  if (payloadKeys.length > 20) {
+    return e.json(400, { message: "invalid_event" });
+  }
+
+  const prohibited = ["query", "path", "content", "prompt", "location", "address"];
+  const allowedKeys = ANALYTICS_SCHEMA[name] || [];
+
+  for (const k of payloadKeys) {
+    // Enforce 80-character keys, prohibited payload keys and schema allowlist
+    if (k.length > 80 || prohibited.includes(k) || !allowedKeys.includes(k)) {
+      return e.json(400, { message: "invalid_event" });
+    }
+    const val = payload[k];
+    const valType = typeof val;
+    // Accept only strings, finite numbers, and booleans as payload values
+    if (valType !== "string" && valType !== "number" && valType !== "boolean") {
+      return e.json(400, { message: "invalid_event" });
+    }
+    if (valType === "number" && !Number.isFinite(val)) {
+      return e.json(400, { message: "invalid_event" });
+    }
+    // Enforce 160-character strings
+    if (valType === "string" && val.length > 160) {
+      return e.json(400, { message: "invalid_event" });
+    }
+  }
+
+  // Save occurredAt supplied by the client only if it parses as RFC 3339 and is no more than 24 hours in the future; otherwise use server time.
+  let occurredAt = new Date().toISOString();
+  if (occurredAtStr) {
+    const rfc3339Regex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/;
+    if (rfc3339Regex.test(occurredAtStr)) {
+      const parsedDate = new Date(occurredAtStr);
+      if (!isNaN(parsedDate.getTime())) {
+        const futureLimit = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        if (parsedDate <= futureLimit) {
+          occurredAt = parsedDate.toISOString();
+        }
+      }
+    }
+  }
+
+  try {
+    const aeCollection = e.app.findCollectionByNameOrId("analytics_events");
+    const record = new Record(aeCollection);
+    record.set("user", e.auth.id);
+    record.set("installationId", installationId);
+    record.set("name", name);
+    record.set("appVersion", appVersion);
+    record.set("occurredAt", occurredAt);
+    record.set("payload", payload);
+    e.app.save(record);
+
+    return e.json(204); // Returns 204 No Content upon success
+  } catch (err) {
+    return e.json(400, { message: err.toString() });
+  }
+});
+
 // Admin-only: List users
 routerAdd("GET", "/api/corelib/admin/users", (e) => {
   const safeProfile = (rec) => {
@@ -563,6 +716,94 @@ routerAdd("POST", "/api/corelib/admin/assignments", (e) => {
     e.app.save(log);
 
     return e.json(200, after);
+  } catch (err) {
+    return e.json(400, { message: err.toString() });
+  }
+});
+
+// Admin-only: Aggregate metrics route
+routerAdd("GET", "/api/corelib/admin/metrics", (e) => {
+  if (!e.auth) return e.json(401, { message: "invalid_session" });
+  if (e.auth.getString("status") !== "approved") return e.json(403, { message: "account_not_approved" });
+  if (e.auth.getString("role") !== "admin") return e.json(403, { message: "admin_required" });
+
+  try {
+    // 1. Count approved and pending users
+    const approvedUsers = e.app.findRecordsByFilter("users", "status = 'approved'", "", 0, 0).length;
+    const pendingUsers = e.app.findRecordsByFilter("users", "status = 'pending'", "", 0, 0).length;
+
+    // 2. Count active users last 30 days
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const recentEvents = e.app.findRecordsByFilter("analytics_events", "occurredAt >= {:thirtyDaysAgo}", "", 0, 0, { thirtyDaysAgo: thirtyDaysAgo });
+    const activeUserIds = new Set();
+    for (const ev of recentEvents) {
+      activeUserIds.add(ev.getString("user"));
+    }
+    let activeUsersLast30Days = 0;
+    for (const uid of activeUserIds) {
+      try {
+        const u = e.app.findRecordById("users", uid);
+        if (u.getString("status") === "approved") {
+          activeUsersLast30Days++;
+        }
+      } catch (_) {}
+    }
+
+    // 3. Count eventsByName, versions, errorsByCode
+    const allEvents = e.app.findRecordsByFilter("analytics_events", "", "", 0, 0);
+
+    const countMap = {};
+    const versionMap = {};
+    const errorMap = {};
+
+    for (const ev of allEvents) {
+      const name = ev.getString("name");
+      countMap[name] = (countMap[name] || 0) + 1;
+
+      const ver = ev.getString("appVersion");
+      versionMap[ver] = (versionMap[ver] || 0) + 1;
+
+      if (name === "handled_error") {
+        let code = "";
+        try {
+          const payloadStr = ev.getString("payload");
+          if (payloadStr) {
+            const payload = JSON.parse(payloadStr);
+            code = payload.code || "";
+          }
+        } catch (_) {}
+        if (code) {
+          errorMap[code] = (errorMap[code] || 0) + 1;
+        }
+      }
+    }
+
+    const eventsByName = [];
+    for (const name in countMap) {
+      eventsByName.push({ name: name, count: countMap[name] });
+    }
+    eventsByName.sort((a, b) => a.name.localeCompare(b.name));
+
+    const versions = [];
+    for (const ver in versionMap) {
+      versions.push({ appVersion: ver, count: versionMap[ver] });
+    }
+    versions.sort((a, b) => a.appVersion.localeCompare(b.appVersion));
+
+    const errorsByCode = [];
+    for (const code in errorMap) {
+      errorsByCode.push({ code: code, count: errorMap[code] });
+    }
+    errorsByCode.sort((a, b) => a.code.localeCompare(b.code));
+
+    return e.json(200, {
+      approvedUsers: approvedUsers,
+      pendingUsers: pendingUsers,
+      activeUsersLast30Days: activeUsersLast30Days,
+      eventsByName: eventsByName,
+      versions: versions,
+      errorsByCode: errorsByCode
+    });
   } catch (err) {
     return e.json(400, { message: err.toString() });
   }
