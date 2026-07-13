@@ -41,6 +41,9 @@ import type { TranslationEngineId } from "../domain/translation";
 import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
 import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, DeckStatistics, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
+import { AccountGate } from "../features/account/AccountGate";
+import { PocketBaseAccountApiClient } from "../lib/account";
+import type { AccountApi } from "../domain/account";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -165,6 +168,7 @@ interface AppProps {
   libraryApi?: LibraryApi;
   learningApi?: LearningApi;
   aiApi?: AiApi;
+  accountApi?: AccountApi;
 }
 
 type AppRoute =
@@ -195,7 +199,14 @@ const nativeAiApi: AiApi = {
   translate: translateText,
 };
 
-export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi, aiApi = nativeAiApi }: AppProps) {
+const defaultAccountApi = new PocketBaseAccountApiClient();
+
+export function App({
+  libraryApi = nativeLibraryApi,
+  learningApi = nativeLearningApi,
+  aiApi = nativeAiApi,
+  accountApi = defaultAccountApi,
+}: AppProps) {
   const { resolvedTheme } = useTheme();
 
   useEffect(() => {
@@ -681,7 +692,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       : "library";
 
   return (
-    <div className="app-shell">
+    <AccountGate api={accountApi}>
+      <div className="app-shell">
       <AppSidebar
         active={activeSection}
         onNavigate={(section) => {
@@ -862,5 +874,6 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
         </div>
       )}
     </div>
+    </AccountGate>
   );
 }

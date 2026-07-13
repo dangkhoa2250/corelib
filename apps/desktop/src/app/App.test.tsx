@@ -50,7 +50,30 @@ vi.mock("pdfjs-dist", () => {
   };
 });
 
-import { beforeAll } from "vitest";
+import { beforeAll, beforeEach } from "vitest";
+import { invoke } from "@tauri-apps/api/core";
+
+beforeEach(() => {
+  vi.mocked(invoke).mockImplementation(async (cmd, _args) => {
+    if (cmd === "account_session") {
+      return {
+        profile: {
+          id: "u-12",
+          displayName: "Mai",
+          email: "mai@example.test",
+          status: "approved",
+          role: "member",
+          analyticsEnabled: true,
+        },
+        entitlements: {
+          featureKeys: [],
+          refreshedAt: "2026-07-13T21:00:00Z",
+        },
+      };
+    }
+    return undefined as any;
+  });
+});
 
 beforeAll(() => {
   HTMLCanvasElement.prototype.getContext = vi.fn().mockReturnValue({
