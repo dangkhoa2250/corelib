@@ -98,3 +98,8 @@ export interface AccountApi {
   adminSetFeatureAssignment(input: FeatureAssignmentInput): Promise<FeatureAssignment>;
   adminMetrics(): Promise<AdminMetrics>;
 }
+
+export function hasFeature(entitlements: Entitlements | null | undefined, key: string): boolean {
+  if (!entitlements || !entitlements.featureKeys) return false;
+  return entitlements.featureKeys.includes(key);
+}

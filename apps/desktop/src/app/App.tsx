@@ -44,6 +44,7 @@ import type { CreateCardInput, SearchResult } from "../lib/learning";
 import { AccountGate } from "../features/account/AccountGate";
 import { PocketBaseAccountApiClient } from "../lib/account";
 import type { AccountApi } from "../domain/account";
+import { AdminPage } from "../features/admin/AdminPage";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -179,7 +180,8 @@ type AppRoute =
   | { name: "cardBrowser"; deckId: string }
   | { name: "deckDetail"; deck: Deck; searchQuery?: string }
   | { name: "trash" }
-  | { name: "settings" };
+  | { name: "settings" }
+  | { name: "admin" };
 
 interface AiApi {
   hasApiKey: (provider: AiProviderId) => Promise<boolean>;
@@ -689,6 +691,8 @@ export function App({
       ? "memora"
       : route.name === "trash"
       ? "trash"
+      : route.name === "admin"
+      ? "admin"
       : "library";
 
   return (
@@ -711,6 +715,7 @@ export function App({
         }}
         onSearchClick={() => paletteRef.current?.open()}
         onSettingsClick={() => setRoute({ name: "settings" })}
+        onAdminClick={() => setRoute({ name: "admin" })}
       />
       <div className="app-shell__content">
         {route.name === "memora" ? (
@@ -786,6 +791,8 @@ export function App({
               void reloadDecks();
             }}
           />
+        ) : route.name === "admin" ? (
+          <AdminPage api={accountApi} />
         ) : (
           <>
             <LibraryPage
