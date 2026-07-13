@@ -171,13 +171,6 @@
   --color-highlight-active: rgb(255 149 0 / 75%);
 }
 
-/* Smooth theme transition */
-*,
-*::before,
-*::after {
-  transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;
-}
-
 * {
   box-sizing: border-box;
 }
@@ -1582,7 +1575,7 @@ textarea::placeholder {
   aspect-ratio: 0.72;
   place-items: center;
   overflow: hidden;
-  border-radius: 7px;
+  border-radius: 12px;
   color: var(--text-secondary);
   background: var(--border-strong);
   box-shadow: 0 5px 14px rgb(29 29 31 / 14%);
@@ -1606,10 +1599,131 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
-.document-card__title {
+.document-card__details {
+  min-width: 0;
+}
+
+.document-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 10px;
+  min-width: 0;
+}
+
+.document-card__title {
+  flex: 1;
+  min-width: 0;
   font-size: 15px;
   font-weight: 650;
+}
+
+.document-card__actions {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.document-card__menu-trigger {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-primary);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+[data-theme="dark"] .document-card__menu-trigger {
+  background: var(--main-bg);
+}
+
+.document-card__menu-trigger:hover,
+.document-card__menu-trigger[aria-expanded="true"] {
+  background: var(--interactive-hover);
+}
+
+.document-card__menu-popover,
+.document-card__rename-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  min-width: 130px;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-lg);
+}
+
+.document-card__menu-popover {
+  display: grid;
+  gap: 2px;
+}
+
+.document-card__menu-popover button {
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.document-card__menu-popover button:hover {
+  background: var(--interactive-hover);
+}
+
+.document-card__menu-popover .document-card__menu-delete {
+  color: var(--error);
+}
+
+.document-card__menu-popover .document-card__menu-delete:hover {
+  background: var(--color-danger-bg-hover);
+}
+
+.document-card__rename-popover {
+  display: grid;
+  min-width: 220px;
+  gap: 6px;
+  padding: 8px;
+}
+
+.document-card__rename-popover input {
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.document-card__rename-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.document-card__rename-actions button {
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--button-secondary-text);
+  background: var(--button-secondary-bg);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.document-card__rename-actions button[type="submit"] {
+  border-color: var(--button-primary-bg);
+  color: var(--button-primary-text);
+  background: var(--button-primary-bg);
 }
 
 .document-card__author,
@@ -3771,4 +3885,3 @@ textarea::placeholder {
     opacity: 1;
   }
 }
-

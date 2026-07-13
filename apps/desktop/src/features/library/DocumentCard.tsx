@@ -175,9 +175,15 @@ export function DocumentCard({
   getDocumentFileUrl,
 }: DocumentCardProps) {
   const statusLabel = documentStatusLabel(document);
+  const [isRenameOpen, setIsRenameOpen] = useState(false);
+  const [renameTitle, setRenameTitle] = useState(document.title);
+
+  useEffect(() => {
+    setRenameTitle(document.title);
+  }, [document.title]);
 
   return (
-    <article className="document-card" style={{ position: "relative" }}>
+    <article className="document-card">
       <button
         className="document-card__open"
         type="button"
@@ -193,7 +199,87 @@ export function DocumentCard({
             <span aria-hidden="true">{document.title.charAt(0)}</span>
           )}
         </div>
-        <span className="document-card__title">{document.title}</span>
+      </button>
+      <div className="document-card__details">
+        <div className="document-card__title-row">
+          <span className="document-card__title">{document.title}</span>
+          {(onDelete || onRename) && (
+            <div className="document-card__actions">
+              <button
+                className="document-card__menu-trigger"
+                type="button"
+                aria-label={`Actions for ${document.title}`}
+                aria-expanded={menuOpen}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMenuToggle?.(!menuOpen);
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                  <circle cx="5" cy="10" r="2" />
+                  <circle cx="10" cy="10" r="2" />
+                  <circle cx="15" cy="10" r="2" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <div className="document-card__menu-popover">
+                  {onRename && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMenuToggle?.(false);
+                        setRenameTitle(document.title);
+                        setIsRenameOpen(true);
+                      }}
+                    >
+                      Rename
+                    </button>
+                  )}
+                  {onDelete && (
+                    <button
+                      className="document-card__menu-delete"
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMenuToggle?.(false);
+                        if (window.confirm(`Are you sure you want to remove "${document.title}"?`)) {
+                          onDelete();
+                        }
+                      }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
+              {isRenameOpen && onRename && (
+                <form
+                  className="document-card__rename-popover"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const nextTitle = renameTitle.trim();
+                    if (nextTitle && nextTitle !== document.title) onRename(nextTitle);
+                    setIsRenameOpen(false);
+                  }}
+                >
+                  <input
+                    aria-label="Rename document title"
+                    value={renameTitle}
+                    onChange={(e) => setRenameTitle(e.currentTarget.value)}
+                    autoFocus
+                  />
+                  <div className="document-card__rename-actions">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setIsRenameOpen(false); }}>
+                      Cancel
+                    </button>
+                    <button type="submit" aria-label="Save title">Save</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+        </div>
         {document.author ? (
           <span className="document-card__author">{document.author}</span>
         ) : null}
@@ -212,118 +298,7 @@ export function DocumentCard({
         ) : statusLabel ? (
           <span className="document-card__status">{statusLabel}</span>
         ) : null}
-      </button>
-      {(onDelete || onRename) && (
-        <div style={{ position: "absolute", top: "8px", right: "8px", zIndex: 10 }}>
-          <button
-            type="button"
-            aria-label={`Actions for ${document.title}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onMenuToggle?.(!menuOpen);
-            }}
-            style={{
-              background: "rgba(255, 255, 255, 0.9)",
-              border: "none",
-              borderRadius: "50%",
-              width: "28px",
-              height: "28px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-              color: "#55555a",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 1)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255, 255, 255, 0.9)")}
-          >
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="currentColor">
-              <circle cx="5" cy="10" r="2" />
-              <circle cx="10" cy="10" r="2" />
-              <circle cx="15" cy="10" r="2" />
-            </svg>
-          </button>
-          {menuOpen && (
-            <div
-              style={{
-                position: "absolute",
-                top: "36px",
-                right: "0",
-                background: "rgba(255, 255, 255, 0.95)",
-                border: "1px solid rgba(0, 0, 0, 0.12)",
-                borderRadius: "10px",
-                boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-                backdropFilter: "blur(10px)",
-                padding: "4px",
-                minWidth: "120px",
-                zIndex: 100,
-                display: "flex",
-                flexDirection: "column",
-                gap: "2px",
-              }}
-            >
-              {onRename && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onMenuToggle?.(false);
-                    const newTitle = window.prompt("Rename book:", document.title);
-                    if (newTitle && newTitle.trim()) {
-                      onRename(newTitle.trim());
-                    }
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "8px 12px",
-                    textAlign: "left",
-                    fontSize: "14px",
-                    color: "#1d1d1f",
-                    cursor: "pointer",
-                    width: "100%",
-                    fontWeight: 500,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e8f2ff")}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                >
-                  Rename
-                </button>
-              )}
-              {onDelete && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onMenuToggle?.(false);
-                    if (window.confirm(`Are you sure you want to remove "${document.title}"?`)) {
-                      onDelete();
-                    }
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    borderRadius: "6px",
-                    padding: "8px 12px",
-                    textAlign: "left",
-                    fontSize: "14px",
-                    color: "#ff3b30",
-                    cursor: "pointer",
-                    width: "100%",
-                    fontWeight: 500,
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#ffebeb")}
-                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      </div>
     </article>
   );
 }

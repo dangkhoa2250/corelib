@@ -37,6 +37,27 @@ test("shows the document status only when it is non-empty", () => {
   expect(screen.getByText("Preparing")).toBeInTheDocument();
 });
 
+test("places document actions beside the truncated title", () => {
+  const { container } = render(
+    <DocumentCard
+      document={{ ...document, title: "Mathematics for Machine Learning" }}
+      onOpen={() => {}}
+      onRename={() => {}}
+    />,
+  );
+
+  const titleRow = container.querySelector(".document-card__title-row");
+  expect(titleRow).toContainElement(screen.getByText("Mathematics for Machine Learning"));
+  expect(titleRow).toContainElement(screen.getByRole("button", { name: "Actions for Mathematics for Machine Learning" }));
+});
+
+test("uses theme-aware classes for the document actions menu", () => {
+  const { container } = render(<DocumentCard document={document} onOpen={() => {}} onRename={() => {}} menuOpen />);
+
+  expect(container.querySelector(".document-card__menu-popover")).toBeInTheDocument();
+  expect(container.querySelector(".document-card__menu-trigger")).toBeInTheDocument();
+});
+
 test("keeps a failed index visible as a recoverable needs-attention card", () => {
   render(
     <DocumentCard
