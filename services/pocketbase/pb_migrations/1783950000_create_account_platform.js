@@ -179,7 +179,7 @@ migrate((app) => {
       {
         name: "enabled",
         type: "bool",
-        required: true,
+        required: false,
       },
       ...autoDateFields()
     ],
