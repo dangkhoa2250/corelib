@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi, beforeAll } from "vitest";
 
 import type { LibraryDocument } from "../../domain/document";
@@ -34,35 +34,39 @@ beforeAll(() => {
   });
 });
 
-// Mock pdfjs-dist
+const { pageRender } = vi.hoisted(() => ({
+  pageRender: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
+}));
+
 vi.mock("pdfjs-dist", () => {
+  const page = {
+    getViewport: vi.fn(({ scale }) => ({ width: 200 * scale, height: 300 * scale })),
+    render: pageRender,
+    getTextContent: vi.fn().mockResolvedValue({
+      items: [{ str: "match" }, { str: "hello" }],
+    }),
+    streamTextContent: vi.fn().mockReturnValue({
+      getReader: vi.fn().mockReturnValue({
+        read: vi.fn()
+          .mockResolvedValueOnce({
+            value: {
+              items: [{ str: "match" }, { str: "hello" }],
+              styles: {},
+            },
+            done: false,
+          })
+          .mockResolvedValueOnce({ done: true }),
+      }),
+    }),
+    getAnnotations: vi.fn().mockResolvedValue([]),
+  };
+
   return {
     GlobalWorkerOptions: { workerSrc: "" },
     getDocument: vi.fn().mockReturnValue({
       promise: Promise.resolve({
         numPages: 3,
-        getPage: vi.fn().mockResolvedValue({
-          getViewport: vi.fn().mockReturnValue({ width: 200, height: 300 }),
-          render: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
-          getTextContent: vi.fn().mockResolvedValue({
-            items: [{ str: "match" }, { str: "hello" }],
-          }),
-          streamTextContent: vi.fn().mockReturnValue({
-            getReader: vi.fn().mockReturnValue({
-              read: vi.fn()
-                .mockResolvedValueOnce({
-                  value: {
-                    items: [{ str: "match" }, { str: "hello" }],
-                    styles: {},
-                  },
-                  done: false,
-                })
-                .mockResolvedValueOnce({
-                  done: true,
-                }),
-            }),
-          }),
-        }),
+        getPage: vi.fn().mockResolvedValue(page),
       }),
     }),
     TextLayer: vi.fn().mockImplementation(function () {
@@ -131,6 +135,418 @@ it("centers the scaled page stack when it is narrower than the reader viewport",
   expect(getCenteredPageOffset(600, 1200)).toBe(0);
 });
 
+it("keeps page observers intact when the visible page changes", async () => {
+  const originalIntersectionObserver = globalThis.IntersectionObserver;
+  const observers: Array<{
+    target: Element | null;
+    notify: (isIntersecting: boolean) => void;
+  }> = [];
+
+  class ControlledIntersectionObserver {
+    target: Element | null = null;
+    readonly notify = (isIntersecting: boolean) => {
+      if (!this.target) return;
+      this.callback(
+        [{ isIntersecting, target: this.target } as IntersectionObserverEntry],
+        this as unknown as IntersectionObserver,
+      );
+    };
+
+    constructor(private readonly callback: IntersectionObserverCallback) {
+      observers.push(this);
+    }
+
+    observe(target: Element) {
+      this.target = target;
+    }
+
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+
+  globalThis.IntersectionObserver = ControlledIntersectionObserver as unknown as typeof IntersectionObserver;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Page 1 of 3")).toBeInTheDocument());
+    await waitFor(() => expect(observers).toHaveLength(6));
+
+    observers.find((observer) => observer.target?.id === "pdf-page-2")?.notify(true);
+
+    await waitFor(() => expect(screen.getByText("Page 2 of 3")).toBeInTheDocument());
+    expect(observers).toHaveLength(6);
+  } finally {
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+  }
+});
+
+it("keeps a page placeholder visible until its first raster frame is ready", async () => {
+  const originalIntersectionObserver = globalThis.IntersectionObserver;
+  let pageOneObserver: (() => void) | undefined;
+  let releaseRaster: (() => void) | undefined;
+  pageRender.mockImplementation(() => ({
+    promise: new Promise<void>((resolve) => {
+      releaseRaster = resolve;
+    }),
+    cancel: vi.fn(),
+  }));
+
+  class ControlledIntersectionObserver {
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+
+    observe(target: Element) {
+      if (target.id === "pdf-page-1") {
+        pageOneObserver = () => this.callback(
+          [{ isIntersecting: true, target } as IntersectionObserverEntry],
+          this as unknown as IntersectionObserver,
+        );
+      }
+    }
+
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+
+  globalThis.IntersectionObserver = ControlledIntersectionObserver as unknown as typeof IntersectionObserver;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageOneObserver).toBeDefined());
+    await act(async () => pageOneObserver?.());
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+
+    expect(screen.getByText("Page 1", { exact: true })).toBeInTheDocument();
+  } finally {
+    releaseRaster?.();
+    pageRender.mockReset().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() });
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+  }
+});
+
+it("keeps visibility updates paused while a rapid zoom settles at the minimum scale", async () => {
+  const originalIntersectionObserver = globalThis.IntersectionObserver;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  const frameCallbacks: FrameRequestCallback[] = [];
+  let pageTwoObserver: { notify: () => void } | undefined;
+
+  class ControlledIntersectionObserver {
+    target: Element | null = null;
+
+    constructor(private readonly callback: IntersectionObserverCallback) {}
+
+    observe(target: Element) {
+      this.target = target;
+      if (target.id === "pdf-page-2") {
+        pageTwoObserver = {
+          notify: () => this.callback(
+            [{ isIntersecting: true, target } as IntersectionObserverEntry],
+            this as unknown as IntersectionObserver,
+          ),
+        };
+      }
+    }
+
+    unobserve() {}
+    disconnect() {}
+    takeRecords(): IntersectionObserverEntry[] {
+      return [];
+    }
+  }
+
+  globalThis.IntersectionObserver = ControlledIntersectionObserver as unknown as typeof IntersectionObserver;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    frameCallbacks.push(callback);
+    return frameCallbacks.length;
+  }) as typeof globalThis.requestAnimationFrame;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Page 1 of 3")).toBeInTheDocument());
+    const zoomOut = screen.getByRole("button", { name: "Zoom out" });
+    for (let index = 0; index < 10; index += 1) fireEvent.click(zoomOut);
+    expect(frameCallbacks).toHaveLength(1);
+
+    await act(async () => {
+      frameCallbacks.shift()?.(performance.now());
+      pageTwoObserver?.notify();
+    });
+
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+  } finally {
+    globalThis.IntersectionObserver = originalIntersectionObserver;
+    globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  }
+});
+
+it("renders the final zoom scale after a fast zoom-out and zoom-in", async () => {
+  pageRender.mockClear();
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const zoomOut = screen.getByRole("button", { name: "Zoom out" });
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(200));
+
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomOut);
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(100));
+
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(200));
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+  }
+});
+
+it("keeps a low-resolution page preview and overlays tiles at high zoom", async () => {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.classList.contains("reader-canvas-container")) {
+      return { left: 0, top: 0, right: 600, bottom: 700, width: 600, height: 700 } as DOMRect;
+    }
+    if (this.id === "pdf-page-1") {
+      return { left: 0, top: 0, right: 600, bottom: 900, width: 600, height: 900 } as DOMRect;
+    }
+    return getBoundingClientRect.call(this);
+  };
+  try {
+    pageRender.mockClear();
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(200));
+    await waitFor(() => expect(globalThis.document.querySelectorAll(".reader-raster-tile").length).toBeGreaterThan(0));
+    expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-raster-tile")?.dataset.cacheKey)
+      .toMatch(/^linear-algebra:1:/);
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+    HTMLElement.prototype.getBoundingClientRect = getBoundingClientRect;
+  }
+});
+
+it("starts visible tile refinement before the zoom settle delay expires", async () => {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.classList.contains("reader-canvas-container")) {
+      return { left: 0, top: 0, right: 600, bottom: 700, width: 600, height: 700 } as DOMRect;
+    }
+    if (this.id === "pdf-page-1") {
+      return { left: 0, top: 0, right: 1800, bottom: 2400, width: 1800, height: 2400 } as DOMRect;
+    }
+    return getBoundingClientRect.call(this);
+  };
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    expect(globalThis.document.querySelectorAll(".reader-raster-tile").length).toBeGreaterThan(0);
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+    HTMLElement.prototype.getBoundingClientRect = getBoundingClientRect;
+  }
+});
+
+it("keeps the page DOM geometry stable while raster resolution catches up", async () => {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const pageContent = globalThis.document.querySelector<HTMLElement>("#pdf-page-1 > div");
+    expect(pageContent).toHaveStyle({ width: "200px", height: "300px", transform: "scale(1)" });
+
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await new Promise((resolve) => setTimeout(resolve, 160));
+
+    expect(pageContent).toHaveStyle({ width: "200px", height: "300px", transform: "scale(1)" });
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+  }
+});
+
+it("keeps the whole-page preview raster while high-zoom tiles refine", async () => {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.classList.contains("reader-canvas-container")) {
+      return { left: 0, top: 0, right: 600, bottom: 700, width: 600, height: 700 } as DOMRect;
+    }
+    if (this.id === "pdf-page-1") {
+      return { left: 0, top: 0, right: 1800, bottom: 2400, width: 1800, height: 2400 } as DOMRect;
+    }
+    return getBoundingClientRect.call(this);
+  };
+  try {
+    pageRender.mockClear();
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const previewRenderCount = () => pageRender.mock.calls.filter(
+      ([options]) => options.viewport.width === 200,
+    ).length;
+    const initialPreviewRenderCount = previewRenderCount();
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+
+    await new Promise((resolve) => setTimeout(resolve, 160));
+    expect(previewRenderCount()).toBe(initialPreviewRenderCount);
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+    HTMLElement.prototype.getBoundingClientRect = getBoundingClientRect;
+  }
+});
+
+it("reuses the whole-page preview after a high-zoom gesture settles", async () => {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  const releases: Array<() => void> = [];
+  const fullPageReleases: Array<() => void> = [];
+  const fullPageRenderCount = () => pageRender.mock.calls.filter(
+    ([options]) => options.viewport.width >= 200,
+  ).length;
+  pageRender.mockClear();
+  pageRender.mockImplementation(({ viewport }) => {
+    let release!: () => void;
+    const promise = new Promise<void>((resolve) => {
+      release = resolve;
+      releases.push(resolve);
+    });
+    if (viewport.width >= 200) fullPageReleases.push(release);
+    return { promise, cancel: vi.fn() };
+  });
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(fullPageRenderCount()).toBe(1));
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    expect(fullPageRenderCount()).toBe(1);
+
+    fullPageReleases.shift()?.();
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(200));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(fullPageRenderCount()).toBe(1);
+  } finally {
+    releases.splice(0).forEach((release) => release());
+    pageRender.mockReset().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() });
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+  }
+});
+
 it("renders PDF document and sidebar thumbnails", async () => {
   const getDocumentFileUrl = vi.fn().mockResolvedValue("/mocked/path.pdf");
   const onPageChange = vi.fn().mockResolvedValue(undefined);
@@ -186,6 +602,23 @@ it("exposes a Preview-style reader layout and labeled controls", async () => {
   expect(screen.getByRole("button", { name: "Back to Library" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
+});
+
+it("does not force the full document column into a composited transform layer", async () => {
+  render(
+    <ReaderPage
+      document={document}
+      onBack={() => {}}
+      getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+      onPageChange={vi.fn().mockResolvedValue(undefined)}
+    />,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Linear Algebra" })).toBeInTheDocument();
+  });
+
+  expect(globalThis.document.querySelector(".reader-page-column")).not.toHaveStyle({ willChange: "transform" });
 });
 
 it("calls onPageChange when page rendering succeeds", async () => {
