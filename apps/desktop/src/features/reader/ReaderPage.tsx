@@ -830,6 +830,11 @@ export function ReaderPage({
     });
   }, [applyScaleToDOM, scheduleRenderScaleSync, stackContentSize.width]);
 
+  const zoomBy = useCallback((delta: number, pointerX: number, pointerY: number) => {
+    const baseScale = pendingZoomRef.current?.scale ?? scaleRef.current;
+    zoomAtViewportPoint(baseScale + delta, pointerX, pointerY);
+  }, [zoomAtViewportPoint]);
+
   useEffect(() => {
     let active = true;
     const loadFileAndDoc = async () => {
@@ -973,8 +978,8 @@ export function ReaderPage({
 
         const factor = 0.05;
         const containerRect = container.getBoundingClientRect();
-        zoomAtViewportPoint(
-          scaleRef.current + (e.deltaY < 0 ? factor : -factor),
+        zoomBy(
+          e.deltaY < 0 ? factor : -factor,
           e.clientX - containerRect.left,
           e.clientY - containerRect.top,
         );
@@ -985,7 +990,7 @@ export function ReaderPage({
     return () => {
       container.removeEventListener("wheel", handleNativeWheel);
     };
-  }, [pdfDoc, zoomAtViewportPoint]);
+  }, [pdfDoc, zoomBy]);
 
   // Search
   const handleSearch = async (e: React.FormEvent) => {
@@ -1210,8 +1215,8 @@ export function ReaderPage({
               onClick={() => {
                 const container = pagesContainerRef.current;
                 if (!container) return;
-                zoomAtViewportPoint(
-                  scaleRef.current - 0.1,
+                zoomBy(
+                  -0.1,
                   container.clientWidth / 2,
                   container.clientHeight / 2,
                 );
@@ -1230,8 +1235,8 @@ export function ReaderPage({
               onClick={() => {
                 const container = pagesContainerRef.current;
                 if (!container) return;
-                zoomAtViewportPoint(
-                  scaleRef.current + 0.1,
+                zoomBy(
+                  0.1,
                   container.clientWidth / 2,
                   container.clientHeight / 2,
                 );

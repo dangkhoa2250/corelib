@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi, beforeAll } from "vitest";
 
 import type { LibraryDocument } from "../../domain/document";
@@ -34,35 +34,39 @@ beforeAll(() => {
   });
 });
 
-// Mock pdfjs-dist
+const { pageRender } = vi.hoisted(() => ({
+  pageRender: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
+}));
+
 vi.mock("pdfjs-dist", () => {
+  const page = {
+    getViewport: vi.fn(({ scale }) => ({ width: 200 * scale, height: 300 * scale })),
+    render: pageRender,
+    getTextContent: vi.fn().mockResolvedValue({
+      items: [{ str: "match" }, { str: "hello" }],
+    }),
+    streamTextContent: vi.fn().mockReturnValue({
+      getReader: vi.fn().mockReturnValue({
+        read: vi.fn()
+          .mockResolvedValueOnce({
+            value: {
+              items: [{ str: "match" }, { str: "hello" }],
+              styles: {},
+            },
+            done: false,
+          })
+          .mockResolvedValueOnce({ done: true }),
+      }),
+    }),
+    getAnnotations: vi.fn().mockResolvedValue([]),
+  };
+
   return {
     GlobalWorkerOptions: { workerSrc: "" },
     getDocument: vi.fn().mockReturnValue({
       promise: Promise.resolve({
         numPages: 3,
-        getPage: vi.fn().mockResolvedValue({
-          getViewport: vi.fn().mockReturnValue({ width: 200, height: 300 }),
-          render: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
-          getTextContent: vi.fn().mockResolvedValue({
-            items: [{ str: "match" }, { str: "hello" }],
-          }),
-          streamTextContent: vi.fn().mockReturnValue({
-            getReader: vi.fn().mockReturnValue({
-              read: vi.fn()
-                .mockResolvedValueOnce({
-                  value: {
-                    items: [{ str: "match" }, { str: "hello" }],
-                    styles: {},
-                  },
-                  done: false,
-                })
-                .mockResolvedValueOnce({
-                  done: true,
-                }),
-            }),
-          }),
-        }),
+        getPage: vi.fn().mockResolvedValue(page),
       }),
     }),
     TextLayer: vi.fn().mockImplementation(function () {
@@ -129,6 +133,46 @@ it("shrinks raster density when zoom x Retina would exceed the canvas pixel budg
 it("centers the scaled page stack when it is narrower than the reader viewport", () => {
   expect(getCenteredPageOffset(1200, 600)).toBe(300);
   expect(getCenteredPageOffset(600, 1200)).toBe(0);
+});
+
+it("renders the final zoom scale after a fast zoom-out and zoom-in", async () => {
+  pageRender.mockClear();
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const zoomOut = screen.getByRole("button", { name: "Zoom out" });
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(600));
+
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomOut);
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(100));
+
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(600));
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+  }
 });
 
 it("renders PDF document and sidebar thumbnails", async () => {
