@@ -55,7 +55,20 @@ function DynamicCover({
       setVisible(entry?.isIntersecting ?? false);
     }, { rootMargin: "200px" });
     observer.observe(element);
-    return () => observer.disconnect();
+    const frame = requestAnimationFrame(() => {
+      const { bottom, left, right, top } = element.getBoundingClientRect();
+      const margin = 200;
+      setVisible(
+        bottom >= -margin
+          && top <= window.innerHeight + margin
+          && right >= -margin
+          && left <= window.innerWidth + margin,
+      );
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
 
   useEffect(() => {

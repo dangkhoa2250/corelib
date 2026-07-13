@@ -100,6 +100,57 @@ test("does not download a cover until its card intersects the viewport", async (
   expect(screen.getByRole("button", { name: "Open Offscreen document" })).toBeInTheDocument();
 });
 
+test("renders a cover for an initially visible card when IntersectionObserver has no startup callback", async () => {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({} as any);
+  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(null));
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    x: 0,
+    y: 0,
+    top: 0,
+    left: 0,
+    right: 200,
+    bottom: 280,
+    width: 200,
+    height: 280,
+    toJSON: () => ({}),
+  });
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  class SilentIntersectionObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() { return []; }
+  }
+  vi.stubGlobal("IntersectionObserver", SilentIntersectionObserver);
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      this.callback([{ target, contentRect: { width: 200, height: 280 } } as ResizeObserverEntry], this as unknown as ResizeObserver);
+    }
+    unobserve() {}
+    disconnect() {}
+  });
+
+  const getDocumentFileUrl = vi.fn().mockResolvedValue("/tmp/initially-visible.pdf");
+  try {
+    render(
+      <DocumentCard
+        document={{ ...document, id: "initially-visible", title: "Initially visible" }}
+        onOpen={() => {}}
+        getDocumentFileUrl={getDocumentFileUrl}
+      />,
+    );
+
+    await waitFor(() => expect(getDocumentFileUrl).toHaveBeenCalledWith("initially-visible"));
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+  }
+});
+
 test("renders a dynamic cover at its displayed Retina resolution", async () => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({ scale: vi.fn() } as any);
   vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation((callback) => callback(null));
