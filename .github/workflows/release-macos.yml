@@ -1,0 +1,88 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Check out tag
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Build signed Tauri artifacts
+        working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npm run tauri build
+
+      - name: Verify .sig files exist
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          sig_count=$(find src-tauri/target/release/bundle -name "*.sig" | wc -l | tr -d ' ')
+          if [ "$sig_count" -eq 0 ]; then
+            echo "::error::No .sig files found — signing failed or secrets are missing"
+            exit 1
+          fi
+          echo "Found $sig_count signature file(s)"
+
+      - name: Generate latest.json
+        working-directory: apps/desktop
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#desktop-v}"
+          REPO="dangkhoa2250/corelib"
+          BUNDLE_DIR="src-tauri/target/release/bundle/macos"
+          APP_TAR_GZ=$(basename "$BUNDLE_DIR"/*.app.tar.gz)
+          SIGNATURE=$(cat "$BUNDLE_DIR"/*.app.tar.gz.sig)
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${APP_TAR_GZ}"
+          cat > latest.json <<ENDJSON
+          {
+            "version": "${VERSION}",
+            "notes": "Release ${VERSION}",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "${SIGNATURE}",
+                "url": "${DOWNLOAD_URL}"
+              },
+              "darwin-x86_64": {
+                "signature": "${SIGNATURE}",
+                "url": "${DOWNLOAD_URL}"
+              }
+            }
+          }
+          ENDJSON
+          echo "Generated latest.json for version ${VERSION}"
+
+      - name: Upload artifacts to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            apps/desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz
+            apps/desktop/src-tauri/target/release/bundle/macos/*.app.tar.gz.sig
+            apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg.sig
+            apps/desktop/latest.json
+          generate_release_notes: true

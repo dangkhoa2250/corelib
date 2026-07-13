@@ -41,6 +41,11 @@ import type { TranslationEngineId } from "../domain/translation";
 import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
 import type { BulkResult, CardBrowserQuery, CardPage, CardSource, Deck, DeckStatistics, LearningCard, ReviewPreview, ReviewRating, UpdateCardInput, UpdateAndMoveCardInput } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
+import { AccountGate, useAccount } from "../features/account/AccountGate";
+import { PocketBaseAccountApiClient } from "../lib/account";
+import type { AccountApi } from "../domain/account";
+import { AdminPage } from "../features/admin/AdminPage";
+import { AnalyticsClient } from "../lib/analytics";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -165,6 +170,7 @@ interface AppProps {
   libraryApi?: LibraryApi;
   learningApi?: LearningApi;
   aiApi?: AiApi;
+  accountApi?: AccountApi;
 }
 
 type AppRoute =
@@ -175,7 +181,17 @@ type AppRoute =
   | { name: "cardBrowser"; deckId: string }
   | { name: "deckDetail"; deck: Deck; searchQuery?: string }
   | { name: "trash" }
-  | { name: "settings" };
+  | { name: "settings" }
+  | { name: "admin" };
+
+const ROUTE_FEATURE_KEYS: Partial<Record<AppRoute["name"], string>> = {
+  library: "library",
+  memora: "memora",
+  deckDetail: "memora",
+  cardBrowser: "memora",
+  trash: "trash",
+  admin: "admin",
+};
 
 interface AiApi {
   hasApiKey: (provider: AiProviderId) => Promise<boolean>;
@@ -195,8 +211,51 @@ const nativeAiApi: AiApi = {
   translate: translateText,
 };
 
-export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearningApi, aiApi = nativeAiApi }: AppProps) {
+const defaultAccountApi = new PocketBaseAccountApiClient();
+
+function AnalyticsInstrumentation({
+  client,
+  route,
+}: {
+  client: AnalyticsClient;
+  route: AppRoute;
+}) {
+  const account = useAccount();
+  const analyticsEnabled = account?.session?.profile.analyticsEnabled ?? false;
+
+  useEffect(() => {
+    client.setAnalyticsEnabled(analyticsEnabled);
+    if (analyticsEnabled) {
+      client.track("app_opened", { source: "launch" });
+      void client.flush();
+    }
+  }, [client, analyticsEnabled]);
+
+  useEffect(() => {
+    if (!analyticsEnabled) return;
+    const featureKey = ROUTE_FEATURE_KEYS[route.name];
+    if (featureKey) {
+      client.track("feature_opened", { featureKey });
+      void client.flush();
+    }
+  }, [client, route.name, analyticsEnabled]);
+
+  useEffect(() => {
+    const stop = client.startAutoFlush();
+    return stop;
+  }, [client]);
+
+  return null;
+}
+
+export function App({
+  libraryApi = nativeLibraryApi,
+  learningApi = nativeLearningApi,
+  aiApi = nativeAiApi,
+  accountApi = defaultAccountApi,
+}: AppProps) {
   const { resolvedTheme } = useTheme();
+  const analyticsClient = useMemo(() => new AnalyticsClient(accountApi, false), [accountApi]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', resolvedTheme);
@@ -678,10 +737,14 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
       ? "memora"
       : route.name === "trash"
       ? "trash"
+      : route.name === "admin"
+      ? "admin"
       : "library";
 
   return (
-    <div className="app-shell">
+    <AccountGate api={accountApi}>
+      <AnalyticsInstrumentation client={analyticsClient} route={route} />
+      <div className="app-shell">
       <AppSidebar
         active={activeSection}
         onNavigate={(section) => {
@@ -699,6 +762,7 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
         }}
         onSearchClick={() => paletteRef.current?.open()}
         onSettingsClick={() => setRoute({ name: "settings" })}
+        onAdminClick={() => setRoute({ name: "admin" })}
       />
       <div className="app-shell__content">
         {route.name === "memora" ? (
@@ -774,6 +838,8 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
               void reloadDecks();
             }}
           />
+        ) : route.name === "admin" ? (
+          <AdminPage api={accountApi} />
         ) : (
           <>
             <LibraryPage
@@ -862,5 +928,6 @@ export function App({ libraryApi = nativeLibraryApi, learningApi = nativeLearnin
         </div>
       )}
     </div>
+    </AccountGate>
   );
 }

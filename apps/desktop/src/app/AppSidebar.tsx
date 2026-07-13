@@ -1,8 +1,9 @@
-import { useCallback, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { useContext, useCallback, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 
 import { IconLibrary, IconMemora, IconSearch, IconSettings, IconTrash } from "./icons";
+import { AccountContext } from "../features/account/AccountGate";
 
-export type AppSection = "library" | "memora" | "trash" | "settings";
+export type AppSection = "library" | "memora" | "trash" | "settings" | "admin";
 
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 360;
@@ -13,6 +14,7 @@ interface AppSidebarProps {
   onNavigate: (section: AppSection) => void;
   onSearchClick: () => void;
   onSettingsClick: () => void;
+  onAdminClick?: () => void;
 }
 
 const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] = [
@@ -21,8 +23,11 @@ const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] =
   { section: "trash", label: "Trash", icon: IconTrash },
 ];
 
-export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick }: AppSidebarProps) {
+export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick, onAdminClick }: AppSidebarProps) {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  
+  const accountContext = useContext(AccountContext);
+  const isAdmin = accountContext?.session?.profile?.role === "admin";
 
   const handleResizeStart = useCallback(
     (e: ReactMouseEvent) => {
@@ -82,6 +87,23 @@ export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick 
             </li>
           );
         })}
+        {isAdmin && onAdminClick && (
+          <li>
+            <button
+              aria-current={active === "admin" ? "page" : undefined}
+              className={`app-sidebar__nav-item ${active === "admin" ? "is-active" : ""}`}
+              onClick={onAdminClick}
+              type="button"
+            >
+              <span aria-hidden="true" className="app-sidebar__nav-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+              </span>
+              Admin
+            </button>
+          </li>
+        )}
       </ul>
       <div className="app-sidebar__footer">
         <button
@@ -92,6 +114,20 @@ export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick 
         >
           <span aria-hidden="true" className="app-sidebar__nav-icon"><IconSettings /></span>
           Settings
+        </button>
+        <button
+          className="app-sidebar__nav-item app-sidebar__logout"
+          onClick={() => accountContext?.signOut()}
+          type="button"
+        >
+          <span aria-hidden="true" className="app-sidebar__nav-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <polyline points="16 17 21 12 16 7" />
+              <line x1="21" y1="12" x2="9" y2="12" />
+            </svg>
+          </span>
+          Log Out
         </button>
       </div>
       <div

@@ -121,7 +121,7 @@ pub fn clear_api_key(provider: &str) -> Result<(), String> {
 pub fn has_api_key(provider: &str) -> Result<bool, String> {
     provider_base_url(provider)?;
     let keys = load_keys();
-    Ok(keys.get(provider).map_or(false, |v| !v.is_empty()))
+    Ok(keys.get(provider).is_some_and(|v| !v.is_empty()))
 }
 
 pub(crate) fn load_api_key(provider: &str) -> Result<String, String> {

@@ -2,3 +2,7 @@
 .worktrees/
 .superpowers/
 math
+
+services/pocketbase/.env
+services/pocketbase/pb_data/
+services/pocketbase/pocketbase

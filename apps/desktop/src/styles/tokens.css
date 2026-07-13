@@ -360,6 +360,11 @@ textarea::placeholder {
   border-top: 1px solid var(--border-subtle);
 }
 
+.app-sidebar__logout:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+}
+
 .settings-page {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
