@@ -167,4 +167,16 @@ describe("AccountGate Component", () => {
     expect(video).toHaveAttribute("loop");
     expect(video).toHaveAttribute("playsinline");
   });
+
+  it("defines a responsive overlay treatment for the video background", () => {
+    const { container } = render(
+      <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
+        <div>Protected app</div>
+      </AccountGate>
+    );
+
+    const styles = container.querySelector("style")?.textContent;
+    expect(styles).toContain(".account-gate-video-overlay");
+    expect(styles).toContain("@media (max-width: 720px)");
+  });
 });
