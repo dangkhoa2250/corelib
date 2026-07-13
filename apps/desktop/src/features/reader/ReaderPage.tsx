@@ -44,6 +44,7 @@ function setCachedPdfDoc(key: string, doc: pdfjs.PDFDocumentProxy): void {
 const MIN_ZOOM_SCALE = 0.5;
 const MAX_ZOOM_SCALE = 3;
 const MAX_CANVAS_PIXEL_RATIO = 3.0;
+const PROGRESSIVE_RENDER_INTERVAL_MS = 120;
 // Bound each whole-page raster while zooming. Viewport tiling can raise this
 // limit later without making the settled full-page render stall the UI.
 const MAX_CANVAS_PIXELS = 16_777_216;
@@ -207,6 +208,7 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active, tagged }: Thumbnai
 }
 
 interface PdfPageProps {
+  documentId: string;
   pdfDoc: pdfjs.PDFDocumentProxy;
   pageNumber: number;
   renderScale: number;
@@ -220,6 +222,7 @@ interface PdfPageProps {
 
 const PdfPage = React.memo(
   function PdfPage({
+    documentId,
     pdfDoc,
     pageNumber,
     renderScale,
@@ -232,14 +235,18 @@ const PdfPage = React.memo(
   }: PdfPageProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    const previewRasterScaleRef = useRef<number | null>(null);
+    const layersRenderedRef = useRef(false);
     const textLayerRef = useRef<HTMLDivElement | null>(null);
     const annotationLayerRef = useRef<HTMLDivElement | null>(null);
     const [isVisible, setIsVisible] = useState(false);
+    const [hasPreview, setHasPreview] = useState(false);
     const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
     const [pdfPage, setPdfPage] = useState<pdfjs.PDFPageProxy | null>(null);
 
     const currentWidth = pageSize ? pageSize.width : defaultWidth;
     const currentHeight = pageSize ? pageSize.height : defaultHeight;
+    const previewScale = renderScale >= 1.5 ? 1 : renderScale;
 
     const captureSelection = useCallback(() => {
       const selection = window.getSelection();
@@ -316,64 +323,62 @@ const PdfPage = React.memo(
           setPageSize({ width: sizeViewport.width, height: sizeViewport.height });
           setPdfPage(page);
 
-          const previewScale = renderScale >= 1.5 ? 1 : renderScale;
           const previewViewport = page.getViewport({ scale: previewScale });
-          const layerViewport = page.getViewport({ scale: renderScale });
+          // Page geometry is always expressed at PDF scale 1. The outer page
+          // column owns visual zoom; raster scale only changes backing pixels.
+          const layerViewport = page.getViewport({ scale: 1 });
           const canvas = canvasRef.current;
           const textLayerContainer = textLayerRef.current;
           const annotationLayerContainer = annotationLayerRef.current;
           if (!canvas || !textLayerContainer || !annotationLayerContainer) return;
 
-          // pdf.js positions text spans using --scale-factor. Keep it in sync
-          // with the viewport scale so selection geometry matches the canvas.
-          textLayerContainer.style.setProperty("--scale-factor", String(renderScale));
-          annotationLayerContainer.style.setProperty("--scale-factor", String(renderScale));
+          textLayerContainer.style.setProperty("--scale-factor", "1");
+          annotationLayerContainer.style.setProperty("--scale-factor", "1");
 
-          // Stretch the stale bitmap to the new page size immediately, then
-          // rasterize offscreen and swap in a single blit — during a zoom the
-          // page shows a scaled (blurry) preview instead of going blank.
-          canvas.style.width = `${currentWidth * renderScale}px`;
-          canvas.style.height = `${currentHeight * renderScale}px`;
+          if (previewRasterScaleRef.current !== previewScale || canvas.width === 0 || canvas.height === 0) {
+            const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, previewViewport.width, previewViewport.height);
+            renderToken = pageRenderQueue.run(async () => {
+              if (!isCurrent) throw new PageRenderQueueError("SUPERSEDED");
+              const offscreen = window.document.createElement("canvas");
+              try {
+                offscreen.width = previewViewport.width * dpr;
+                offscreen.height = previewViewport.height * dpr;
+                const offscreenContext = offscreen.getContext("2d");
+                if (!offscreenContext) throw new Error("Unable to create a PDF render canvas");
+                offscreenContext.scale(dpr, dpr);
 
-          const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, previewViewport.width, previewViewport.height);
-          renderToken = pageRenderQueue.run(async () => {
-            if (!isCurrent) throw new PageRenderQueueError("SUPERSEDED");
-            const offscreen = window.document.createElement("canvas");
-            try {
-              offscreen.width = previewViewport.width * dpr;
-              offscreen.height = previewViewport.height * dpr;
-              const offscreenContext = offscreen.getContext("2d");
-              if (!offscreenContext) throw new Error("Unable to create a PDF render canvas");
-              offscreenContext.scale(dpr, dpr);
-
-              renderTask = page.render({
-                canvasContext: offscreenContext,
-                viewport: previewViewport,
-              });
-              await renderTask.promise;
-              return offscreen;
-            } catch (error) {
+                renderTask = page.render({
+                  canvasContext: offscreenContext,
+                  viewport: previewViewport,
+                  background: "#ffffff",
+                });
+                await renderTask.promise;
+                return offscreen;
+              } catch (error) {
+                releaseCanvas(offscreen);
+                throw error;
+              }
+            }, { priority: 10 });
+            const offscreen = await renderToken.promise;
+            if (!isCurrent) {
               releaseCanvas(offscreen);
-              throw error;
+              return;
             }
-          }, { priority: 10 });
-          const offscreen = await renderToken.promise;
-          if (!isCurrent) {
+
+            const context = canvas.getContext("2d");
+            if (!context) {
+              releaseCanvas(offscreen);
+              return;
+            }
+            canvas.width = offscreen.width;
+            canvas.height = offscreen.height;
+            context.drawImage(offscreen, 0, 0);
             releaseCanvas(offscreen);
-            return;
+            previewRasterScaleRef.current = previewScale;
+            setHasPreview(true);
           }
 
-          const context = canvas.getContext("2d");
-          if (!context) {
-            releaseCanvas(offscreen);
-            return;
-          }
-          canvas.width = offscreen.width;
-          canvas.height = offscreen.height;
-          context.drawImage(offscreen, 0, 0);
-          releaseCanvas(offscreen);
-
-          if (isCurrent) {
+          if (isCurrent && !layersRenderedRef.current) {
             // Text Layer
             textLayerContainer.innerHTML = "";
             const textStream = page.streamTextContent();
@@ -446,11 +451,12 @@ const PdfPage = React.memo(
                 linkService: linkService as any,
                 renderForms: false,
               });
+              if (isCurrent) layersRenderedRef.current = true;
             }
           }
         } catch (error) {
           if (import.meta.env.DEV && isCurrent && !isExpectedRenderCancellation(error)) {
-            console.error("PDF page render failed", { pageNumber, renderScale, error });
+            console.error("PDF page render failed", { pageNumber, previewScale, error });
           }
         }
       };
@@ -462,7 +468,7 @@ const PdfPage = React.memo(
         renderTask?.cancel();
         if (renderToken) pageRenderQueue.supersede(renderToken.id);
       };
-    }, [pdfDoc, pageNumber, renderScale, isVisible]);
+    }, [pdfDoc, pageNumber, previewScale, isVisible]);
 
     // Release the raster and DOM layers only once the page scrolls off-screen,
     // so zoom re-renders keep the previous bitmap visible until replaced.
@@ -473,15 +479,16 @@ const PdfPage = React.memo(
         canvas.width = 0;
         canvas.height = 0;
       }
+      previewRasterScaleRef.current = null;
+      layersRenderedRef.current = false;
       if (textLayerRef.current) {
         textLayerRef.current.innerHTML = "";
       }
       if (annotationLayerRef.current) {
         annotationLayerRef.current.innerHTML = "";
       }
+      setHasPreview(false);
     }, [isVisible]);
-
-    const cssScale = 1 / renderScale;
 
     return (
       <div
@@ -499,18 +506,23 @@ const PdfPage = React.memo(
         }}
       >
         <div
+          className="reader-page-content"
           style={{
             position: "absolute",
             top: 0,
             left: 0,
-            width: `${currentWidth * renderScale}px`,
-            height: `${currentHeight * renderScale}px`,
-            transform: `scale(${cssScale})`,
+            width: `${currentWidth}px`,
+            height: `${currentHeight}px`,
+            transform: "scale(1)",
             transformOrigin: "top left",
             display: isVisible ? "block" : "none",
           }}
         >
-          <canvas ref={canvasRef} className="reader-canvas" />
+          <canvas
+            ref={canvasRef}
+            className="reader-canvas"
+            style={{ width: `${currentWidth}px`, height: `${currentHeight}px`, display: "block" }}
+          />
           {isVisible && pdfPage && (
             <PdfViewportTiles
               page={pdfPage}
@@ -520,6 +532,7 @@ const PdfPage = React.memo(
               pageContainerRef={containerRef}
               rootRef={pagesContainerRef}
               queue={pageRenderQueue}
+              cacheNamespace={`${documentId}:${pageNumber}`}
             />
           )}
           <div
@@ -550,7 +563,7 @@ const PdfPage = React.memo(
           />
         </div>
 
-        {!isVisible && (
+        {(!isVisible || !hasPreview) && (
           <div
             style={{
               width: "100%",
@@ -587,6 +600,7 @@ const PdfPage = React.memo(
   (prevProps, nextProps) => {
     return (
       prevProps.pdfDoc === nextProps.pdfDoc &&
+      prevProps.documentId === nextProps.documentId &&
       prevProps.pageNumber === nextProps.pageNumber &&
       prevProps.renderScale === nextProps.renderScale &&
       prevProps.defaultWidth === nextProps.defaultWidth &&
@@ -706,6 +720,9 @@ export function ReaderPage({
   const scaleRef = useRef(1.0);
   const isZoomingRef = useRef(false);
   const zoomDebounceRef = useRef<any>(null);
+  const progressiveRenderTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRenderScaleRef = useRef<number | null>(null);
+  const lastRenderScaleSyncRef = useRef(0);
   const zoomFrameRef = useRef(0);
   const pendingZoomRef = useRef<{ scale: number; scrollLeft: number; scrollTop: number } | null>(null);
   // Set while a programmatic scrollToPage animation is in flight. Pages
@@ -764,6 +781,9 @@ export function ReaderPage({
       }
       if (zoomDebounceRef.current) {
         clearTimeout(zoomDebounceRef.current);
+      }
+      if (progressiveRenderTimeoutRef.current) {
+        clearTimeout(progressiveRenderTimeoutRef.current);
       }
       if (zoomFrameRef.current) cancelAnimationFrame(zoomFrameRef.current);
       if (navigateSettleTimeoutRef.current) {
@@ -832,14 +852,43 @@ export function ReaderPage({
     };
   }, [stackContentSize]);
 
-  // Debounce renderScale: only re-render canvases after zoom gesture ends
+  const syncPendingRenderScale = useCallback(() => {
+    progressiveRenderTimeoutRef.current = null;
+    const scale = pendingRenderScaleRef.current;
+    if (scale === null) return;
+    pendingRenderScaleRef.current = null;
+    lastRenderScaleSyncRef.current = performance.now();
+    setRenderScale(scale);
+  }, []);
+
+  // Refine the visible PDF progressively during a sustained zoom, while
+  // coalescing input so PDF.js never receives a raster job for every wheel tick.
   const scheduleRenderScaleSync = useCallback((newScale: number) => {
+    pendingRenderScaleRef.current = newScale;
+    const elapsed = performance.now() - lastRenderScaleSyncRef.current;
+    if (!progressiveRenderTimeoutRef.current) {
+      if (elapsed >= PROGRESSIVE_RENDER_INTERVAL_MS) {
+        syncPendingRenderScale();
+      } else {
+        progressiveRenderTimeoutRef.current = setTimeout(
+          syncPendingRenderScale,
+          PROGRESSIVE_RENDER_INTERVAL_MS - elapsed,
+        );
+      }
+    }
+
     if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
     zoomDebounceRef.current = setTimeout(() => {
+      if (progressiveRenderTimeoutRef.current) {
+        clearTimeout(progressiveRenderTimeoutRef.current);
+        progressiveRenderTimeoutRef.current = null;
+      }
+      pendingRenderScaleRef.current = null;
+      lastRenderScaleSyncRef.current = performance.now();
       setRenderScale(newScale);
       isZoomingRef.current = false;
     }, 300);
-  }, []);
+  }, [syncPendingRenderScale]);
 
   const zoomAtViewportPoint = useCallback((requestedScale: number, pointerX: number, pointerY: number) => {
     const container = pagesContainerRef.current;
@@ -1352,7 +1401,6 @@ export function ReaderPage({
               left: 0,
               transform: `scale(${scaleRef.current})`,
               transformOrigin: "top left",
-              willChange: "transform",
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
@@ -1361,6 +1409,7 @@ export function ReaderPage({
             {pagesArray.map((pageNumber) => (
               <PdfPage
                 key={pageNumber}
+                documentId={document.id}
                 pdfDoc={pdfDoc!}
                 pageNumber={pageNumber}
                 renderScale={renderScale}
