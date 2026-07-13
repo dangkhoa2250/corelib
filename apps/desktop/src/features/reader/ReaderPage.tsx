@@ -9,6 +9,7 @@ import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
 import { CardComposer, type CardSaveInput, type CardComposerDeck } from "../cards/CardComposer";
 import { createPageRenderQueue, PageRenderQueueError, type PageRenderQueueToken } from "./pageRenderQueue";
+import { PdfViewportTiles } from "./PdfViewportTiles";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -235,6 +236,7 @@ const PdfPage = React.memo(
     const annotationLayerRef = useRef<HTMLDivElement | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
+    const [pdfPage, setPdfPage] = useState<pdfjs.PDFPageProxy | null>(null);
 
     const currentWidth = pageSize ? pageSize.width : defaultWidth;
     const currentHeight = pageSize ? pageSize.height : defaultHeight;
@@ -312,8 +314,11 @@ const PdfPage = React.memo(
 
           const sizeViewport = page.getViewport({ scale: 1.0 });
           setPageSize({ width: sizeViewport.width, height: sizeViewport.height });
+          setPdfPage(page);
 
-          const viewport = page.getViewport({ scale: renderScale });
+          const previewScale = renderScale >= 1.5 ? 1 : renderScale;
+          const previewViewport = page.getViewport({ scale: previewScale });
+          const layerViewport = page.getViewport({ scale: renderScale });
           const canvas = canvasRef.current;
           const textLayerContainer = textLayerRef.current;
           const annotationLayerContainer = annotationLayerRef.current;
@@ -327,23 +332,23 @@ const PdfPage = React.memo(
           // Stretch the stale bitmap to the new page size immediately, then
           // rasterize offscreen and swap in a single blit — during a zoom the
           // page shows a scaled (blurry) preview instead of going blank.
-          canvas.style.width = `${viewport.width}px`;
-          canvas.style.height = `${viewport.height}px`;
+          canvas.style.width = `${currentWidth * renderScale}px`;
+          canvas.style.height = `${currentHeight * renderScale}px`;
 
-          const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, viewport.width, viewport.height);
+          const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, previewViewport.width, previewViewport.height);
           renderToken = pageRenderQueue.run(async () => {
             if (!isCurrent) throw new PageRenderQueueError("SUPERSEDED");
             const offscreen = window.document.createElement("canvas");
             try {
-              offscreen.width = viewport.width * dpr;
-              offscreen.height = viewport.height * dpr;
+              offscreen.width = previewViewport.width * dpr;
+              offscreen.height = previewViewport.height * dpr;
               const offscreenContext = offscreen.getContext("2d");
               if (!offscreenContext) throw new Error("Unable to create a PDF render canvas");
               offscreenContext.scale(dpr, dpr);
 
               renderTask = page.render({
                 canvasContext: offscreenContext,
-                viewport: viewport,
+                viewport: previewViewport,
               });
               await renderTask.promise;
               return offscreen;
@@ -375,7 +380,7 @@ const PdfPage = React.memo(
             const textLayer = new pdfjs.TextLayer({
               textContentSource: textStream,
               container: textLayerContainer,
-              viewport: viewport,
+              viewport: layerViewport,
             });
             await textLayer.render();
 
@@ -430,11 +435,11 @@ const PdfPage = React.memo(
                 annotationCanvasMap: null,
                 annotationEditorUIManager: null,
                 page: page,
-                viewport: viewport,
+                viewport: layerViewport,
                 structTreeLayer: null,
               });
               await annotationLayer.render({
-                viewport: viewport,
+                viewport: layerViewport,
                 div: annotationLayerContainer,
                 annotations: annotations,
                 page: page,
@@ -506,6 +511,17 @@ const PdfPage = React.memo(
           }}
         >
           <canvas ref={canvasRef} className="reader-canvas" />
+          {isVisible && pdfPage && (
+            <PdfViewportTiles
+              page={pdfPage}
+              pageWidth={currentWidth}
+              pageHeight={currentHeight}
+              renderScale={renderScale}
+              pageContainerRef={containerRef}
+              rootRef={pagesContainerRef}
+              queue={pageRenderQueue}
+            />
+          )}
           <div
             ref={textLayerRef}
             className="textLayer"

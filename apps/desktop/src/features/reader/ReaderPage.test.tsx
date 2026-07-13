@@ -275,7 +275,7 @@ it("renders the final zoom scale after a fast zoom-out and zoom-in", async () =>
     for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 350));
-    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(600));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(200));
 
     for (let index = 0; index < 25; index += 1) fireEvent.click(zoomOut);
     await Promise.resolve();
@@ -286,9 +286,48 @@ it("renders the final zoom scale after a fast zoom-out and zoom-in", async () =>
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 350));
 
-    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(600));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(200));
   } finally {
     globalThis.requestAnimationFrame = requestAnimationFrame;
+  }
+});
+
+it("keeps a low-resolution page preview and overlays tiles at high zoom", async () => {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  const getBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this.classList.contains("reader-canvas-container")) {
+      return { left: 0, top: 0, right: 600, bottom: 700, width: 600, height: 700 } as DOMRect;
+    }
+    if (this.id === "pdf-page-1") {
+      return { left: 0, top: 0, right: 600, bottom: 900, width: 600, height: 900 } as DOMRect;
+    }
+    return getBoundingClientRect.call(this);
+  };
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(200));
+    await waitFor(() => expect(globalThis.document.querySelectorAll(".reader-raster-tile").length).toBeGreaterThan(0));
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+    HTMLElement.prototype.getBoundingClientRect = getBoundingClientRect;
   }
 });
 
@@ -333,7 +372,7 @@ it("waits for an in-flight raster before starting the final rapid-zoom raster", 
     fullPageReleases.shift()?.();
     await waitFor(() => expect(fullPageRenderCount()).toBe(2));
     fullPageReleases.shift()?.();
-    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(600));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(200));
   } finally {
     releases.splice(0).forEach((release) => release());
     pageRender.mockReset().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() });
