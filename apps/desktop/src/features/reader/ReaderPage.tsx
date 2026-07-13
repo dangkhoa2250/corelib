@@ -8,6 +8,7 @@ import type { CardSource, SelectionRect } from "../../domain/learning";
 import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
 import { CardComposer, type CardSaveInput, type CardComposerDeck } from "../cards/CardComposer";
+import { createPageRenderQueue, PageRenderQueueError, type PageRenderQueueToken } from "./pageRenderQueue";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -45,6 +46,17 @@ const MAX_CANVAS_PIXEL_RATIO = 3.0;
 // Bound each whole-page raster while zooming. Viewport tiling can raise this
 // limit later without making the settled full-page render stall the UI.
 const MAX_CANVAS_PIXELS = 16_777_216;
+const pageRenderQueue = createPageRenderQueue({ concurrency: 1 });
+
+function releaseCanvas(canvas: HTMLCanvasElement) {
+  canvas.width = 0;
+  canvas.height = 0;
+}
+
+function isExpectedRenderCancellation(error: unknown) {
+  return error instanceof PageRenderQueueError
+    || (error instanceof Error && error.name === "RenderingCancelledException");
+}
 
 export function clampZoomScale(scale: number) {
   return Math.min(Math.max(scale, MIN_ZOOM_SCALE), MAX_ZOOM_SCALE);
@@ -291,6 +303,7 @@ const PdfPage = React.memo(
       if (!isVisible) return;
       let isCurrent = true;
       let renderTask: any = null;
+      let renderToken: PageRenderQueueToken<HTMLCanvasElement> | null = null;
 
       const renderPage = async () => {
         try {
@@ -318,27 +331,42 @@ const PdfPage = React.memo(
           canvas.style.height = `${viewport.height}px`;
 
           const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, viewport.width, viewport.height);
-          const offscreen = window.document.createElement("canvas");
-          offscreen.width = viewport.width * dpr;
-          offscreen.height = viewport.height * dpr;
-          const offscreenContext = offscreen.getContext("2d");
-          if (!offscreenContext) return;
-          offscreenContext.scale(dpr, dpr);
+          renderToken = pageRenderQueue.run(async () => {
+            if (!isCurrent) throw new PageRenderQueueError("SUPERSEDED");
+            const offscreen = window.document.createElement("canvas");
+            try {
+              offscreen.width = viewport.width * dpr;
+              offscreen.height = viewport.height * dpr;
+              const offscreenContext = offscreen.getContext("2d");
+              if (!offscreenContext) throw new Error("Unable to create a PDF render canvas");
+              offscreenContext.scale(dpr, dpr);
 
-          renderTask = page.render({
-            canvasContext: offscreenContext,
-            viewport: viewport,
-          });
-          await renderTask.promise;
-          if (!isCurrent) return;
+              renderTask = page.render({
+                canvasContext: offscreenContext,
+                viewport: viewport,
+              });
+              await renderTask.promise;
+              return offscreen;
+            } catch (error) {
+              releaseCanvas(offscreen);
+              throw error;
+            }
+          }, { priority: 10 });
+          const offscreen = await renderToken.promise;
+          if (!isCurrent) {
+            releaseCanvas(offscreen);
+            return;
+          }
 
           const context = canvas.getContext("2d");
-          if (!context) return;
+          if (!context) {
+            releaseCanvas(offscreen);
+            return;
+          }
           canvas.width = offscreen.width;
           canvas.height = offscreen.height;
           context.drawImage(offscreen, 0, 0);
-          offscreen.width = 0;
-          offscreen.height = 0;
+          releaseCanvas(offscreen);
 
           if (isCurrent) {
             // Text Layer
@@ -415,16 +443,19 @@ const PdfPage = React.memo(
               });
             }
           }
-        } catch (_) {}
+        } catch (error) {
+          if (import.meta.env.DEV && isCurrent && !isExpectedRenderCancellation(error)) {
+            console.error("PDF page render failed", { pageNumber, renderScale, error });
+          }
+        }
       };
 
       void renderPage();
 
       return () => {
         isCurrent = false;
-        if (renderTask) {
-          renderTask.cancel();
-        }
+        renderTask?.cancel();
+        if (renderToken) pageRenderQueue.supersede(renderToken.id);
       };
     }, [pdfDoc, pageNumber, renderScale, isVisible]);
 
@@ -800,7 +831,6 @@ export function ReaderPage({
     const previousScale = pending?.scale ?? scaleRef.current;
     const nextScale = clampZoomScale(requestedScale);
     if (!container || nextScale === previousScale) {
-      isZoomingRef.current = false;
       return;
     }
 
