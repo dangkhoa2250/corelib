@@ -9,3 +9,11 @@ status="$(curl --silent --output /tmp/corelib-register.json --write-out '%{http_
 
 test "${status}" = "200"
 grep -q '"status":"pending"' /tmp/corelib-register.json
+
+status="$(curl --silent --output /tmp/corelib-escalation.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/register" \
+  --header 'content-type: application/json' \
+  --data '{"displayName":"Escalation","email":"escalation@example.test","password":"correct horse battery staple","passwordConfirm":"correct horse battery staple","status":"approved","role":"admin"}')"
+test "${status}" = "200"
+grep -q '"status":"pending"' /tmp/corelib-escalation.json
+
