@@ -42,3 +42,16 @@ Signed macOS releases are published automatically by `.github/workflows/release-
 6. **Artifacts** — after the workflow completes, confirm the GitHub Release contains the `.app.tar.gz`, its `.sig` file, and `latest.json`.
 
 > The workflow fails if any expected `.sig` file is absent or if the signing secrets are missing.
+
+## End-to-end release checklist
+
+Complete these steps **in order** before announcing a release. If any step fails, stop and fix only the first root cause.
+
+1. **Register** a fresh account from the desktop app; verify it sees only the Pending screen.
+2. **Token boundary** — verify a pending account cannot call `/me`, analytics, or admin routes with a forged or stale token.
+3. **Approve** the account from the desktop Admin section; sign out, sign back in, and open Library.
+4. **Feature gates** — assign a group feature; verify it appears in the desktop UI. Add a user-level deny for the same feature; verify it disappears.
+5. **Analytics opt-in** — opt in to analytics, open a feature, and verify the Admin → Overview Metrics shows only aggregate counts (no emails, IDs, or raw payloads).
+6. **Analytics opt-out** — opt out; verify new events return `analytics_disabled` and are **not** queued locally.
+7. **Signed update** — install the previous signed build, publish a higher signed tag (`desktop-vX.Y.Z`), wait for the release workflow, then check/install/relaunch the update from Account Settings.
+8. **Backup restoration** — restore the latest encrypted server backup into `/tmp/corelib-restore` (see `services/pocketbase/README.md` → Restoration drill) and run smoke tests against it.

@@ -130,3 +130,15 @@ rm -rf /tmp/corelib-restore
 - The DuckDNS token appears in **no** log file or process listing.
 - SSH is restricted to the owner's source IP at both the Oracle firewall and OS firewall.
 - Backups are encrypted (GPG) before any off-host copy; unencrypted archives are deleted immediately.
+
+## Automated checks (run before every release)
+
+```bash
+cd apps/desktop && npm test
+cd apps/desktop && npm run build
+cargo test --all-targets --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo clippy --all-targets --all-features --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
+bash services/pocketbase/tests/smoke.sh https://LIBRARY_HOME.duckdns.org
+```
+
+Every command must exit 0. If any fails, stop and fix only the first root cause.
