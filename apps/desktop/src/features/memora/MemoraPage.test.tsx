@@ -26,7 +26,7 @@ function renderMemora() {
         newCards: 1,
         learningCards: 1,
         reviewCards: 1,
-        dueCards: 2,
+        dueCards: 0,
       })}
       listDecks={vi.fn().mockResolvedValue([englishDeck])}
       listDueCards={vi.fn().mockResolvedValue([{ id: "due-1" }, { id: "due-2" }])}

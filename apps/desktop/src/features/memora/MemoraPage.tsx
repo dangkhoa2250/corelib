@@ -147,7 +147,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
       ) : null}
       <ActionMenu
         items={[
-          { label: "Review Due", disabled: !stats?.dueCards, onSelect: onStudy },
+          { label: "Review Due", disabled: !(stats && stats.newCards + stats.dueCards > 0), onSelect: onStudy },
           { label: "Practice All", disabled: !stats?.totalCards, onSelect: onPracticeAll },
         ]}
         label={`Study ${deck.name}`}

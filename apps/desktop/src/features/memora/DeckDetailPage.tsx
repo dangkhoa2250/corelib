@@ -103,7 +103,7 @@ export function DeckDetailPage({
               headerActions={(
                 <>
                   <Button
-                    disabled={!stats?.dueCards}
+                    disabled={!(stats && stats.newCards + stats.dueCards > 0)}
                     onClick={() => onStudyDeck(deck.id)}
                     variant="secondary"
                   >

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 
-import { isSchedulableCard, type LearningCard } from "./learning";
+import { isReadyToReview, isSchedulableCard, type LearningCard } from "./learning";
 
 test("recognizes a complete new learning card as schedulable", () => {
   const card: LearningCard = {
@@ -52,4 +52,29 @@ test.each([
   };
 
   expect(isSchedulableCard(card)).toBe(false);
+});
+
+test("includes new cards and already-due cards in a review queue, but excludes future cards", () => {
+  const now = "2026-07-14T00:00:00.000Z";
+  const card: LearningCard = {
+    id: "card-1",
+    deckId: "deck-1",
+    front: "Question",
+    back: "Answer",
+    state: "review",
+    dueAt: now,
+    reps: 1,
+    lapses: 0,
+    stability: 1,
+    difficulty: 1,
+    lastReviewAt: null,
+    source: null,
+    tags: [],
+    frontLanguage: null,
+  };
+
+  expect(isReadyToReview({ ...card, state: "new" }, now)).toBe(true);
+  expect(isReadyToReview(card, now)).toBe(true);
+  expect(isReadyToReview({ ...card, dueAt: "2026-07-15T00:00:00.000Z" }, now)).toBe(false);
+  expect(isReadyToReview({ ...card, state: "suspended" }, now)).toBe(false);
 });

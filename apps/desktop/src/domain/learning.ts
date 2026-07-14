@@ -73,6 +73,10 @@ export function isSchedulableCard(card: LearningCard): boolean {
   );
 }
 
+export function isReadyToReview(card: LearningCard, now: string): boolean {
+  return card.state !== "suspended" && (card.state === "new" || card.dueAt <= now);
+}
+
 export type CardLifecycleState = "new" | "learning" | "review" | "relearning" | "suspended";
 export type CardSort = "updated_desc" | "created_desc" | "due_asc" | "front_asc";
 export type TrashSort = "deleted_desc" | "front_asc";
