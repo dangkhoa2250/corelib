@@ -1610,12 +1610,16 @@ textarea::placeholder {
 }
 
 .library-import-menu__trigger {
-  border: 0;
-  border-radius: 999px;
-  padding: 10px 16px;
-  color: var(--button-primary-text);
-  background: var(--button-primary-bg);
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: var(--surface-1);
   cursor: pointer;
+}
+
+.library-import-menu__trigger:hover:not(:disabled) {
+  background: var(--interactive-selected);
 }
 
 .library-import-menu__items {
