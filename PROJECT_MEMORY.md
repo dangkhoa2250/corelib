@@ -71,6 +71,11 @@ The current verified baseline is 91 frontend tests, 89 Rust unit tests, 1 PDF ex
 - `Cmd/Ctrl+K` searches documents and cards. Card results open Review today; Show source resolves the source document/page and keeps review usable when a source is unavailable.
 - OAuth tokens belong in the OS credential store; do not put secrets in SQLite or logs.
 
+## Design rules
+
+- Every UI change must be designed, implemented, and visually verified in both light mode and dark mode. Use the semantic tokens in `apps/desktop/src/styles/tokens.css`; do not add hard-coded theme colors when an appropriate token exists.
+- Preserve accessible contrast, focus states, disabled states, and legibility in both themes. Brand marks may retain their official colors, while surrounding surfaces and text must remain theme-aware.
+
 ## Not implemented yet
 
 These are intentionally deferred and should be built as separate slices:
