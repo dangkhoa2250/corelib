@@ -121,11 +121,13 @@ const emptyDeckStatistics = {
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
 
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 async function openReaderAndSelectText(
@@ -308,6 +310,39 @@ test("imports selected files concurrently and removes only the completed placeho
     secondImport.resolve([{ ...document, id: "second", title: "Second" }]);
     await secondImport.promise;
   });
+});
+
+test("ignores an initial load failure after a selected import begins", async () => {
+  const user = userEvent.setup();
+  const initialList = deferred<typeof document[]>();
+  const importResult = deferred<typeof document[]>();
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockReturnValue(initialList.promise),
+        pick: vi.fn().mockResolvedValue(["/chosen/linear-algebra.pdf"]),
+        importDocuments: vi.fn().mockReturnValue(importResult.promise),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  await user.click(screen.getByRole("menuitem", { name: "Upload file" }));
+  await waitFor(() => expect(screen.getByLabelText("Importing linear-algebra")).toBeInTheDocument());
+
+  await act(async () => {
+    initialList.reject(new Error("Library loading failed"));
+    await Promise.resolve();
+  });
+
+  await act(async () => {
+    importResult.resolve([document]);
+    await importResult.promise;
+  });
+
+  expect(await screen.findByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
 test("opens a reader placeholder and returns to the library", async () => {

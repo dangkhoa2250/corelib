@@ -408,6 +408,8 @@ export function App({
         return;
       }
 
+      requestId.current += 1;
+      setLoading(false);
       const items: PendingImport[] = paths.map((p, i) => ({
         id: `pending-${Date.now()}-${pendingImportId.current++}-${i}`,
         name: p.split("/").pop()?.replace(/\.pdf$/i, "") ?? p,
@@ -418,8 +420,6 @@ export function App({
         const item = items[index];
         try {
           const imported = await libraryApi.importDocuments([path]);
-          requestId.current += 1;
-          setLoading(false);
           setDocuments((current) => mergeDocuments(current, imported));
         } catch (fileError) {
           const message = `${item.name}: ${errorMessage(fileError)}`;
