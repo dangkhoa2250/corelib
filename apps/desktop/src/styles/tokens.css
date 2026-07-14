@@ -1602,6 +1602,7 @@ textarea::placeholder {
 }
 
 .library-import-menu__item:disabled {
+  opacity: 0.55;
   color: var(--text-disabled);
   cursor: not-allowed;
 }
