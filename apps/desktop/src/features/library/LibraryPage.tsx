@@ -1,6 +1,7 @@
 import type { LibraryDocument } from "../../domain/document";
 import type { PendingImport } from "../../app/ImportProgress";
 import { DocumentGrid } from "./DocumentGrid";
+import { ImportMenu } from "./ImportMenu";
 
 interface LibraryPageProps {
   documents: LibraryDocument[];
@@ -27,16 +28,7 @@ export function LibraryPage({
     <main className="library-page">
       <header className="library-page__header">
         <h1>Library</h1>
-        <div style={{ display: 'flex', gap: '8px' }}>
-          <button type="button" onClick={onImport}>
-            Import from Mac
-          </button>
-          {onOpenDrive && (
-            <button type="button" onClick={onOpenDrive}>
-              Google Drive
-            </button>
-          )}
-        </div>
+        <ImportMenu onUpload={onImport} onGoogleDrive={() => onOpenDrive?.()} />
       </header>
       {documents.length > 0 || (pendingImports && pendingImports.length > 0) ? (
         <DocumentGrid

@@ -16,10 +16,19 @@ const document: LibraryDocument = {
   numPages: null,
 };
 
-test("renders ready local documents with import and open actions", () => {
-  render(<LibraryPage documents={[document]} onImport={() => {}} onOpen={() => {}} />);
+test("renders ready local documents with a single import menu trigger and open action", () => {
+  render(
+    <LibraryPage
+      documents={[document]}
+      onImport={() => {}}
+      onOpen={() => {}}
+      onOpenDrive={() => {}}
+    />,
+  );
 
-  expect(screen.getByRole("button", { name: "Import from Mac" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Import" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Import from Mac" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Google Drive" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
 });
 
