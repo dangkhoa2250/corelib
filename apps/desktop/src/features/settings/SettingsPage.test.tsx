@@ -197,6 +197,26 @@ test("renders connected providers as a list", async () => {
   expect(screen.getByRole("button", { name: "+ Add provider" })).toBeInTheDocument();
 });
 
+test("shows the creator icon before a model but keeps provider rows icon-free", async () => {
+  const user = userEvent.setup();
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "nvidia"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([{ id: "01-ai/yi-large", name: "01-ai/yi-large" }])}
+    />,
+  );
+
+  await user.type(screen.getByLabelText("Search models"), "yi-large");
+  const result = await screen.findByRole("button", { name: /01-ai\/yi-large/ });
+  expect(result.querySelector("img")).toHaveAttribute("data-brand", "zeroone");
+  expect(screen.getByLabelText("Connected providers").querySelector("img")).toBeNull();
+
+  await user.click(result);
+  expect(screen.getByLabelText("Selected model").querySelector("img")).toHaveAttribute("data-brand", "zeroone");
+});
+
 test("loads models for the connected provider when settings opens", async () => {
   const user = userEvent.setup();
   const listModels = vi.fn().mockResolvedValue([
