@@ -232,7 +232,8 @@ test("loads documents asynchronously and preserves them after a failed import", 
   expect(screen.getByRole("status", { name: "Loading library" })).toBeInTheDocument();
   expect(await screen.findByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
 
-  await user.click(screen.getByRole("button", { name: "Import from Mac" }));
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  await user.click(screen.getByRole("menuitem", { name: "Upload file" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent("Import failed");
   expect(screen.getByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
@@ -257,7 +258,8 @@ test("does not import when the picker is cancelled", async () => {
   );
 
   await screen.findByText("Your books will appear here.");
-  await user.click(screen.getByRole("button", { name: "Import from Mac" }));
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  await user.click(screen.getByRole("menuitem", { name: "Upload file" }));
 
   expect(importDocuments).not.toHaveBeenCalled();
 });
@@ -341,7 +343,8 @@ test("keeps imported documents when an older initial load resolves last", async 
     />,
   );
 
-  await user.click(screen.getByRole("button", { name: "Import from Mac" }));
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  await user.click(screen.getByRole("menuitem", { name: "Upload file" }));
   await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
   refreshedList.resolve([document]);
   expect(await screen.findByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
@@ -377,7 +380,8 @@ test("preserves the Drive parent stack for an empty nested folder", async () => 
     />,
   );
 
-  await user.click(await screen.findByRole("button", { name: "Google Drive" }));
+  await user.click(await screen.findByRole("button", { name: "Import" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Google Drive" }));
   await user.click(await screen.findByRole("button", { name: "📁 Folder A" }));
   expect(await screen.findByText("No PDFs or folders found here.")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "← Up" }));
