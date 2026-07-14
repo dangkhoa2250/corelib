@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import type { Deck, CardBrowserRow, CardLifecycleState, CardSort, CardSource } from "../../domain/learning";
 import { queryDeckCards, moveCards, setCardsSuspended, trashCards, listActiveTags, createCard, updateAndMoveCard } from "../../lib/learning";
 import { CardSidePanel } from "./CardSidePanel";
 import { SourceViewer } from "./SourceViewer";
 import { Combobox } from "../../components/Combobox";
+import { Button } from "../../components/Button";
 
 export interface CardBrowserProps {
   decks: Deck[];
@@ -27,6 +28,8 @@ export interface CardBrowserProps {
   sourceView?: CardSource | null;
   onSourceViewChange?: (source: CardSource | null) => void;
   hideSourcePanel?: boolean;
+  headerTitle?: string;
+  headerActions?: ReactNode;
 }
 
 const PAGE_SIZE = 50;
@@ -53,6 +56,8 @@ export function CardBrowser({
   sourceView: controlledSourceView,
   onSourceViewChange,
   hideSourcePanel = false,
+  headerTitle = "Card Browser",
+  headerActions,
 }: CardBrowserProps) {
   const [deckId, setDeckId] = useState(initialDeckId);
   const [internalSourceView, setInternalSourceView] = useState<CardSource | null>(null);
@@ -355,12 +360,13 @@ export function CardBrowser({
               ← Back
             </button>
           )}
-          <h1 className="card-browser__title">Card Browser</h1>
+          <h1 className="card-browser__title">{headerTitle}</h1>
           <span className="card-browser__count">({total} cards)</span>
         </div>
-        <button className="card-browser__bulk-btn" onClick={handleAddCard} type="button">
-          Add Card
-        </button>
+        <div className="card-browser__header-actions">
+          {headerActions}
+          <Button onClick={handleAddCard}>Add Card</Button>
+        </div>
       </div>
 
       <div className="card-browser__toolbar">

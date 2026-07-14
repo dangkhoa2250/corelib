@@ -122,6 +122,24 @@ describe("CardBrowser component", () => {
     });
   });
 
+  it("renders a supplied deck title and header actions", () => {
+    vi.mocked(queryDeckCards).mockResolvedValue({ rows: [], total: 0, nextCursor: null });
+
+    render(
+      <CardBrowser
+        decks={mockDecks}
+        headerActions={<button type="button">Review Due</button>}
+        headerTitle="Biology Card Browser"
+        initialDeckId="d1"
+        selectedIds={new Set()}
+        setSelectedIds={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("heading", { name: "Biology Card Browser" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Review Due" })).toBeInTheDocument();
+  });
+
   it("handles bulk operations and side panel editing", async () => {
     vi.mocked(queryDeckCards).mockResolvedValue({
       rows: mockRows,
