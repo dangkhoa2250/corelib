@@ -178,5 +178,6 @@ describe("AccountGate Component", () => {
     const styles = container.querySelector("style")?.textContent;
     expect(styles).toContain(".account-gate-video-overlay");
     expect(styles).toContain("@media (max-width: 720px)");
+    expect(styles).toContain("margin-right: 64px");
   });
 });

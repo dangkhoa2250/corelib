@@ -222,6 +222,7 @@ export function AccountGate({
           border: 1px solid rgba(255, 255, 255, 0.16);
           border-radius: 24px;
           padding: 36px;
+          margin-right: 64px;
           box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
           box-sizing: border-box;
           animation: gate-fade-in 0.4s ease-out;
@@ -480,6 +481,7 @@ export function AccountGate({
           .account-gate-card {
             max-width: 520px;
             padding: 28px 24px;
+            margin-right: 0;
           }
         }
       `}</style>
