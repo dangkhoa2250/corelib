@@ -7,7 +7,6 @@ interface LibraryPageProps {
   onOpen: (id: string) => void;
   onImport: () => void;
   onOpenDrive?: () => void;
-  onClearCache?: () => void;
   onDelete?: (id: string) => void;
   onRename?: (id: string, newTitle: string) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
@@ -19,7 +18,6 @@ export function LibraryPage({
   onOpen,
   onImport,
   onOpenDrive,
-  onClearCache,
   onDelete,
   onRename,
   getDocumentFileUrl,
@@ -51,13 +49,6 @@ export function LibraryPage({
         />
       ) : (
         <p className="library-page__empty">Your books will appear here.</p>
-      )}
-      {onClearCache && (
-        <footer style={{ marginTop: '48px', borderTop: '1px solid #e5e5ea', paddingTop: '24px' }}>
-          <button type="button" onClick={onClearCache}>
-            Clear downloaded Drive files
-          </button>
-        </footer>
       )}
     </main>
   );

@@ -206,6 +206,9 @@ test("renders the Library heading", () => {
   expect(
     screen.getByRole("heading", { level: 1, name: "Library" }),
   ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Clear downloaded Drive files" }),
+  ).not.toBeInTheDocument();
 });
 
 test("loads documents asynchronously and preserves them after a failed import", async () => {
@@ -283,6 +286,38 @@ test("opens a reader placeholder and returns to the library", async () => {
   await user.click(screen.getByRole("button", { name: "Back to Library" }));
 
   expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+});
+
+test("renames a document from the library actions menu", async () => {
+  const user = userEvent.setup();
+  const renameDocument = vi.fn().mockResolvedValue({
+    ...document,
+    title: "Linear Algebra 2",
+  });
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([document]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+        deleteDocument: vi.fn().mockResolvedValue(undefined),
+        renameDocument,
+      }}
+    />,
+  );
+
+  await screen.findByRole("button", { name: "Open Linear Algebra" });
+  await user.click(screen.getByRole("button", { name: "Actions for Linear Algebra" }));
+  await user.click(screen.getByRole("button", { name: "Rename" }));
+  const renameInput = await screen.findByRole("textbox", { name: "Rename document title" });
+  await user.clear(renameInput);
+  await user.type(renameInput, "Linear Algebra 2");
+  await user.click(screen.getByRole("button", { name: "Save title" }));
+
+  await waitFor(() => {
+    expect(renameDocument).toHaveBeenCalledWith("linear-algebra", "Linear Algebra 2");
+  });
 });
 
 

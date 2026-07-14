@@ -375,14 +375,15 @@ impl LibraryDatabase {
     }
 
     pub fn delete_document(&mut self, id: &str) -> Result<Option<String>> {
-        let managed_path: Option<String> = self
+        let managed_path = self
             .connection
             .query_row(
                 "SELECT managed_path FROM documents WHERE id = ?1",
                 params![id],
-                |row| row.get(0),
+                |row| row.get::<_, Option<String>>(0),
             )
-            .optional()?;
+            .optional()?
+            .flatten();
 
         let transaction = self.connection.transaction()?;
         transaction.execute(

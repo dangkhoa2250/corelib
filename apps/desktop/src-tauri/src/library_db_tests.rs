@@ -33,6 +33,23 @@ fn inserting_a_duplicate_local_hash_returns_the_existing_record() {
 }
 
 #[test]
+fn inserting_a_duplicate_drive_source_returns_the_existing_record() {
+    let directory = tempdir().expect("create temporary directory");
+    let mut database = LibraryDatabase::open(directory.path()).expect("open database");
+
+    let first = database
+        .insert_drive("first", "drive-file-1", "First title.pdf")
+        .expect("insert first drive document");
+    let duplicate = database
+        .insert_drive("second", "drive-file-1", "Second title.pdf")
+        .expect("return existing drive document");
+
+    assert_eq!(duplicate.id, first.id);
+    assert_eq!(duplicate.title, "First title.pdf");
+    assert_eq!(database.list().expect("list documents").len(), 1);
+}
+
+#[test]
 fn search_matches_title_metadata_case_insensitively() {
     let directory = tempdir().expect("create temporary directory");
     let mut database = LibraryDatabase::open(directory.path()).expect("open database");
@@ -514,6 +531,66 @@ fn opening_a_pre_learning_database_preserves_existing_documents() {
 
     assert_eq!(documents.len(), 1);
     assert_eq!(documents[0].id, "legacy-document");
+}
+
+#[test]
+fn deleting_a_drive_document_with_null_managed_path_succeeds() {
+    let directory = tempdir().expect("create temporary directory");
+    let database_path = directory.path().join("library.sqlite3");
+    let connection = Connection::open(&database_path).expect("open legacy database");
+
+    connection
+        .execute_batch(
+            "CREATE TABLE schema_migrations (id TEXT PRIMARY KEY NOT NULL);
+             INSERT INTO schema_migrations (id) VALUES
+               ('0001_library'), ('0002_index_claims'), ('0003_drive_source'),
+               ('0004_learning'), ('0005_learning_source_integrity'),
+               ('0006_card_lifecycle'), ('0007_youglish_clickable'),
+               ('0008_page_count'), ('0009_page_tags');
+             CREATE TABLE documents (
+               id TEXT PRIMARY KEY NOT NULL,
+               source TEXT NOT NULL,
+               source_ref TEXT,
+               title TEXT NOT NULL,
+               managed_path TEXT,
+               status TEXT NOT NULL,
+               index_state TEXT NOT NULL,
+               created_at TEXT NOT NULL,
+               updated_at TEXT NOT NULL
+             );
+             CREATE TABLE document_text (
+               document_id TEXT PRIMARY KEY NOT NULL,
+               body TEXT NOT NULL
+             );",
+        )
+        .expect("create legacy schema");
+
+    let ts = "2026-07-13T00:00:00Z";
+    connection
+        .execute(
+            "INSERT INTO documents (
+               id, source, source_ref, title, managed_path, status, index_state, created_at, updated_at
+             ) VALUES (?1, 'google_drive', ?2, ?3, NULL, 'download_required', 'pending', ?4, ?4)",
+            params!["doc-a", "drive-file-1", "Linear Algebra.pdf", ts],
+        )
+        .expect("insert drive document");
+    drop(connection);
+
+    let mut database = LibraryDatabase::open(directory.path()).expect("open legacy db");
+    database
+        .delete_document("doc-a")
+        .expect("delete drive document");
+    drop(database);
+
+    let connection = Connection::open(&database_path).expect("reopen db");
+    let remaining: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM documents WHERE source = 'google_drive' AND source_ref = ?1",
+            params!["drive-file-1"],
+            |row| row.get(0),
+        )
+        .expect("count remaining documents");
+    assert_eq!(remaining, 0);
 }
 
 #[test]

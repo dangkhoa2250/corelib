@@ -16,6 +16,7 @@ import {
   getDocumentFileUrl as nativeGetDocumentFileUrl,
   saveReadPage as nativeSaveReadPage,
   deleteDocument as nativeDeleteDocument,
+  renameDocument as nativeRenameDocument,
   listPageTags as nativeListPageTags,
   togglePageTag as nativeTogglePageTag,
   saveGoogleDriveCredentials,
@@ -55,6 +56,7 @@ export interface LibraryApi {
   getDocumentFileUrl?: (id: string) => Promise<string>;
   saveReadPage?: (id: string, page: number, numPages?: number) => Promise<LibraryDocument>;
   deleteDocument?: (id: string) => Promise<void>;
+  renameDocument?: (id: string, title: string) => Promise<LibraryDocument>;
   connectDrive?: () => Promise<void>;
   listDrive?: (folderId?: string) => Promise<DriveEntry[]>;
   importDrive?: (ids: string[]) => Promise<LibraryDocument[]>;
@@ -85,6 +87,7 @@ const nativeLibraryApi: LibraryApi = {
   getDocumentFileUrl: nativeGetDocumentFileUrl,
   saveReadPage: nativeSaveReadPage,
   deleteDocument: nativeDeleteDocument,
+  renameDocument: nativeRenameDocument,
   connectDrive,
   listDrive,
   importDrive,
@@ -645,20 +648,20 @@ export function App({
     }
   }, [libraryApi, load]);
 
-  const handleClearCache = useCallback(async () => {
+  const handleDelete = useCallback(async (id: string) => {
     setError(null);
     try {
-      await (libraryApi.clearDriveCache ?? clearDriveCache)();
+      await (libraryApi.deleteDocument ?? nativeDeleteDocument)(id);
       await load();
     } catch (e) {
       setError(errorMessage(e));
     }
   }, [libraryApi, load]);
 
-  const handleDelete = useCallback(async (id: string) => {
+  const handleRename = useCallback(async (id: string, title: string) => {
     setError(null);
     try {
-      await (libraryApi.deleteDocument ?? nativeDeleteDocument)(id);
+      await (libraryApi.renameDocument ?? nativeRenameDocument)(id, title);
       await load();
     } catch (e) {
       setError(errorMessage(e));
@@ -854,8 +857,8 @@ export function App({
               }}
               onImport={() => void handleImport()}
               onOpenDrive={() => void handleOpenDrive()}
-              onClearCache={() => void handleClearCache()}
               onDelete={(id) => void handleDelete(id)}
+              onRename={(id, title) => void handleRename(id, title)}
               getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
               pendingImports={pendingImports}
             />
