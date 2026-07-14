@@ -152,4 +152,32 @@ describe("AccountGate Component", () => {
       expect(screen.queryByTestId("child")).not.toBeInTheDocument();
     });
   });
+
+  it("renders the ping-pong video as a muted looping background", () => {
+    const { container } = render(
+      <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
+        <div>Protected app</div>
+      </AccountGate>
+    );
+
+    const video = container.querySelector(".account-gate-video");
+    expect(video).toHaveAttribute("src", "/corelib-login-page-ping-pong.mp4");
+    expect(video).toHaveAttribute("autoplay");
+    expect(video).toHaveProperty("muted", true);
+    expect(video).toHaveAttribute("loop");
+    expect(video).toHaveAttribute("playsinline");
+  });
+
+  it("defines a responsive overlay treatment for the video background", () => {
+    const { container } = render(
+      <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
+        <div>Protected app</div>
+      </AccountGate>
+    );
+
+    const styles = container.querySelector("style")?.textContent;
+    expect(styles).toContain(".account-gate-video-overlay");
+    expect(styles).toContain("@media (max-width: 720px)");
+    expect(styles).toContain("margin-right: 64px");
+  });
 });

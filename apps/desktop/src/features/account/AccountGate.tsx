@@ -165,36 +165,65 @@ export function AccountGate({
 
   return (
     <div className="account-gate-container">
+      <video
+        className="account-gate-video"
+        src="/corelib-login-page-ping-pong.mp4"
+        autoPlay
+        muted
+        loop
+        playsInline
+        aria-hidden="true"
+      />
+      <div className="account-gate-video-overlay" aria-hidden="true" />
       <style>{`
         .account-gate-container {
           display: flex;
           align-items: center;
-          justify-content: center;
+          justify-content: flex-end;
           min-height: 100vh;
           width: 100vw;
-          background: radial-gradient(circle at center, #180f2b 0%, #090511 100%);
+          background: #070b0f;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           color: #f3f4f6;
           margin: 0;
-          padding: 20px;
+          padding: clamp(24px, 6vw, 96px);
           box-sizing: border-box;
           position: fixed;
           top: 0;
           left: 0;
           z-index: 99999;
-          overflow-y: auto;
+          overflow: hidden;
+        }
+
+        .account-gate-video,
+        .account-gate-video-overlay {
+          position: absolute;
+          inset: 0;
+        }
+
+        .account-gate-video {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .account-gate-video-overlay {
+          background: linear-gradient(90deg, rgba(4, 8, 11, 0.2), rgba(4, 8, 11, 0.82));
         }
 
         .account-gate-card {
+          position: relative;
+          z-index: 1;
           width: 100%;
           max-width: 440px;
-          background: rgba(22, 14, 38, 0.65);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 16px;
+          background: rgba(10, 16, 21, 0.78);
+          backdrop-filter: blur(24px);
+          -webkit-backdrop-filter: blur(24px);
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          border-radius: 24px;
           padding: 36px;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+          margin-right: 64px;
+          box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
           box-sizing: border-box;
           animation: gate-fade-in 0.4s ease-out;
         }
@@ -211,17 +240,17 @@ export function AccountGate({
 
         .account-gate-logo h1 {
           font-size: 26px;
-          font-weight: 700;
-          letter-spacing: -0.5px;
+          font-family: Georgia, "Times New Roman", serif;
+          font-size: 36px;
+          font-weight: 500;
+          letter-spacing: -1px;
           margin: 0;
-          background: linear-gradient(135deg, #a78bfa 0%, #ec4899 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
+          color: #f8fafc;
         }
 
         .account-gate-logo p {
           font-size: 14px;
-          color: #9ca3af;
+          color: #c7cdd4;
           margin: 6px 0 0 0;
         }
 
@@ -250,7 +279,7 @@ export function AccountGate({
         }
 
         .account-gate-tab.active {
-          color: #c084fc;
+          color: #f8fafc;
         }
 
         .account-gate-tab.active::after {
@@ -260,7 +289,7 @@ export function AccountGate({
           left: 0;
           right: 0;
           height: 2px;
-          background: linear-gradient(90deg, #a78bfa, #ec4899);
+          background: #f8fafc;
           border-radius: 2px;
         }
 
@@ -286,9 +315,9 @@ export function AccountGate({
 
         .form-group input {
           background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 8px;
-          padding: 10px 14px;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          border-radius: 12px;
+          padding: 13px 14px;
           color: #ffffff;
           font-size: 15px;
           transition: all 0.2s;
@@ -296,9 +325,9 @@ export function AccountGate({
         }
 
         .form-group input:focus {
-          border-color: #a78bfa;
+          border-color: rgba(255, 255, 255, 0.7);
           background: rgba(255, 255, 255, 0.08);
-          box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.25);
+          box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
         }
 
         .form-group-row {
@@ -323,7 +352,7 @@ export function AccountGate({
         .remember-me input {
           width: 16px;
           height: 16px;
-          accent-color: #a78bfa;
+          accent-color: #f8fafc;
           cursor: pointer;
         }
 
@@ -339,11 +368,11 @@ export function AccountGate({
         }
 
         .account-gate-btn {
-          background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%);
+          background: #f8fafc;
           border: none;
-          border-radius: 8px;
-          padding: 12px;
-          color: #ffffff;
+          border-radius: 12px;
+          padding: 14px;
+          color: #111827;
           font-size: 15px;
           font-weight: 600;
           cursor: pointer;
@@ -424,16 +453,36 @@ export function AccountGate({
         }
 
         .page-spinner {
+          position: relative;
+          z-index: 1;
           width: 40px;
           height: 40px;
           border: 3px solid rgba(255, 255, 255, 0.08);
-          border-top-color: #c084fc;
+          border-top-color: #f8fafc;
           border-radius: 50%;
           animation: gate-spin 0.8s linear infinite;
         }
 
         @keyframes gate-spin {
           to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 720px) {
+          .account-gate-container {
+            justify-content: center;
+            padding: 20px;
+            overflow-y: auto;
+          }
+
+          .account-gate-video-overlay {
+            background: rgba(4, 8, 11, 0.72);
+          }
+
+          .account-gate-card {
+            max-width: 520px;
+            padding: 28px 24px;
+            margin-right: 0;
+          }
         }
       `}</style>
 

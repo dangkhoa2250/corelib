@@ -6,6 +6,9 @@ describe("SignInPage", () => {
   it("renders email and password inputs and handles submit", () => {
     const onSubmit = vi.fn();
     const { container } = render(<SignInPage onSubmit={onSubmit} onToggleTab={vi.fn()} loading={false} error={null} />);
+    expect(screen.getByRole("heading", { name: "Corelib" })).toBeInTheDocument();
+    expect(screen.getByText("Welcome back")).toBeInTheDocument();
+    expect(container.querySelector(".account-gate-mark")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "test@example.com" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123" } });
     

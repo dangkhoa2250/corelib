@@ -23,8 +23,8 @@ export function SignInPage({
   return (
     <div className="account-gate-card">
       <div className="account-gate-logo">
-        <h1>Antigravity Library</h1>
-        <p>Your ultimate reading & learning companion</p>
+        <h1>Corelib</h1>
+        <p>Welcome back</p>
       </div>
 
       <div className="account-gate-tabs">
