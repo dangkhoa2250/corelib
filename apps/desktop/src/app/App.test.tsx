@@ -345,6 +345,50 @@ test("ignores an initial load failure after a selected import begins", async () 
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
 
+test("keeps a successful import when a retry load began while another file was pending", async () => {
+  const user = userEvent.setup();
+  const retryList = deferred<typeof document[]>();
+  const secondImport = deferred<typeof document[]>();
+  const importDocuments = vi.fn((paths: string[]) =>
+    paths[0] === "/chosen/first.pdf"
+      ? Promise.reject(new Error("First import failed"))
+      : secondImport.promise,
+  );
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn()
+          .mockResolvedValueOnce([])
+          .mockReturnValueOnce(retryList.promise),
+        pick: vi.fn().mockResolvedValue(["/chosen/first.pdf", "/chosen/second.pdf"]),
+        importDocuments,
+      }}
+    />,
+  );
+
+  await screen.findByText("Your books will appear here.");
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  await user.click(screen.getByRole("menuitem", { name: "Upload file" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("First import failed");
+  expect(screen.getByLabelText("Importing second")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Retry" }));
+
+  await act(async () => {
+    secondImport.resolve([document]);
+    await secondImport.promise;
+  });
+  expect(await screen.findByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
+
+  await act(async () => {
+    retryList.resolve([]);
+    await retryList.promise;
+  });
+
+  expect(screen.getByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
+});
+
 test("opens a reader placeholder and returns to the library", async () => {
   const user = userEvent.setup();
   const list = vi.fn().mockResolvedValue([document]);

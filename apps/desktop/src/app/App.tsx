@@ -420,6 +420,7 @@ export function App({
         const item = items[index];
         try {
           const imported = await libraryApi.importDocuments([path]);
+          requestId.current += 1;
           setDocuments((current) => mergeDocuments(current, imported));
         } catch (fileError) {
           const message = `${item.name}: ${errorMessage(fileError)}`;
