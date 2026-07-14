@@ -5,7 +5,7 @@ import oneDriveMark from "../../assets/import-sources/onedrive.svg";
 
 interface ImportMenuProps {
   onUpload: () => void;
-  onGoogleDrive: () => void;
+  onGoogleDrive?: () => void;
 }
 
 export function ImportMenu({ onUpload, onGoogleDrive }: ImportMenuProps) {
@@ -102,9 +102,18 @@ export function ImportMenu({ onUpload, onGoogleDrive }: ImportMenuProps) {
             <IconUpload />
             <span>Upload file</span>
           </button>
-          <button type="button" role="menuitem" className="library-import-menu__item" onClick={() => select(onGoogleDrive)}>
+          <button
+            type="button"
+            role="menuitem"
+            className="library-import-menu__item"
+            disabled={!onGoogleDrive}
+            onClick={() => onGoogleDrive && select(onGoogleDrive)}
+          >
             <img src={googleDriveMark} alt="" aria-hidden="true" />
             <span>Google Drive</span>
+            {!onGoogleDrive ? (
+              <span className="library-import-menu__coming-soon">Unavailable</span>
+            ) : null}
           </button>
           <button type="button" role="menuitem" className="library-import-menu__item" disabled>
             <IconCloud />

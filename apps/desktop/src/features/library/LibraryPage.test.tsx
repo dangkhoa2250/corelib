@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 
 import type { LibraryDocument } from "../../domain/document";
@@ -36,4 +37,15 @@ test("shows an empty-state message without documents", () => {
   render(<LibraryPage documents={[]} onImport={() => {}} onOpen={() => {}} />);
 
   expect(screen.getByText("Your books will appear here.")).toBeInTheDocument();
+});
+
+test("makes Google Drive unavailable when no Drive action is supplied", async () => {
+  const user = userEvent.setup();
+  render(<LibraryPage documents={[]} onImport={() => {}} onOpen={() => {}} />);
+
+  await user.click(screen.getByRole("button", { name: "Import" }));
+
+  expect(
+    screen.getByRole("menuitem", { name: /Google Drive.*Unavailable/ }),
+  ).toBeDisabled();
 });

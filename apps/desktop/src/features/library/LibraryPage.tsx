@@ -28,7 +28,7 @@ export function LibraryPage({
     <main className="library-page">
       <header className="library-page__header">
         <h1>Library</h1>
-        <ImportMenu onUpload={onImport} onGoogleDrive={() => onOpenDrive?.()} />
+        <ImportMenu onUpload={onImport} onGoogleDrive={onOpenDrive} />
       </header>
       {documents.length > 0 || (pendingImports && pendingImports.length > 0) ? (
         <DocumentGrid
