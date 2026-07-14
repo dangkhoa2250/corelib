@@ -727,7 +727,7 @@ textarea::placeholder {
 .settings-page__model-name,
 .settings-page__selected-model {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   min-width: 0;
 }

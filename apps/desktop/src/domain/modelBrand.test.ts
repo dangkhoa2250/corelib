@@ -28,3 +28,7 @@ test.each([
 test("uses the specific vendor rule before a generic family match", () => {
   expect(modelBrandFor("01-ai/yi-meta").id).toBe("zeroone");
 });
+
+test("does not match a creator token embedded in an unrelated word", () => {
+  expect(modelBrandFor("metaphor-ai/v1").id).toBe("fallback");
+});

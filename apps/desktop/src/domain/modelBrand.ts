@@ -42,12 +42,16 @@ const familyBrands: Array<[string, KnownModelBrand]> = [
   ["grok", { id: "grok", src: grok }],
 ];
 
+function hasDelimitedToken(modelId: string, token: string): boolean {
+  return new RegExp(`(?:^|[\\/_-])${token}(?=$|[\\/_-])`).test(modelId);
+}
+
 export function modelBrandFor(modelId: string): ModelBrand {
   const normalizedId = modelId.toLowerCase();
   // Specific creator prefixes intentionally precede all generic model-family matches.
   const vendorBrand = vendorBrands.find(([prefix]) => normalizedId.startsWith(prefix));
   if (vendorBrand) return vendorBrand[1];
 
-  const familyBrand = familyBrands.find(([token]) => normalizedId.includes(token));
+  const familyBrand = familyBrands.find(([token]) => hasDelimitedToken(normalizedId, token));
   return familyBrand?.[1] ?? { id: "fallback", src: null };
 }
