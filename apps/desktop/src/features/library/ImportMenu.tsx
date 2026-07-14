@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { IconCloud, IconUpload } from "../../app/icons";
-import googleDriveMark from "../../assets/import-sources/google-drive.png";
+import googleDriveMark from "../../assets/import-sources/google-drive.svg";
 import oneDriveMark from "../../assets/import-sources/onedrive.svg";
 
 interface ImportMenuProps {
@@ -49,7 +49,7 @@ export function ImportMenu({ onUpload, onGoogleDrive }: ImportMenuProps) {
         if (event.key === "Home") {
           items[0]?.focus();
         } else if (event.key === "End") {
-          items.at(-1)?.focus();
+          items[items.length - 1]?.focus();
         } else {
           const direction = event.key === "ArrowDown" ? 1 : -1;
           const nextIndex =
