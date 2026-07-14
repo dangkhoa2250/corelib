@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { IconCloud, IconUpload } from "../../app/icons";
-import googleDriveMark from "../../assets/import-sources/google-drive.svg";
+import googleDriveMark from "../../assets/import-sources/google-drive.png";
 import oneDriveMark from "../../assets/import-sources/onedrive.svg";
 
 interface ImportMenuProps {
