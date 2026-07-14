@@ -970,8 +970,8 @@ textarea::placeholder {
   display: flex;
   align-items: center;
   gap: 14px;
-  min-height: 76px;
-  padding: 10px 14px;
+  min-height: 64px;
+  padding: 8px 14px;
   border: 1px solid var(--border-subtle);
   border-radius: 14px;
   background: var(--surface-1);
@@ -1087,14 +1087,8 @@ textarea::placeholder {
   background: var(--color-danger-bg-hover) !important;
 }
 
-.memora-deck-list__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex: 0 0 auto;
-}
-
 .memora-deck-list__name {
+  color: var(--text-primary);
   font-weight: 550;
 }
 
@@ -1144,10 +1138,15 @@ textarea::placeholder {
   min-width: 0;
   padding: 0;
   border: 0;
+  color: var(--text-primary);
   background: transparent;
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.memora-deck-list__item .action-menu__trigger {
+  padding: 7px 12px;
 }
 
 @media (max-width: 760px) {

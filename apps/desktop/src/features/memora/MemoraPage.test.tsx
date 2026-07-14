@@ -62,9 +62,9 @@ describe("MemoraPage", () => {
     expect(onOpenDeck).not.toHaveBeenCalled();
   });
 
-  it("shows the global due count beside New Deck", async () => {
+  it("shows the global ready count beside New Deck", async () => {
     renderMemora();
 
-    expect(await screen.findByRole("button", { name: "Review 2 Due" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Review 2 Ready" })).toBeInTheDocument();
   });
 });

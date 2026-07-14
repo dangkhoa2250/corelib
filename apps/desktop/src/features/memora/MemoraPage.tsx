@@ -131,11 +131,6 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
   return (
     <li className="memora-deck-list__item">
       <button aria-label={deck.name} className="memora-deck-list__open" onClick={onOpen} type="button">
-        <span
-          aria-hidden="true"
-          className="memora-deck-list__dot"
-          style={{ background: deck.color ?? "var(--text-secondary)" }}
-        />
         <div className="memora-deck-list__content">
           <span className="memora-deck-list__name">{deck.name}</span>
           {deck.description ? (
@@ -318,7 +313,7 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
             disabled={!dueCount}
             onClick={onReviewToday}
           >
-            {dueCount ? `Review ${dueCount} Due` : "Review Due"}
+            {dueCount ? `Review ${dueCount} Ready` : "Review"}
           </Button>
         </div>
       </header>
