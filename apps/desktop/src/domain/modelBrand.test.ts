@@ -32,3 +32,15 @@ test("uses the specific vendor rule before a generic family match", () => {
 test("does not match a creator token embedded in an unrelated word", () => {
   expect(modelBrandFor("metaphor-ai/v1").id).toBe("fallback");
 });
+
+test.each([
+  ["01-ai/yi-large", "zeroone-color.svg"],
+  ["meta/llama-3.1-70b-instruct", "meta-color.svg"],
+  ["ai21labs/jamba-1.5-large-instruct", "ai21-brand-color.svg"],
+  ["google/gemma-4-31b", "gemini-color.svg"],
+  ["mistralai/mistral-small", "mistral-color.svg"],
+  ["qwen/qwen3", "qwen-color.svg"],
+  ["deepseek/deepseek-v3", "deepseek-color.svg"],
+])("uses the color asset for %s", (modelId, assetName) => {
+  expect(modelBrandFor(modelId).asset).toBe(assetName);
+});

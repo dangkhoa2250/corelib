@@ -19,6 +19,7 @@ import { IconArrowLeft, IconMemora, IconSearch, IconAppearance, IconCloud } from
 import { useTheme } from "../../contexts/ThemeContext";
 import { Combobox } from "../../components/Combobox";
 import { ModelBrandIcon } from "../../components/ModelBrandIcon";
+import { ProviderBrandIcon } from "../../components/ProviderBrandIcon";
 import { useContext } from "react";
 import { AccountContext } from "../account/AccountGate";
 import { AccountSettingsSection } from "../account/AccountSettingsSection";
@@ -542,9 +543,12 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           <div className="settings-page__provider-list" aria-label="Connected providers">
             {connectedProviders.length > 0 ? connectedProviders.map((item) => (
               <div className={`settings-page__provider-row ${item.id === provider ? "is-selected" : ""}`} key={item.id}>
-                <div>
-                  <strong>{item.name}</strong>
-                  <span>{item.description}</span>
+                <div className="settings-page__provider-details">
+                  <ProviderBrandIcon providerId={item.id} />
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>{item.description}</span>
+                  </div>
                 </div>
                 <div className="settings-page__provider-row-actions">
                   <button onClick={() => handleManageProvider(item.id)} type="button">Manage</button>
@@ -570,7 +574,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
               setShowApiKey(false);
               setError(null);
             }}
-            options={AI_PROVIDERS.map((item) => ({ value: item.id, label: item.name }))}
+            options={AI_PROVIDERS.map((item) => ({ value: item.id, label: item.name, icon: <ProviderBrandIcon providerId={item.id} /> }))}
             searchPlaceholder="Search providers..."
             ariaLabel="AI provider"
           />
@@ -673,7 +677,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
             {filteredModels.map((model) => (
               <button
                 aria-pressed={selectedEngineId === model.engineId}
-                className={`settings-page__model-result ${selectedEngineId === model.engineId ? "is-selected" : ""} ${filteredModels[highlightedModelIndex] === model ? "is-highlighted" : ""}`}
+                className={`settings-page__model-result settings-page__model-result--compact ${selectedEngineId === model.engineId ? "is-selected" : ""} ${filteredModels[highlightedModelIndex] === model ? "is-highlighted" : ""}`}
                 key={model.engineId}
                 onClick={() => selectModel(model)}
                 type="button"

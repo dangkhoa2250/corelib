@@ -575,11 +575,18 @@ textarea::placeholder {
   display: block;
 }
 
+.settings-page__provider-details {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
 .settings-page__provider-row strong {
   font-size: 14px;
 }
 
-.settings-page__provider-row > div:first-child span {
+.settings-page__provider-details span {
   margin-top: 4px;
   color: var(--text-secondary);
   font-size: 12px;
@@ -704,7 +711,7 @@ textarea::placeholder {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  padding: 10px 12px;
+  padding: 7px 10px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   color: var(--text-primary);
@@ -744,6 +751,24 @@ textarea::placeholder {
   width: 18px;
   height: 18px;
   vertical-align: -0.125em;
+}
+
+.settings-page__model-result--compact .model-brand-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.provider-brand-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.provider-brand-icon--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
 }
 
 .model-brand-icon--fallback {
@@ -1565,7 +1590,7 @@ textarea::placeholder {
   letter-spacing: -0.04em;
 }
 
-.library-page__header button {
+.library-page__header > button {
   border: 0;
   border-radius: 999px;
   padding: 10px 16px;
@@ -1611,13 +1636,14 @@ textarea::placeholder {
   align-items: center;
   gap: 10px;
   width: 100%;
-  padding: 9px 10px;
+  padding: 7px 8px;
   border: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-primary);
   background: transparent;
   cursor: pointer;
   text-align: left;
+  font-size: 13px;
 }
 
 .library-import-menu__item:hover:not(:disabled) {
@@ -1631,7 +1657,7 @@ textarea::placeholder {
 }
 
 .library-import-menu__item:disabled {
-  opacity: 0.55;
+  opacity: 1;
   color: var(--text-disabled);
   cursor: not-allowed;
 }
@@ -1639,8 +1665,8 @@ textarea::placeholder {
 .library-import-menu__item svg,
 .library-import-menu__item img {
   flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .library-import-menu__coming-soon {
