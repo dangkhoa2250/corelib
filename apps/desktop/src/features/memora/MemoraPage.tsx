@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { ActionMenu } from "../../components/ActionMenu";
+import { Button } from "../../components/Button";
 import type { Deck, LearningCard, DeckStatistics } from "../../domain/learning";
 
 interface MemoraPageProps {
@@ -12,6 +14,8 @@ interface MemoraPageProps {
   countDeckCards: (id: string) => Promise<number>;
   getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
   onOpenDeck: (deck: Deck) => void;
+  onStudyDeck: (deckId: string) => void;
+  onPracticeAll: (deckId: string) => void;
 }
 
 function errorMessage(error: unknown): string {
@@ -25,11 +29,13 @@ interface DeckRowProps {
   onOpen: () => void;
   onRename: (name: string) => Promise<void>;
   onDelete: () => Promise<void>;
+  onStudy: () => void;
+  onPracticeAll: () => void;
   countDeckCards: (id: string) => Promise<number>;
   getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
 }
 
-function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, countDeckCards, getDeckStatistics: fetchStats }: DeckRowProps) {
+function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onStudy, onPracticeAll, countDeckCards, getDeckStatistics: fetchStats }: DeckRowProps) {
   const [mode, setMode] = useState<"idle" | "rename" | "delete">("idle");
   const [nameValue, setNameValue] = useState(deck.name);
   const [saving, setSaving] = useState(false);
@@ -135,13 +141,23 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, cou
           {deck.description ? (
             <span className="memora-deck-list__description">{deck.description}</span>
           ) : null}
-          {stats ? (
-            <span className="deck-statistics-badge">
-              New: {stats.newCards} | Learning: {stats.learningCards} | Due: {stats.dueCards}
-            </span>
-          ) : null}
         </div>
       </button>
+      {stats ? (
+        <div aria-label={`Statistics for ${deck.name}`} className="memora-deck-list__statistics">
+          <span className="memora-deck-list__stat memora-deck-list__stat--new"><strong>{stats.newCards}</strong>New</span>
+          <span className="memora-deck-list__stat memora-deck-list__stat--learning"><strong>{stats.learningCards}</strong>Learning</span>
+          <span className="memora-deck-list__stat memora-deck-list__stat--due"><strong>{stats.dueCards}</strong>Due</span>
+        </div>
+      ) : null}
+      <ActionMenu
+        items={[
+          { label: "Review Due", disabled: !stats?.dueCards, onSelect: onStudy },
+          { label: "Practice All", disabled: !stats?.totalCards, onSelect: onPracticeAll },
+        ]}
+        label={`Study ${deck.name}`}
+        triggerLabel="Study"
+      />
       <div className="memora-deck-list__menu">
         <button
           aria-label={`Actions for ${deck.name}`}
@@ -189,7 +205,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, cou
   );
 }
 
-export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, getDeckStatistics, onOpenDeck }: MemoraPageProps) {
+export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, getDeckStatistics, onOpenDeck, onStudyDeck, onPracticeAll }: MemoraPageProps) {
   const [decks, setDecks] = useState<Deck[] | null>(null);
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -259,7 +275,7 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
     <main className="memora-page">
       <header className="memora-page__header">
         <h1>Memora</h1>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div className="memora-page__actions">
           {creatingDeck ? (
             <form
               className="memora-new-deck"
@@ -296,17 +312,14 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
               </button>
             </form>
           ) : (
-            <button onClick={() => setCreatingDeck(true)} type="button">
-              New Deck
-            </button>
+            <Button onClick={() => setCreatingDeck(true)}>New Deck</Button>
           )}
-          <button
+          <Button
             disabled={!dueCount}
             onClick={onReviewToday}
-            type="button"
           >
-            {dueCount ? `Review ${dueCount} due` : "Nothing due today"}
-          </button>
+            {dueCount ? `Review ${dueCount} Due` : "Review Due"}
+          </Button>
         </div>
       </header>
       {error ? (
@@ -324,9 +337,11 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
               key={deck.id}
               menuOpen={openMenuId === deck.id}
               onDelete={() => handleDeleteDeck(deck.id)}
+              onPracticeAll={() => onPracticeAll(deck.id)}
               onMenuToggle={(open) => setOpenMenuId(open ? deck.id : null)}
               onOpen={() => onOpenDeck(deck)}
               onRename={(name) => handleRenameDeck(deck.id, name)}
+              onStudy={() => onStudyDeck(deck.id)}
             />
           ))}
         </ul>

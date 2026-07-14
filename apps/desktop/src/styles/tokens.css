@@ -931,19 +931,9 @@ textarea::placeholder {
   letter-spacing: -0.04em;
 }
 
-.memora-page__header button {
-  border: 0;
-  border-radius: 999px;
-  padding: 10px 16px;
-  color: var(--button-primary-text);
-  background: var(--button-primary-bg);
-  cursor: pointer;
-}
-
-.memora-page__header button:disabled {
-  color: var(--text-disabled);
-  background: var(--border-strong);
-  cursor: default;
+.memora-page__actions {
+  display: flex;
+  gap: 8px;
 }
 
 .memora-new-deck {
@@ -969,7 +959,7 @@ textarea::placeholder {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  max-width: 640px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 0;
   list-style: none;
@@ -979,9 +969,13 @@ textarea::placeholder {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 14px;
+  min-height: 76px;
+  padding: 10px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-sm);
 }
 
 .memora-deck-list__item--confirm {
@@ -1116,10 +1110,31 @@ textarea::placeholder {
   flex-direction: column;
 }
 
-.deck-statistics-badge {
-  font-size: 0.85rem;
+.memora-deck-list__statistics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(64px, 1fr));
+  gap: 8px;
+  min-width: 250px;
+}
+
+.memora-deck-list__stat {
+  display: grid;
+  gap: 2px;
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 14px;
   color: var(--text-secondary);
-  margin-top: 4px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.memora-deck-list__stat strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.memora-deck-list__stat--new { color: var(--color-new-text); }
+.memora-deck-list__stat--learning { color: var(--color-learning-text); }
+.memora-deck-list__stat--due { color: var(--color-relearning-text); }
 }
 
 .memora-deck-list__open {
@@ -1134,6 +1149,18 @@ textarea::placeholder {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .memora-page__header,
+  .memora-page__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .memora-deck-list__statistics {
+    display: none;
+  }
 }
 
 .deck-detail-page {

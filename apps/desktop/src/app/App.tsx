@@ -773,6 +773,8 @@ export function App({
             listDecks={learning.listDecks}
             listDueCards={learning.listDueCards}
             onReviewToday={handleReviewToday}
+            onStudyDeck={handleStudyDeck}
+            onPracticeAll={handlePracticeAll}
             createDeck={handleCreateDeck}
             renameDeck={handleRenameDeck}
             deleteDeck={handleDeleteDeck}
