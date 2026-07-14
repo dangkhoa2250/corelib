@@ -14,12 +14,48 @@ export function ImportMenu({ onUpload, onGoogleDrive }: ImportMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (open) {
+      menuRef.current
+        ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+        ?.focus();
+    }
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setOpen(false);
         triggerRef.current?.focus();
+        return;
+      }
+
+      if (
+        event.key === "ArrowDown" ||
+        event.key === "ArrowUp" ||
+        event.key === "Home" ||
+        event.key === "End"
+      ) {
+        const items = Array.from(
+          menuRef.current?.querySelectorAll<HTMLButtonElement>(
+            '[role="menuitem"]:not(:disabled)',
+          ) ?? [],
+        );
+        const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+        if (items.length === 0) return;
+
+        event.preventDefault();
+        if (event.key === "Home") {
+          items[0]?.focus();
+        } else if (event.key === "End") {
+          items.at(-1)?.focus();
+        } else {
+          const direction = event.key === "ArrowDown" ? 1 : -1;
+          const nextIndex =
+            (currentIndex + direction + items.length) % items.length;
+          items[nextIndex]?.focus();
+        }
       }
     };
     const closeOnOutsidePointer = (event: PointerEvent) => {

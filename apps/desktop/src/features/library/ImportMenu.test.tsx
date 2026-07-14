@@ -54,3 +54,27 @@ test("closes on Escape and outside click", async () => {
   await user.click(document.body);
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 });
+
+test("moves focus among enabled menu items with keyboard controls", async () => {
+  const user = userEvent.setup();
+  render(<ImportMenu onUpload={vi.fn()} onGoogleDrive={vi.fn()} />);
+
+  const trigger = screen.getByRole("button", { name: "Import" });
+  await user.click(trigger);
+
+  const upload = screen.getByRole("menuitem", { name: "Upload file" });
+  const googleDrive = screen.getByRole("menuitem", { name: /Google Drive/ });
+  expect(upload).toHaveFocus();
+
+  await user.keyboard("{ArrowDown}");
+  expect(googleDrive).toHaveFocus();
+  await user.keyboard("{ArrowDown}");
+  expect(upload).toHaveFocus();
+  await user.keyboard("{End}");
+  expect(googleDrive).toHaveFocus();
+  await user.keyboard("{Home}");
+  expect(upload).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+});
