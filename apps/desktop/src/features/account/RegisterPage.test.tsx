@@ -8,6 +8,7 @@ describe("RegisterPage", () => {
     const { container } = render(<RegisterPage onSubmit={onSubmit} onToggleTab={vi.fn()} loading={false} error={null} />);
     expect(screen.getByRole("heading", { name: "Corelib" })).toBeInTheDocument();
     expect(screen.getByText("Create your Corelib account")).toBeInTheDocument();
+    expect(container.querySelector(".account-gate-mark")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Display Name"), { target: { value: "Mai" } });
     fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: "mai@example.com" } });
     fireEvent.change(screen.getByLabelText("Password (min 12 chars)"), { target: { value: "password123456" } });

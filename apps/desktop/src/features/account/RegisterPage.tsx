@@ -32,7 +32,6 @@ export function RegisterPage({
   return (
     <div className="account-gate-card">
       <div className="account-gate-logo">
-        <span className="account-gate-mark" aria-hidden="true">C</span>
         <h1>Corelib</h1>
         <p>Create your Corelib account</p>
       </div>

@@ -237,21 +237,6 @@ export function AccountGate({
           margin-bottom: 28px;
         }
 
-        .account-gate-mark {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 42px;
-          height: 42px;
-          margin-bottom: 12px;
-          border: 1px solid rgba(255, 255, 255, 0.65);
-          border-radius: 50%;
-          color: #f8fafc;
-          font-family: Georgia, serif;
-          font-size: 28px;
-          line-height: 1;
-        }
-
         .account-gate-logo h1 {
           font-size: 26px;
           font-family: Georgia, "Times New Roman", serif;
