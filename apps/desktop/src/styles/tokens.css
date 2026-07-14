@@ -1135,7 +1135,6 @@ textarea::placeholder {
 .memora-deck-list__stat--new { color: var(--color-new-text); }
 .memora-deck-list__stat--learning { color: var(--color-learning-text); }
 .memora-deck-list__stat--due { color: var(--color-relearning-text); }
-}
 
 .memora-deck-list__open {
   display: flex;
