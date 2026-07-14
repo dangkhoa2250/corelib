@@ -142,3 +142,13 @@ export function IconCloud({ size = 16 }: IconProps) {
     </svg>
   );
 }
+
+export function IconUpload({ size = 16 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <path d="M12 16V3" />
+      <polyline points="7 8 12 3 17 8" />
+      <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
+    </svg>
+  );
+}
