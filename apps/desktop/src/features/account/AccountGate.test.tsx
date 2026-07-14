@@ -153,7 +153,7 @@ describe("AccountGate Component", () => {
     });
   });
 
-  it("renders the supplied video as a muted looping background", () => {
+  it("renders the ping-pong video as a muted looping background", () => {
     const { container } = render(
       <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
         <div>Protected app</div>
@@ -161,7 +161,7 @@ describe("AccountGate Component", () => {
     );
 
     const video = container.querySelector(".account-gate-video");
-    expect(video).toHaveAttribute("src", "/corelib-login-page.mp4");
+    expect(video).toHaveAttribute("src", "/corelib-login-page-ping-pong.mp4");
     expect(video).toHaveAttribute("autoplay");
     expect(video).toHaveProperty("muted", true);
     expect(video).toHaveAttribute("loop");

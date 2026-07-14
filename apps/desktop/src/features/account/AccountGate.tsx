@@ -167,7 +167,7 @@ export function AccountGate({
     <div className="account-gate-container">
       <video
         className="account-gate-video"
-        src="/corelib-login-page.mp4"
+        src="/corelib-login-page-ping-pong.mp4"
         autoPlay
         muted
         loop
