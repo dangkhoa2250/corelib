@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { IconCheck, IconChevronDown, IconSearch } from "../app/icons";
 
 export interface ComboboxOption<T extends string> {
   value: T;
   label: string;
+  icon?: ReactNode;
 }
 
 export interface ComboboxProps<T extends string> {
@@ -174,6 +175,7 @@ export function Combobox<T extends string>({
                     triggerRef.current?.focus();
                   }}
                 >
+                  {option.icon}
                   <span className="combobox__option-label">{option.label}</span>
                   {option.value === value ? (
                     <IconCheck size={14} />

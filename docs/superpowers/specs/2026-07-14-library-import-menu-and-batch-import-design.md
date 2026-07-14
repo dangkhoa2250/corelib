@@ -16,7 +16,7 @@ Replace the separate Library import buttons with one accessible `Import` dropdow
 
 ## Brand assets
 
-- Google Drive's local SVG asset is sourced from Google's official Drive branding guidance and used without alteration.
+- Google Drive's local PNG asset is Google's current official product mark and is used without alteration.
 - OneDrive's local SVG asset is sourced from Microsoft's official brand assets and used without alteration.
 - Apple does not provide a generally reusable iCloud logo asset for third-party embedding. Until an approved asset and integration exist, iCloud Drive uses the app's neutral cloud icon rather than an unofficial copy.
 - Assets live in the desktop app bundle, never a runtime CDN, so the menu remains functional offline.

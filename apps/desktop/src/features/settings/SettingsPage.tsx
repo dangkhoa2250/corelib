@@ -18,6 +18,8 @@ import { IconEye, IconEyeOff } from "../../app/icons";
 import { IconArrowLeft, IconMemora, IconSearch, IconAppearance, IconCloud } from "../../app/icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { Combobox } from "../../components/Combobox";
+import { ModelBrandIcon } from "../../components/ModelBrandIcon";
+import { ProviderBrandIcon } from "../../components/ProviderBrandIcon";
 import { useContext } from "react";
 import { AccountContext } from "../account/AccountGate";
 import { AccountSettingsSection } from "../account/AccountSettingsSection";
@@ -191,6 +193,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
   ];
   const filteredModels = searchableModels.filter((model) => `${model.name} ${model.description}`.toLowerCase().includes(deferredModelSearch.trim().toLowerCase()));
   const keyboardModels = searchableModels.filter((model) => `${model.name} ${model.description}`.toLowerCase().includes(modelSearch.trim().toLowerCase()));
+  const selectedModel = searchableModels.find((model) => model.engineId === selectedEngineId);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => setDeferredModelSearch(modelSearch), 250);
@@ -540,9 +543,12 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           <div className="settings-page__provider-list" aria-label="Connected providers">
             {connectedProviders.length > 0 ? connectedProviders.map((item) => (
               <div className={`settings-page__provider-row ${item.id === provider ? "is-selected" : ""}`} key={item.id}>
-                <div>
-                  <strong>{item.name}</strong>
-                  <span>{item.description}</span>
+                <div className="settings-page__provider-details">
+                  <ProviderBrandIcon providerId={item.id} />
+                  <div>
+                    <strong>{item.name}</strong>
+                    <span>{item.description}</span>
+                  </div>
                 </div>
                 <div className="settings-page__provider-row-actions">
                   <button onClick={() => handleManageProvider(item.id)} type="button">Manage</button>
@@ -568,7 +574,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
               setShowApiKey(false);
               setError(null);
             }}
-            options={AI_PROVIDERS.map((item) => ({ value: item.id, label: item.name }))}
+            options={AI_PROVIDERS.map((item) => ({ value: item.id, label: item.name, icon: <ProviderBrandIcon providerId={item.id} /> }))}
             searchPlaceholder="Search providers..."
             ariaLabel="AI provider"
           />
@@ -659,17 +665,27 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           />
         </label>
 
+        {modelSelectionMade && selectedModel ? (
+          <div aria-label="Selected model" className="settings-page__selected-model">
+            <ModelBrandIcon modelId={selectedModel.id} />
+            <span>{selectedModel.name}</span>
+          </div>
+        ) : null}
+
         {modelSearch.trim() && modelSearch === deferredModelSearch && !modelSelectionMade && filteredModels.length > 0 ? (
           <div aria-label="Model results" className="settings-page__model-results">
             {filteredModels.map((model) => (
               <button
                 aria-pressed={selectedEngineId === model.engineId}
-                className={`settings-page__model-result ${selectedEngineId === model.engineId ? "is-selected" : ""} ${filteredModels[highlightedModelIndex] === model ? "is-highlighted" : ""}`}
+                className={`settings-page__model-result settings-page__model-result--compact ${selectedEngineId === model.engineId ? "is-selected" : ""} ${filteredModels[highlightedModelIndex] === model ? "is-highlighted" : ""}`}
                 key={model.engineId}
                 onClick={() => selectModel(model)}
                 type="button"
               >
-                <span>{model.name}</span>
+                <span className="settings-page__model-name">
+                  <ModelBrandIcon modelId={model.id} />
+                  <span>{model.name}</span>
+                </span>
                 <small>{model.description}</small>
               </button>
             ))}

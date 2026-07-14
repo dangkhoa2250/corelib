@@ -197,6 +197,68 @@ test("renders connected providers as a list", async () => {
   expect(screen.getByRole("button", { name: "+ Add provider" })).toBeInTheDocument();
 });
 
+test("shows a colored creator icon before compact model results", async () => {
+  const user = userEvent.setup();
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "nvidia"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([{ id: "01-ai/yi-large", name: "01-ai/yi-large" }])}
+    />,
+  );
+
+  await user.type(screen.getByLabelText("Search models"), "yi-large");
+  const result = await screen.findByRole("button", { name: /01-ai\/yi-large/ });
+  expect(result.querySelector("img")).toHaveAttribute("data-brand", "zeroone");
+  expect(result).toHaveClass("settings-page__model-result--compact");
+  expect(result.querySelector("img")).toHaveAttribute("data-asset", "zeroone-color.svg");
+
+  await user.click(result);
+  expect(screen.getByLabelText("Selected model").querySelector("img")).toHaveAttribute("data-brand", "zeroone");
+});
+
+test("uses a decorative neutral fallback for an unknown model", async () => {
+  const user = userEvent.setup();
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "nvidia"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([{ id: "unknown/vendor-model", name: "unknown/vendor-model" }])}
+    />,
+  );
+
+  await user.type(screen.getByLabelText("Search models"), "vendor-model");
+  const result = await screen.findByRole("button", { name: /unknown\/vendor-model/ });
+  const fallback = result.querySelector(".model-brand-icon--fallback");
+  expect(fallback).toHaveAttribute("aria-hidden", "true");
+  expect(fallback).toHaveAttribute("data-brand", "fallback");
+});
+
+test("shows colored provider brands in connected rows and provider options", async () => {
+  const user = userEvent.setup();
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "nvidia" || provider === "openrouter"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([])}
+    />,
+  );
+
+  const providers = await screen.findByLabelText("Connected providers");
+  expect(within(providers).getByText("NVIDIA NIM").closest(".settings-page__provider-row")?.querySelector("img")).toHaveAttribute("data-brand", "nvidia");
+  expect(within(providers).getByText("OpenRouter").closest(".settings-page__provider-row")?.querySelector("[data-brand='fallback']")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "+ Add provider" }));
+  await user.click(screen.getByRole("combobox", { name: "AI provider" }));
+  const google = await screen.findByRole("option", { name: /Google AI Studio/ });
+  const googleCloud = screen.getByRole("option", { name: /Google Cloud Translation/ });
+  expect(google.querySelector("img")).toHaveAttribute("data-brand", "google");
+  expect(googleCloud.querySelector("img")).toHaveAttribute("data-brand", "google-cloud");
+});
+
 test("loads models for the connected provider when settings opens", async () => {
   const user = userEvent.setup();
   const listModels = vi.fn().mockResolvedValue([

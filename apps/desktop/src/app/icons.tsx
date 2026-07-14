@@ -48,6 +48,16 @@ export function IconMemora({ size = 16 }: IconProps) {
   );
 }
 
+export function IconSparkles({ size = 16 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <path d="m12 2 1.5 5.5L19 9l-5.5 1.5L12 16l-1.5-5.5L5 9l5.5-1.5L12 2Z" />
+      <path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15Z" />
+      <path d="m5 16 .5 1.5L7 18l-1.5.5L5 20l-.5-1.5L3 18l1.5-.5L5 16Z" />
+    </svg>
+  );
+}
+
 export function IconTrash({ size = 16 }: IconProps) {
   return (
     <svg {...baseProps} height={size} width={size}>
@@ -139,6 +149,16 @@ export function IconCloud({ size = 16 }: IconProps) {
   return (
     <svg {...baseProps} height={size} width={size}>
       <path d="M17.5 19A4.5 4.5 0 0 0 22 14.5c0-2.22-1.6-4.07-3.73-4.43A6 6 0 0 0 6.5 11c-2.3 0-4.22 1.68-4.48 4A4 4 0 0 0 6 19h11.5Z" />
+    </svg>
+  );
+}
+
+export function IconUpload({ size = 16 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <path d="M12 16V3" />
+      <polyline points="7 8 12 3 17 8" />
+      <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" />
     </svg>
   );
 }

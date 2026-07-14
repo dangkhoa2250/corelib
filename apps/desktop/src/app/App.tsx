@@ -309,6 +309,7 @@ export function App({
   const [driveFolderStack, setDriveFolderStack] = useState<string[]>([]);
   const [driveCurrentFolderId, setDriveCurrentFolderId] = useState<string | undefined>();
   const requestId = useRef(0);
+  const pendingImportId = useRef(0);
   const paletteRef = useRef<CommandPaletteHandle>(null);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
@@ -400,10 +401,6 @@ export function App({
   }, [load, reloadDecks]);
 
   const handleImport = useCallback(async () => {
-    if (pendingImports.length > 0) {
-      return;
-    }
-
     setError(null);
     try {
       const paths = await libraryApi.pick();
@@ -411,36 +408,31 @@ export function App({
         return;
       }
 
+      requestId.current += 1;
+      setLoading(false);
       const items: PendingImport[] = paths.map((p, i) => ({
-        id: `pending-${i}-${Date.now()}`,
+        id: `pending-${Date.now()}-${pendingImportId.current++}-${i}`,
         name: p.split("/").pop()?.replace(/\.pdf$/i, "") ?? p,
       }));
-      setPendingImports(items);
-      const fileErrors: string[] = [];
+      setPendingImports((current) => [...current, ...items]);
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
-
-      for (let i = 0; i < paths.length; i++) {
+      await Promise.all(paths.map(async (path, index) => {
+        const item = items[index];
         try {
-          const imported = await libraryApi.importDocuments([paths[i]]);
+          const imported = await libraryApi.importDocuments([path]);
+          requestId.current += 1;
           setDocuments((current) => mergeDocuments(current, imported));
         } catch (fileError) {
-          fileErrors.push(`${items[i].name}: ${errorMessage(fileError)}`);
+          const message = `${item.name}: ${errorMessage(fileError)}`;
+          setError((current) => current ? `${current}\n${message}` : message);
+        } finally {
+          setPendingImports((current) => current.filter((pending) => pending.id !== item.id));
         }
-        setPendingImports((prev) => prev.filter((p) => p.id !== items[i].id));
-      }
-
-      await load();
-
-      if (fileErrors.length > 0) {
-        setError(fileErrors.join("\n"));
-      }
+      }));
     } catch (importError) {
       setError(errorMessage(importError));
-    } finally {
-      setPendingImports([]);
     }
-  }, [pendingImports, libraryApi, load]);
+  }, [libraryApi, requestId]);
 
   const handleOpen = useCallback((document: LibraryDocument) => {
     setSourceHighlight(null);

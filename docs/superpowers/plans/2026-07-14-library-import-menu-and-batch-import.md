@@ -14,7 +14,7 @@
 
 - Create: \`apps/desktop/src/features/library/ImportMenu.tsx\` — accessible source dropdown.
 - Create: \`apps/desktop/src/features/library/ImportMenu.test.tsx\` — menu behavior tests.
-- Create: \`apps/desktop/src/assets/import-sources/google-drive.svg\` and \`onedrive.svg\` — unaltered official local assets.
+- Create: \`apps/desktop/src/assets/import-sources/google-drive.png\` and \`onedrive.svg\` — unaltered official local assets. Google’s current standalone product mark is PNG; OneDrive remains SVG.
 - Modify: \`apps/desktop/src/features/library/LibraryPage.tsx\`, \`LibraryPage.test.tsx\`, \`apps/desktop/src/app/App.tsx\`, \`App.test.tsx\`, and \`apps/desktop/src/styles/tokens.css\`.
 
 ### Task 1: Define the import menu with tests
@@ -57,7 +57,7 @@ Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
-    git add apps/desktop/src/features/library/ImportMenu.tsx apps/desktop/src/features/library/ImportMenu.test.tsx apps/desktop/src/assets/import-sources/google-drive.svg apps/desktop/src/assets/import-sources/onedrive.svg
+    git add apps/desktop/src/features/library/ImportMenu.tsx apps/desktop/src/features/library/ImportMenu.test.tsx apps/desktop/src/assets/import-sources/google-drive.png apps/desktop/src/assets/import-sources/onedrive.svg
     git commit -m "feat: add library import source menu"
 
 ### Task 2: Integrate the menu and theme-aware styles
@@ -162,4 +162,3 @@ Expected: PASS.
 Run: \`npm run tauri dev\`
 
 In light and dark mode, verify menu contrast, focus, Escape/outside close, disabled rows, brand mark legibility, multiple simultaneous placeholders, and responsive navigation during import.
-
