@@ -264,6 +264,52 @@ test("does not import when the picker is cancelled", async () => {
   expect(importDocuments).not.toHaveBeenCalled();
 });
 
+test("imports selected files concurrently and removes only the completed placeholder", async () => {
+  const user = userEvent.setup();
+  const firstImport = deferred<typeof document[]>();
+  const secondImport = deferred<typeof document[]>();
+  const importDocuments = vi.fn((paths: string[]) =>
+    paths[0] === "/chosen/first.pdf" ? firstImport.promise : secondImport.promise,
+  );
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn().mockResolvedValue(["/chosen/first.pdf", "/chosen/second.pdf"]),
+        importDocuments,
+      }}
+    />,
+  );
+
+  await screen.findByText("Your books will appear here.");
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  await user.click(screen.getByRole("menuitem", { name: "Upload file" }));
+
+  await waitFor(() => {
+    expect(importDocuments).toHaveBeenCalledTimes(2);
+  });
+  expect(importDocuments).toHaveBeenNthCalledWith(1, ["/chosen/first.pdf"]);
+  expect(importDocuments).toHaveBeenNthCalledWith(2, ["/chosen/second.pdf"]);
+  expect(screen.getByLabelText("Importing first")).toBeInTheDocument();
+  expect(screen.getByLabelText("Importing second")).toBeInTheDocument();
+
+  await act(async () => {
+    firstImport.resolve([{ ...document, id: "first", title: "First" }]);
+    await firstImport.promise;
+  });
+
+  await waitFor(() => {
+    expect(screen.queryByLabelText("Importing first")).not.toBeInTheDocument();
+  });
+  expect(screen.getByLabelText("Importing second")).toBeInTheDocument();
+
+  await act(async () => {
+    secondImport.resolve([{ ...document, id: "second", title: "Second" }]);
+    await secondImport.promise;
+  });
+});
+
 test("opens a reader placeholder and returns to the library", async () => {
   const user = userEvent.setup();
   const list = vi.fn().mockResolvedValue([document]);
@@ -327,8 +373,7 @@ test("renames a document from the library actions menu", async () => {
 test("keeps imported documents when an older initial load resolves last", async () => {
   const user = userEvent.setup();
   const initialList = deferred<typeof document[]>();
-  const refreshedList = deferred<typeof document[]>();
-  const list = vi.fn().mockReturnValueOnce(initialList.promise).mockReturnValueOnce(refreshedList.promise);
+  const list = vi.fn().mockReturnValue(initialList.promise);
   const importDocuments = vi.fn().mockResolvedValue([document]);
 
   render(
@@ -345,8 +390,6 @@ test("keeps imported documents when an older initial load resolves last", async 
 
   await user.click(screen.getByRole("button", { name: "Import" }));
   await user.click(screen.getByRole("menuitem", { name: "Upload file" }));
-  await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-  refreshedList.resolve([document]);
   expect(await screen.findByRole("button", { name: "Open Linear Algebra" })).toBeInTheDocument();
 
   await act(async () => {
