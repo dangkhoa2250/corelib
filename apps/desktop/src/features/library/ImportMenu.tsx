@@ -37,6 +37,8 @@ export function ImportMenu({ onUpload, onGoogleDrive }: ImportMenuProps) {
         event.key === "Home" ||
         event.key === "End"
       ) {
+        if (!menuRef.current?.contains(event.target as Node)) return;
+
         const items = Array.from(
           menuRef.current?.querySelectorAll<HTMLButtonElement>(
             '[role="menuitem"]:not(:disabled)',

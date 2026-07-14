@@ -78,3 +78,26 @@ test("moves focus among enabled menu items with keyboard controls", async () => 
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   expect(trigger).toHaveFocus();
 });
+
+test("does not hijack navigation keys from outside the open menu", async () => {
+  const user = userEvent.setup();
+  render(
+    <>
+      <button type="button">Outside control</button>
+      <ImportMenu onUpload={vi.fn()} onGoogleDrive={vi.fn()} />
+    </>,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Import" }));
+  const outsideControl = screen.getByRole("button", { name: "Outside control" });
+  outsideControl.focus();
+  const event = new KeyboardEvent("keydown", {
+    bubbles: true,
+    cancelable: true,
+    key: "ArrowDown",
+  });
+  outsideControl.dispatchEvent(event);
+
+  expect(event.defaultPrevented).toBe(false);
+  expect(outsideControl).toHaveFocus();
+});
