@@ -217,6 +217,25 @@ test("shows the creator icon before a model but keeps provider rows icon-free", 
   expect(screen.getByLabelText("Selected model").querySelector("img")).toHaveAttribute("data-brand", "zeroone");
 });
 
+test("uses a decorative neutral fallback for an unknown model", async () => {
+  const user = userEvent.setup();
+  render(
+    <SettingsPage
+      hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "nvidia"))}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([{ id: "unknown/vendor-model", name: "unknown/vendor-model" }])}
+    />,
+  );
+
+  await user.type(screen.getByLabelText("Search models"), "vendor-model");
+  const result = await screen.findByRole("button", { name: /unknown\/vendor-model/ });
+  const fallback = result.querySelector(".model-brand-icon--fallback");
+  expect(fallback).toHaveAttribute("aria-hidden", "true");
+  expect(fallback).toHaveAttribute("data-brand", "fallback");
+  expect(screen.getByLabelText("Connected providers").querySelector(".model-brand-icon")).toBeNull();
+});
+
 test("loads models for the connected provider when settings opens", async () => {
   const user = userEvent.setup();
   const listModels = vi.fn().mockResolvedValue([

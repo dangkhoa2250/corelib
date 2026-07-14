@@ -1,4 +1,4 @@
-import { IconMemora } from "../app/icons";
+import { IconSparkles } from "../app/icons";
 import { modelBrandFor } from "../domain/modelBrand";
 
 interface ModelBrandIconProps {
@@ -13,8 +13,8 @@ export function ModelBrandIcon({ modelId }: ModelBrandIconProps) {
   }
 
   return (
-    <span aria-hidden="true" className="model-brand-icon model-brand-icon--fallback">
-      <IconMemora size={18} />
+    <span aria-hidden="true" className="model-brand-icon model-brand-icon--fallback" data-brand="fallback">
+      <IconSparkles size={18} />
     </span>
   );
 }

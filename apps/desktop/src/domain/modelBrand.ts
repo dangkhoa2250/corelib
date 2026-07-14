@@ -12,7 +12,10 @@ export type ModelBrand =
   | { id: "zeroone" | "meta" | "ai21" | "baai" | "gemini" | "mistral" | "qwen" | "deepseek" | "grok"; src: string }
   | { id: "fallback"; src: null };
 
-const vendorBrands: Array<[string, Exclude<ModelBrand, { id: "fallback" }>]> = [
+type KnownModelBrand = Exclude<ModelBrand, { id: "fallback" }>;
+
+// Keep vendor prefixes first so an explicit creator is never overridden by a generic token.
+const vendorBrands: Array<[string, KnownModelBrand]> = [
   ["01-ai/", { id: "zeroone", src: zeroone }],
   ["meta/", { id: "meta", src: meta }],
   ["ai21labs/", { id: "ai21", src: ai21 }],
@@ -25,9 +28,12 @@ const vendorBrands: Array<[string, Exclude<ModelBrand, { id: "fallback" }>]> = [
   ["x-ai/", { id: "grok", src: grok }],
 ];
 
-const familyBrands: Array<[string, Exclude<ModelBrand, { id: "fallback" }>]> = [
+const familyBrands: Array<[string, KnownModelBrand]> = [
+  ["meta", { id: "meta", src: meta }],
   ["llama", { id: "meta", src: meta }],
+  ["ai21", { id: "ai21", src: ai21 }],
   ["jamba", { id: "ai21", src: ai21 }],
+  ["baai", { id: "baai", src: baai }],
   ["gemma", { id: "gemini", src: gemini }],
   ["gemini", { id: "gemini", src: gemini }],
   ["mistral", { id: "mistral", src: mistral }],
@@ -38,6 +44,7 @@ const familyBrands: Array<[string, Exclude<ModelBrand, { id: "fallback" }>]> = [
 
 export function modelBrandFor(modelId: string): ModelBrand {
   const normalizedId = modelId.toLowerCase();
+  // Specific creator prefixes intentionally precede all generic model-family matches.
   const vendorBrand = vendorBrands.find(([prefix]) => normalizedId.startsWith(prefix));
   if (vendorBrand) return vendorBrand[1];
 

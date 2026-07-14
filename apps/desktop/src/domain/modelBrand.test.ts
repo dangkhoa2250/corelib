@@ -17,6 +17,14 @@ test("matches model IDs case-insensitively", () => {
   expect(modelBrandFor("META/LLAMA-3.1-70B-INSTRUCT").id).toBe("meta");
 });
 
+test.each([
+  ["community-meta-model", "meta"],
+  ["Community-AI21-Model", "ai21"],
+  ["embedding-baai-v2", "baai"],
+])("recognizes generic creator token %s as %s", (modelId, expected) => {
+  expect(modelBrandFor(modelId).id).toBe(expected);
+});
+
 test("uses the specific vendor rule before a generic family match", () => {
-  expect(modelBrandFor("01-ai/yi-large").id).toBe("zeroone");
+  expect(modelBrandFor("01-ai/yi-meta").id).toBe("zeroone");
 });
