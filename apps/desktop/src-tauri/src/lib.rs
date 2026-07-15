@@ -64,18 +64,6 @@ pub fn run() {
             );
             app.manage(commands::AccountServiceState { api: account_api });
 
-            #[cfg(target_os = "macos")]
-            {
-                let window = app.get_webview_window("main").unwrap();
-                window_vibrancy::apply_vibrancy(
-                    &window,
-                    window_vibrancy::NSVisualEffectMaterial::Sidebar,
-                    None,
-                    None,
-                )
-                .expect("apply_vibrancy requires macOS 10.11+");
-            }
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
 import * as pdfjs from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
@@ -9,7 +9,6 @@ import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
 import { CardComposer, type CardSaveInput, type CardComposerDeck } from "../cards/CardComposer";
 import { createPageRenderQueue, PageRenderQueueError, type PageRenderQueueToken } from "./pageRenderQueue";
-import { PdfViewportTiles } from "./PdfViewportTiles";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -44,10 +43,17 @@ function setCachedPdfDoc(key: string, doc: pdfjs.PDFDocumentProxy): void {
 const MIN_ZOOM_SCALE = 0.5;
 const MAX_ZOOM_SCALE = 3;
 const MAX_CANVAS_PIXEL_RATIO = 3.0;
-const PROGRESSIVE_RENDER_INTERVAL_MS = 120;
-// Bound each whole-page raster while zooming. Viewport tiling can raise this
-// limit later without making the settled full-page render stall the UI.
+// After the last zoom input, wait this long before committing the final
+// raster scale. Shorter = the sharp re-render starts sooner, so the page
+// stops looking "stuck mid-zoom" (blurry, stretched) more quickly.
+const ZOOM_SETTLE_DEBOUNCE_MS = 300;
+const RASTER_RETENTION_MS = 1_000;
+// Bound each whole-page raster by device-pixel area. The whole page is
+// rasterized at the true zoom scale (no viewport tiling); this clamp only
+// protects against runaway memory on very large pages / high zoom.
 const MAX_CANVAS_PIXELS = 16_777_216;
+// Serialize whole-page rasters so their visible/offscreen backing stores do
+// not compete for WebKit canvas memory during scrolling and zooming.
 const pageRenderQueue = createPageRenderQueue({ concurrency: 1 });
 
 function releaseCanvas(canvas: HTMLCanvasElement) {
@@ -65,7 +71,11 @@ export function clampZoomScale(scale: number) {
 }
 
 export function getCanvasPixelRatio(devicePixelRatio: number, cssWidth = 0, cssHeight = 0) {
-  const ratio = Math.min(Math.max(devicePixelRatio, 1), MAX_CANVAS_PIXEL_RATIO);
+  // Some WebKit/Tauri configurations report 1 even on a Retina display.
+  // Keep the reader raster at least 2x so a whole-page canvas is not
+  // upscaled by the compositor after zooming. The area cap below remains
+  // the hard memory guard for unusually large pages.
+  const ratio = Math.min(Math.max(devicePixelRatio, 2), MAX_CANVAS_PIXEL_RATIO);
   const area = cssWidth * cssHeight;
   if (area <= 0) return ratio;
   return Math.max(Math.min(ratio, Math.sqrt(MAX_CANVAS_PIXELS / area)), 0.25);
@@ -222,7 +232,6 @@ interface PdfPageProps {
 
 const PdfPage = React.memo(
   function PdfPage({
-    documentId,
     pdfDoc,
     pageNumber,
     renderScale,
@@ -237,16 +246,20 @@ const PdfPage = React.memo(
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const previewRasterScaleRef = useRef<number | null>(null);
     const layersRenderedRef = useRef(false);
+    const releaseRasterTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const textLayerRef = useRef<HTMLDivElement | null>(null);
     const annotationLayerRef = useRef<HTMLDivElement | null>(null);
+    const contentBoxRef = useRef<HTMLDivElement | null>(null);
     const [isVisible, setIsVisible] = useState(false);
     const [hasPreview, setHasPreview] = useState(false);
     const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
-    const [pdfPage, setPdfPage] = useState<pdfjs.PDFPageProxy | null>(null);
 
     const currentWidth = pageSize ? pageSize.width : defaultWidth;
     const currentHeight = pageSize ? pageSize.height : defaultHeight;
-    const previewScale = renderScale >= 1.5 ? 1 : renderScale;
+    // Rasterize the whole page at the true zoom scale so it is sharp at every
+    // zoom level (no viewport tiling). getCanvasPixelRatio clamps the device
+    // pixel ratio by area to protect memory on large pages / high zoom.
+    const previewScale = renderScale;
 
     const captureSelection = useCallback(() => {
       const selection = window.getSelection();
@@ -321,22 +334,40 @@ const PdfPage = React.memo(
 
           const sizeViewport = page.getViewport({ scale: 1.0 });
           setPageSize({ width: sizeViewport.width, height: sizeViewport.height });
-          setPdfPage(page);
+          // At a settled zoom, give the canvas its real rendered CSS size.
+          // Keeping it at scale 1 and enlarging an ancestor with transform
+          // lets WebKit rasterize the composited texture at the smaller size.
+          const pw = `${sizeViewport.width * previewScale}px`;
+          const ph = `${sizeViewport.height * previewScale}px`;
+          if (canvasRef.current) {
+            canvasRef.current.style.width = pw;
+            canvasRef.current.style.height = ph;
+          }
+          if (contentBoxRef.current) {
+            contentBoxRef.current.style.width = pw;
+            contentBoxRef.current.style.height = ph;
+          }
+          if (containerRef.current) {
+            containerRef.current.style.width = pw;
+            containerRef.current.style.height = ph;
+          }
 
           const previewViewport = page.getViewport({ scale: previewScale });
-          // Page geometry is always expressed at PDF scale 1. The outer page
-          // column owns visual zoom; raster scale only changes backing pixels.
-          const layerViewport = page.getViewport({ scale: 1 });
+          const layerViewport = previewViewport;
           const canvas = canvasRef.current;
           const textLayerContainer = textLayerRef.current;
           const annotationLayerContainer = annotationLayerRef.current;
           if (!canvas || !textLayerContainer || !annotationLayerContainer) return;
 
-          textLayerContainer.style.setProperty("--scale-factor", "1");
-          annotationLayerContainer.style.setProperty("--scale-factor", "1");
+          textLayerContainer.style.setProperty("--scale-factor", String(previewScale));
+          annotationLayerContainer.style.setProperty("--scale-factor", String(previewScale));
 
+          const dpr = getCanvasPixelRatio(
+            window.devicePixelRatio || 1,
+            previewViewport.width,
+            previewViewport.height,
+          );
           if (previewRasterScaleRef.current !== previewScale || canvas.width === 0 || canvas.height === 0) {
-            const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, previewViewport.width, previewViewport.height);
             renderToken = pageRenderQueue.run(async () => {
               if (!isCurrent) throw new PageRenderQueueError("SUPERSEDED");
               const offscreen = window.document.createElement("canvas");
@@ -376,6 +407,7 @@ const PdfPage = React.memo(
             releaseCanvas(offscreen);
             previewRasterScaleRef.current = previewScale;
             setHasPreview(true);
+
           }
 
           if (isCurrent && !layersRenderedRef.current) {
@@ -470,24 +502,43 @@ const PdfPage = React.memo(
       };
     }, [pdfDoc, pageNumber, previewScale, isVisible]);
 
-    // Release the raster and DOM layers only once the page scrolls off-screen,
-    // so zoom re-renders keep the previous bitmap visible until replaced.
+    // A page can briefly leave the observer margin while scrolling or while
+    // the zoom layout is being recomputed. Retaining its completed frame for a
+    // short grace period prevents needless full-page rerasterization and the
+    // resulting soft/blank transition when it immediately re-enters view.
     useEffect(() => {
-      if (isVisible) return;
-      const canvas = canvasRef.current;
-      if (canvas) {
-        canvas.width = 0;
-        canvas.height = 0;
+      if (isVisible) {
+        if (releaseRasterTimeoutRef.current) {
+          clearTimeout(releaseRasterTimeoutRef.current);
+          releaseRasterTimeoutRef.current = null;
+        }
+        return;
       }
-      previewRasterScaleRef.current = null;
-      layersRenderedRef.current = false;
-      if (textLayerRef.current) {
-        textLayerRef.current.innerHTML = "";
-      }
-      if (annotationLayerRef.current) {
-        annotationLayerRef.current.innerHTML = "";
-      }
-      setHasPreview(false);
+
+      releaseRasterTimeoutRef.current = setTimeout(() => {
+        releaseRasterTimeoutRef.current = null;
+        const canvas = canvasRef.current;
+        if (canvas) {
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+        previewRasterScaleRef.current = null;
+        layersRenderedRef.current = false;
+        if (textLayerRef.current) {
+          textLayerRef.current.innerHTML = "";
+        }
+        if (annotationLayerRef.current) {
+          annotationLayerRef.current.innerHTML = "";
+        }
+        setHasPreview(false);
+      }, RASTER_RETENTION_MS);
+
+      return () => {
+        if (releaseRasterTimeoutRef.current) {
+          clearTimeout(releaseRasterTimeoutRef.current);
+          releaseRasterTimeoutRef.current = null;
+        }
+      };
     }, [isVisible]);
 
     return (
@@ -496,45 +547,33 @@ const PdfPage = React.memo(
         id={`pdf-page-${pageNumber}`}
         className="reader-pdf-page"
         style={{
-          width: `${currentWidth}px`,
-          height: `${currentHeight}px`,
+          width: `${currentWidth * previewScale}px`,
+          height: `${currentHeight * previewScale}px`,
           position: "relative",
           background: "#ffffff",
           boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-          margin: "0 auto 20px auto",
+          margin: `0 auto ${20 * previewScale}px auto`,
           overflow: "hidden",
         }}
       >
         <div
+          ref={contentBoxRef}
           className="reader-page-content"
           style={{
             position: "absolute",
             top: 0,
             left: 0,
-            width: `${currentWidth}px`,
-            height: `${currentHeight}px`,
-            transform: "scale(1)",
-            transformOrigin: "top left",
+            width: `${currentWidth * previewScale}px`,
+            height: `${currentHeight * previewScale}px`,
+            transform: "none",
             display: isVisible ? "block" : "none",
           }}
         >
           <canvas
             ref={canvasRef}
             className="reader-canvas"
-            style={{ width: `${currentWidth}px`, height: `${currentHeight}px`, display: "block" }}
+            style={{ width: `${currentWidth * previewScale}px`, height: `${currentHeight * previewScale}px`, display: "block" }}
           />
-          {isVisible && pdfPage && (
-            <PdfViewportTiles
-              page={pdfPage}
-              pageWidth={currentWidth}
-              pageHeight={currentHeight}
-              renderScale={renderScale}
-              pageContainerRef={containerRef}
-              rootRef={pagesContainerRef}
-              queue={pageRenderQueue}
-              cacheNamespace={`${documentId}:${pageNumber}`}
-            />
-          )}
           <div
             ref={textLayerRef}
             className="textLayer"
@@ -585,10 +624,10 @@ const PdfPage = React.memo(
         {isVisible && highlightRects?.map((rect, i) => (
           <div key={i} style={{
             position: "absolute",
-            left: `${rect.x}px`,
-            top: `${rect.y}px`,
-            width: `${rect.width}px`,
-            height: `${rect.height}px`,
+            left: `${rect.x * previewScale}px`,
+            top: `${rect.y * previewScale}px`,
+            width: `${rect.width * previewScale}px`,
+            height: `${rect.height * previewScale}px`,
             background: "rgba(255, 230, 0, 0.35)",
             pointerEvents: "none",
             zIndex: 1,
@@ -808,7 +847,9 @@ export function ReaderPage({
     };
   }, [pageSizes, defaultSize, pdfDoc]);
 
-  // Keep the transformed visual surface and the scroll layout in the same coordinate system.
+  // During a gesture, temporarily transform the most recently committed
+  // layout. Once the raster catches up, the page CSS dimensions are promoted
+  // to that scale and this transform returns to 1.
   const applyScaleToDOM = useCallback((scale = scaleRef.current) => {
     const baseWidth = stackContentSize.width + 48;
     const baseHeight = stackContentSize.height + 48;
@@ -818,7 +859,7 @@ export function ReaderPage({
       zoomLayoutRef.current.style.height = `${baseHeight * scale}px`;
     }
     if (scalingDivRef.current) {
-      scalingDivRef.current.style.transform = `scale(${scale})`;
+      scalingDivRef.current.style.transform = `scale(${scale / renderScale})`;
       const viewportWidth = pagesContainerRef.current?.clientWidth ?? 0;
       const contentWidth = baseWidth * scale;
       scalingDivRef.current.style.left = `${getCenteredPageOffset(viewportWidth, contentWidth)}px`;
@@ -827,7 +868,11 @@ export function ReaderPage({
     if (zoomLabelRef.current) {
       zoomLabelRef.current.textContent = `${Math.round(scale * 100)}%`;
     }
-  }, [stackContentSize]);
+  }, [renderScale, stackContentSize]);
+
+  useLayoutEffect(() => {
+    applyScaleToDOM(scaleRef.current);
+  }, [applyScaleToDOM]);
 
   useEffect(() => {
     const container = pagesContainerRef.current;
@@ -852,43 +897,22 @@ export function ReaderPage({
     };
   }, [stackContentSize]);
 
-  const syncPendingRenderScale = useCallback(() => {
-    progressiveRenderTimeoutRef.current = null;
-    const scale = pendingRenderScaleRef.current;
-    if (scale === null) return;
-    pendingRenderScaleRef.current = null;
-    lastRenderScaleSyncRef.current = performance.now();
-    setRenderScale(scale);
-  }, []);
-
-  // Refine the visible PDF progressively during a sustained zoom, while
-  // coalescing input so PDF.js never receives a raster job for every wheel tick.
+  // Re-raster the page at the final zoom scale once the gesture settles.
+  // We deliberately do NOT spam a full-page re-raster on every wheel tick
+  // (a "progressive" storm): that queues a backlog of whole-page
+  // rasters so the final sharp raster is stuck behind it, which reads as
+  // "blurry even when standing still". One debounced raster per gesture
+  // keeps convergence fast; brief blur during an active zoom is expected.
   const scheduleRenderScaleSync = useCallback((newScale: number) => {
     pendingRenderScaleRef.current = newScale;
-    const elapsed = performance.now() - lastRenderScaleSyncRef.current;
-    if (!progressiveRenderTimeoutRef.current) {
-      if (elapsed >= PROGRESSIVE_RENDER_INTERVAL_MS) {
-        syncPendingRenderScale();
-      } else {
-        progressiveRenderTimeoutRef.current = setTimeout(
-          syncPendingRenderScale,
-          PROGRESSIVE_RENDER_INTERVAL_MS - elapsed,
-        );
-      }
-    }
-
     if (zoomDebounceRef.current) clearTimeout(zoomDebounceRef.current);
     zoomDebounceRef.current = setTimeout(() => {
-      if (progressiveRenderTimeoutRef.current) {
-        clearTimeout(progressiveRenderTimeoutRef.current);
-        progressiveRenderTimeoutRef.current = null;
-      }
       pendingRenderScaleRef.current = null;
       lastRenderScaleSyncRef.current = performance.now();
       setRenderScale(newScale);
       isZoomingRef.current = false;
-    }, 300);
-  }, [syncPendingRenderScale]);
+    }, ZOOM_SETTLE_DEBOUNCE_MS);
+  }, []);
 
   const zoomAtViewportPoint = useCallback((requestedScale: number, pointerX: number, pointerY: number) => {
     const container = pagesContainerRef.current;
@@ -942,7 +966,7 @@ export function ReaderPage({
         const assetUrl = convertFileSrc(url);
         const cacheKey = document.id;
         const cached = getCachedPdfDoc(cacheKey);
-        const doc = cached ?? await pdfjs.getDocument({ url: assetUrl, enableHWA: true }).promise;
+        const doc = cached ?? await pdfjs.getDocument({ url: assetUrl, enableHWA: false }).promise;
         if (!active) return;
         if (!cached) {
           setCachedPdfDoc(cacheKey, doc);
@@ -1012,13 +1036,13 @@ export function ReaderPage({
     const scroll = () => {
       const element = window.document.getElementById(`pdf-page-${pageNo}`);
       if (!element || !container) return;
-      // Page offsets are measured inside the unscaled column, while the
-      // scroll layout reserves scaled dimensions.
-      container.scrollTop = element.offsetTop * scaleRef.current;
+      // Page offsets are measured in the committed layout scale; during an
+      // active gesture only the remaining scale ratio is a CSS transform.
+      container.scrollTop = element.offsetTop * (scaleRef.current / renderScale);
     };
     scroll();
     requestAnimationFrame(scroll);
-  }, []);
+  }, [renderScale]);
 
   const handlePageSelect = (pageNo: number) => {
     isNavigatingRef.current = true;
@@ -1392,14 +1416,14 @@ export function ReaderPage({
             ref={scalingDivRef}
             className="reader-page-column"
             style={{
-              width: `${stackContentSize.width + 48}px`,
-              height: `${stackContentSize.height + 48}px`,
-              padding: "24px",
+              width: `${(stackContentSize.width + 48) * renderScale}px`,
+              height: `${(stackContentSize.height + 48) * renderScale}px`,
+              padding: `${24 * renderScale}px`,
               boxSizing: "border-box",
               position: "absolute",
               top: 0,
               left: 0,
-              transform: `scale(${scaleRef.current})`,
+              transform: `scale(${scaleRef.current / renderScale})`,
               transformOrigin: "top left",
               display: "flex",
               flexDirection: "column",
