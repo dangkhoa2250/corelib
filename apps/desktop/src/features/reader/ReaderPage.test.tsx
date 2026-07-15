@@ -34,7 +34,8 @@ beforeAll(() => {
   });
 });
 
-const { pageRender } = vi.hoisted(() => ({
+const { getDocument, pageRender } = vi.hoisted(() => ({
+  getDocument: vi.fn(),
   pageRender: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
 }));
 
@@ -61,14 +62,16 @@ vi.mock("pdfjs-dist", () => {
     getAnnotations: vi.fn().mockResolvedValue([]),
   };
 
+  getDocument.mockReturnValue({
+    promise: Promise.resolve({
+      numPages: 3,
+      getPage: vi.fn().mockResolvedValue(page),
+    }),
+  });
+
   return {
     GlobalWorkerOptions: { workerSrc: "" },
-    getDocument: vi.fn().mockReturnValue({
-      promise: Promise.resolve({
-        numPages: 3,
-        getPage: vi.fn().mockResolvedValue(page),
-      }),
-    }),
+    getDocument,
     TextLayer: vi.fn().mockImplementation(function () {
       return {
         render: vi.fn().mockResolvedValue(undefined),
@@ -455,6 +458,53 @@ it("keeps the page DOM geometry stable while raster resolution catches up", asyn
   } finally {
     globalThis.requestAnimationFrame = requestAnimationFrame;
   }
+});
+
+it("keeps the page stack geometry at its committed scale during an active zoom", async () => {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const stack = globalThis.document.querySelector<HTMLElement>(".reader-page-stack");
+    expect(stack).toHaveStyle({ width: "248px" });
+
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
+    await new Promise((resolve) => setTimeout(resolve, 160));
+
+    expect(stack).toHaveStyle({ width: "248px" });
+    expect(globalThis.document.querySelector<HTMLElement>(".reader-page-column"))
+      .toHaveStyle({ transform: "scale(3)" });
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+  }
+});
+
+it("opens PDF.js documents with hardware acceleration enabled", async () => {
+  getDocument.mockClear();
+  render(
+    <ReaderPage
+      document={{ ...document, id: "hardware-accelerated" }}
+      onBack={() => {}}
+      getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+      onPageChange={vi.fn().mockResolvedValue(undefined)}
+    />,
+  );
+
+  await waitFor(() => expect(getDocument).toHaveBeenCalled());
+  expect(getDocument).toHaveBeenCalledWith(expect.objectContaining({ enableHWA: true }));
 });
 
 it("commits settled zoom into the canvas layout instead of a parent transform", async () => {
