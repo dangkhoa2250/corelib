@@ -1,5 +1,22 @@
 use tauri::Manager;
 
+#[cfg(target_os = "macos")]
+fn configure_macos_overlay_scrollers(window: &tauri::WebviewWindow) {
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSScrollerStyle, NSScrollView};
+    use objc2_web_kit::WKWebView;
+
+    window
+        .with_webview(|webview| unsafe {
+            let webview: &WKWebView = &*webview.inner().cast();
+            // WKWebView keeps its AppKit scroller in this private backing view;
+            // Tauri already opts into macos-private-api for the window chrome.
+            let scroll_view: Retained<NSScrollView> = objc2::msg_send![webview, _scrollView];
+            scroll_view.setScrollerStyle(NSScrollerStyle::Overlay);
+        })
+        .expect("configure macOS overlay scrollers");
+}
+
 pub mod commands;
 pub mod ai;
 pub mod drive_api;
@@ -74,6 +91,7 @@ pub fn run() {
                     None,
                 )
                 .expect("apply_vibrancy requires macOS 10.11+");
+                configure_macos_overlay_scrollers(&window);
             }
 
             Ok(())

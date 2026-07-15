@@ -55,3 +55,13 @@ test("uses one transparent-track scrollbar primitive across the app", () => {
   expect(css).not.toContain("scrollbar-width: none;");
   expect(css).not.toContain("scrollbar-color: var(--border-subtle) transparent;");
 });
+
+test("forces native macOS webview scrollers into overlay style", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const nativeApp = readFileSync(join(currentDir, "../../src-tauri/src/lib.rs"), "utf8");
+  const manifest = readFileSync(join(currentDir, "../../src-tauri/Cargo.toml"), "utf8");
+
+  expect(nativeApp).toContain("configure_macos_overlay_scrollers(&window);");
+  expect(nativeApp).toContain("setScrollerStyle(NSScrollerStyle::Overlay)");
+  expect(manifest).toContain('objc2-app-kit = { version = "0.3", features = ["NSScrollView", "NSScroller"] }');
+});
