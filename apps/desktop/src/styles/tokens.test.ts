@@ -50,6 +50,7 @@ test("uses one transparent-track scrollbar primitive across the app", () => {
   expect(css).toContain("--scrollbar-thumb:");
   expect(css).toContain(":where(*) {\n  scrollbar-width: thin;\n  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);");
   expect(css).toContain(":where(*)::-webkit-scrollbar-track {\n  background: var(--scrollbar-track);");
+  expect(css).toContain(":where(*)::-webkit-scrollbar-track-piece {\n  background: var(--scrollbar-track);");
   expect(css).toContain(":where(*)::-webkit-scrollbar-thumb {");
   expect(css).not.toContain("scrollbar-width: none;");
   expect(css).not.toContain("scrollbar-color: var(--border-subtle) transparent;");
