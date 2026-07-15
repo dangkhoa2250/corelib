@@ -23,6 +23,7 @@ swift-rs = { version = "1.0.7", features = ["build"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 window-vibrancy = "0.7.1"
+objc2-app-kit = { version = "0.3", features = ["NSView", "NSScrollView", "NSScroller"] }
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }

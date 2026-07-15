@@ -1,5 +1,31 @@
 use tauri::Manager;
 
+#[cfg(target_os = "macos")]
+fn apply_overlay_scroller_style(view: &objc2_app_kit::NSView) {
+    use objc2_app_kit::{NSScrollerStyle, NSScrollView};
+
+    for subview in view.subviews().iter() {
+        if let Some(scroll_view) = subview.downcast_ref::<NSScrollView>() {
+            scroll_view.setScrollerStyle(NSScrollerStyle::Overlay);
+        }
+        apply_overlay_scroller_style(&subview);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn configure_macos_overlay_scrollers(window: &tauri::WebviewWindow) {
+    use objc2_app_kit::NSView;
+
+    window
+        .with_webview(|webview| unsafe {
+            // WKWebView inherits NSView. Only public NSView APIs are used to
+            // find WebKit's embedded NSScrollViews, avoiding private selectors.
+            let view: &NSView = &*webview.inner().cast();
+            apply_overlay_scroller_style(view);
+        })
+        .expect("configure macOS overlay scrollers");
+}
+
 pub mod commands;
 pub mod ai;
 pub mod drive_api;
@@ -74,6 +100,7 @@ pub fn run() {
                     None,
                 )
                 .expect("apply_vibrancy requires macOS 10.11+");
+                configure_macos_overlay_scrollers(&window);
             }
 
             Ok(())
