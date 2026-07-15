@@ -23,3 +23,21 @@ test("uses a dark-theme-safe compact surface for the import trigger", () => {
   expect(trigger).not.toContain("--button-primary");
   expect(css).toContain(".library-import-menu__trigger:hover:not(:disabled) {");
 });
+
+test("keeps the native window transparent for the sidebar glass surface", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const config = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.conf.json"), "utf8"));
+
+  expect(config.app.windows[0].transparent).toBe(true);
+});
+
+test("uses a tinted glass fallback instead of a fully transparent sidebar", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const sidebar = css.match(/\.app-sidebar \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(css).toMatch(/--sidebar-bg:\s*rgb\([^)]*\/\s*\d+%\);/);
+  expect(sidebar).toContain("background: var(--sidebar-bg);");
+  expect(sidebar).toContain("backdrop-filter: blur(24px) saturate(1.15);");
+  expect(sidebar).toContain("-webkit-backdrop-filter: blur(24px) saturate(1.15);");
+});

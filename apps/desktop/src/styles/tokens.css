@@ -7,7 +7,9 @@
   /* Window / Surface hierarchy */
   --window-bg: #f2f2f4;
   --main-bg: #ffffff;
-  --sidebar-bg: transparent;
+  /* macOS composes this over native vibrancy; Windows/Linux receive the same
+     readable, non-zero-alpha glass fallback instead of a fully clear pane. */
+  --sidebar-bg: rgb(248 248 250 / 72%);
 
   --viewer-canvas-bg: #d9d9dc;
   --toolbar-bg: rgba(248, 248, 250, 0.92);
@@ -93,6 +95,7 @@
   /* Window / Surface hierarchy */
   --window-bg: #131315;
   --main-bg: #18181a;
+  --sidebar-bg: rgb(28 28 30 / 72%);
 
   --viewer-canvas-bg: #38383b;
   --toolbar-bg: rgba(35, 35, 38, 0.94);
@@ -250,6 +253,8 @@ textarea::placeholder {
   padding: 40px 12px 16px;
   border-right: 1px solid var(--border-subtle);
   background: var(--sidebar-bg);
+  backdrop-filter: blur(24px) saturate(1.15);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
 }
 
 .app-sidebar__drag-region {
@@ -385,6 +390,8 @@ textarea::placeholder {
   overflow: hidden;
   border-right: 1px solid var(--border-subtle);
   background: var(--sidebar-bg);
+  backdrop-filter: blur(24px) saturate(1.15);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
 }
 
 .settings-page__back,
