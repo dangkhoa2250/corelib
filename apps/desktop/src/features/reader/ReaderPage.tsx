@@ -847,32 +847,39 @@ export function ReaderPage({
     };
   }, [pageSizes, defaultSize, pdfDoc]);
 
-  // During a gesture, temporarily transform the most recently committed
-  // layout. Once the raster catches up, the page CSS dimensions are promoted
-  // to that scale and this transform returns to 1.
-  const applyScaleToDOM = useCallback((scale = scaleRef.current) => {
-    const baseWidth = stackContentSize.width + 48;
-    const baseHeight = stackContentSize.height + 48;
-
-    if (zoomLayoutRef.current) {
-      zoomLayoutRef.current.style.width = `${baseWidth * scale}px`;
-      zoomLayoutRef.current.style.height = `${baseHeight * scale}px`;
-    }
+  // While the gesture is active, keep layout at its last committed scale and
+  // update only the composited transform. Resizing the complete page stack on
+  // each wheel frame forces a reflow across every PDF page and makes zooming
+  // feel much less responsive on long documents.
+  const applyGestureScale = useCallback((scale = scaleRef.current) => {
     if (scalingDivRef.current) {
       scalingDivRef.current.style.transform = `scale(${scale / renderScale})`;
       const viewportWidth = pagesContainerRef.current?.clientWidth ?? 0;
-      const contentWidth = baseWidth * scale;
+      const contentWidth = (stackContentSize.width + 48) * scale;
       scalingDivRef.current.style.left = `${getCenteredPageOffset(viewportWidth, contentWidth)}px`;
       if (pagesContainerRef.current && contentWidth <= viewportWidth) pagesContainerRef.current.scrollLeft = 0;
     }
     if (zoomLabelRef.current) {
       zoomLabelRef.current.textContent = `${Math.round(scale * 100)}%`;
     }
-  }, [renderScale, stackContentSize]);
+  }, [renderScale, stackContentSize.width]);
+
+  // Promote the final zoom scale into real layout only after the debounce has
+  // settled. This is one deliberate reflow before the corresponding sharp
+  // full-page raster is rendered, rather than a reflow for every input event.
+  const commitRenderLayout = useCallback((scale = scaleRef.current) => {
+    const baseWidth = stackContentSize.width + 48;
+    const baseHeight = stackContentSize.height + 48;
+    if (zoomLayoutRef.current) {
+      zoomLayoutRef.current.style.width = `${baseWidth * scale}px`;
+      zoomLayoutRef.current.style.height = `${baseHeight * scale}px`;
+    }
+    applyGestureScale(scale);
+  }, [applyGestureScale, stackContentSize.height, stackContentSize.width]);
 
   useLayoutEffect(() => {
-    applyScaleToDOM(scaleRef.current);
-  }, [applyScaleToDOM]);
+    commitRenderLayout(scaleRef.current);
+  }, [commitRenderLayout]);
 
   useEffect(() => {
     const container = pagesContainerRef.current;
@@ -941,13 +948,13 @@ export function ReaderPage({
       pendingZoomRef.current = null;
       if (!next) return;
       scaleRef.current = next.scale;
-      applyScaleToDOM(next.scale);
+      applyGestureScale(next.scale);
       const contentWidth = (stackContentSize.width + 48) * next.scale;
       container.scrollLeft = contentWidth <= container.clientWidth ? 0 : next.scrollLeft;
       container.scrollTop = next.scrollTop;
       scheduleRenderScaleSync(next.scale);
     });
-  }, [applyScaleToDOM, scheduleRenderScaleSync, stackContentSize.width]);
+  }, [applyGestureScale, scheduleRenderScaleSync, stackContentSize.width]);
 
   const zoomBy = useCallback((delta: number, pointerX: number, pointerY: number) => {
     const baseScale = pendingZoomRef.current?.scale ?? scaleRef.current;
@@ -966,7 +973,7 @@ export function ReaderPage({
         const assetUrl = convertFileSrc(url);
         const cacheKey = document.id;
         const cached = getCachedPdfDoc(cacheKey);
-        const doc = cached ?? await pdfjs.getDocument({ url: assetUrl, enableHWA: false }).promise;
+        const doc = cached ?? await pdfjs.getDocument({ url: assetUrl, enableHWA: true }).promise;
         if (!active) return;
         if (!cached) {
           setCachedPdfDoc(cacheKey, doc);
