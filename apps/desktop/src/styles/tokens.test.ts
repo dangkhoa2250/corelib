@@ -41,3 +41,16 @@ test("uses a tinted glass fallback instead of a fully transparent sidebar", () =
   expect(sidebar).toContain("backdrop-filter: blur(24px) saturate(1.15);");
   expect(sidebar).toContain("-webkit-backdrop-filter: blur(24px) saturate(1.15);");
 });
+
+test("uses one transparent-track scrollbar primitive across the app", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+
+  expect(css).toContain("--scrollbar-track: transparent;");
+  expect(css).toContain("--scrollbar-thumb:");
+  expect(css).toContain(":where(*) {\n  scrollbar-width: thin;\n  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);");
+  expect(css).toContain(":where(*)::-webkit-scrollbar-track {\n  background: var(--scrollbar-track);");
+  expect(css).toContain(":where(*)::-webkit-scrollbar-thumb {");
+  expect(css).not.toContain("scrollbar-width: none;");
+  expect(css).not.toContain("scrollbar-color: var(--border-subtle) transparent;");
+});
