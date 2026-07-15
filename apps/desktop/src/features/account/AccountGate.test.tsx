@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AccountGate } from "./AccountGate";
 import type { AccountApi, SessionSnapshot } from "../../domain/account";
 
@@ -37,6 +37,14 @@ const mockSession: SessionSnapshot = {
     refreshedAt: "2026-07-13T21:00:00Z",
   },
 };
+
+beforeEach(() => {
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("AccountGate Component", () => {
   it("renders loading spinner on mount and does not render children", () => {
@@ -166,6 +174,16 @@ describe("AccountGate Component", () => {
     expect(video).toHaveProperty("muted", true);
     expect(video).toHaveAttribute("loop");
     expect(video).toHaveAttribute("playsinline");
+  });
+
+  it("starts the login background video after the gate mounts", async () => {
+    render(
+      <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
+        <div>Protected app</div>
+      </AccountGate>,
+    );
+
+    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
   });
 
   it("defines a responsive overlay treatment for the video background", () => {

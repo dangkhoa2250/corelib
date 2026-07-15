@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { AccountApi, SessionSnapshot } from "../../domain/account";
 import { SignInPage } from "./SignInPage";
 import { RegisterPage } from "./RegisterPage";
@@ -63,6 +63,7 @@ export function AccountGate({
   const [activeTab, setActiveTab] = useState<"signin" | "register">("signin");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const backgroundVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Load session on mount
   useEffect(() => {
@@ -82,6 +83,27 @@ export function AccountGate({
       active = false;
     };
   }, [api]);
+
+  // WebKit-based desktop webviews can evaluate declarative autoplay before
+  // React has applied the muted property. Start it again after mount and once
+  // media is ready, so the muted background reliably begins on app launch.
+  useEffect(() => {
+    if (state.kind === "approved") return;
+    const video = backgroundVideoRef.current;
+    if (!video) return;
+
+    const start = () => {
+      video.muted = true;
+      video.defaultMuted = true;
+      try {
+        void video.play().catch(() => {});
+      } catch (_) {}
+    };
+
+    start();
+    video.addEventListener("canplay", start, { once: true });
+    return () => video.removeEventListener("canplay", start);
+  }, [state.kind]);
 
   const handleSignOut = async () => {
     try {
@@ -166,12 +188,14 @@ export function AccountGate({
   return (
     <div className="account-gate-container">
       <video
+        ref={backgroundVideoRef}
         className="account-gate-video"
         src="/corelib-login-page-ping-pong.mp4"
         autoPlay
         muted
         loop
         playsInline
+        preload="auto"
         aria-hidden="true"
       />
       <div className="account-gate-video-overlay" aria-hidden="true" />
