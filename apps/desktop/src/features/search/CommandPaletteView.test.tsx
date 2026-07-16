@@ -33,6 +33,7 @@ function renderView(overrides: Partial<ComponentProps<typeof CommandPaletteView>
       label="Quick Open"
       onExecute={vi.fn()}
       onQueryChange={vi.fn()}
+      onSelect={vi.fn()}
       onSelectNext={vi.fn()}
       onSelectPrevious={vi.fn()}
       query=""
@@ -75,6 +76,7 @@ test("delegates query and result keyboard actions to its callbacks", async () =>
   const onSelectNext = vi.fn();
   const onSelectPrevious = vi.fn();
   const onExecute = vi.fn();
+  const onSelect = vi.fn();
   const close = vi.fn();
   const result = entry();
   renderView({
@@ -82,6 +84,7 @@ test("delegates query and result keyboard actions to its callbacks", async () =>
     groups: [{ section: "Library", results: [result] }],
     onExecute,
     onQueryChange,
+    onSelect,
     onSelectNext,
     onSelectPrevious,
   });
@@ -95,6 +98,19 @@ test("delegates query and result keyboard actions to its callbacks", async () =>
   expect(onSelectPrevious).toHaveBeenCalledOnce();
   expect(onExecute).toHaveBeenCalledWith(result);
   expect(close).toHaveBeenCalledOnce();
+});
+
+test("selects a clicked row before executing it", async () => {
+  const user = userEvent.setup();
+  const onExecute = vi.fn();
+  const onSelect = vi.fn();
+  renderView({ onExecute, onSelect });
+
+  await user.click(screen.getByRole("button", { name: "Open Calculus" }));
+
+  expect(onSelect).toHaveBeenCalledWith(1);
+  expect(onExecute).toHaveBeenCalledWith(expect.objectContaining({ id: "deck.calculus" }));
+  expect(onSelect.mock.invocationCallOrder[0]).toBeLessThan(onExecute.mock.invocationCallOrder[0]);
 });
 
 test("closes from Escape when a result button has focus", async () => {

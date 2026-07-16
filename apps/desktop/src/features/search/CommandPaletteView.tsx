@@ -14,6 +14,7 @@ export interface CommandPaletteViewProps {
   groups: CommandPaletteGroup[];
   selectedIndex: number;
   onExecute: (entry: CommandEntry) => void;
+  onSelect: (index: number) => void;
   onSelectNext: () => void;
   onSelectPrevious: () => void;
   close: () => void;
@@ -54,6 +55,7 @@ export function CommandPaletteView({
   label,
   onExecute,
   onQueryChange,
+  onSelect,
   onSelectNext,
   onSelectPrevious,
   query,
@@ -129,7 +131,10 @@ export function CommandPaletteView({
                     aria-label={`${resultVerb} ${result.title}${isSelected ? ", selected" : ""}`}
                     className={isSelected ? "is-selected" : undefined}
                     data-selected={isSelected ? "true" : undefined}
-                    onClick={() => onExecute(result)}
+                    onClick={() => {
+                      onSelect(index);
+                      onExecute(result);
+                    }}
                     type="button"
                   >
                     <span className="command-palette__title">{highlightMatch(result.title, query)}</span>

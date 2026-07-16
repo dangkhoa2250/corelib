@@ -1,6 +1,7 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 
 import type { CommandEntry, CommandSurface } from "../../app/commandRegistry";
+import { CommandPaletteView } from "./CommandPaletteView";
 
 interface CommandPaletteProps {
   mode: CommandSurface;
@@ -12,6 +13,18 @@ export interface CommandPaletteHandle {
 }
 
 const SEARCH_DEBOUNCE_MS = 50;
+const PALETTE_OPEN_EVENT = "corelib:command-palette-open";
+
+interface ActivePalette {
+  source: symbol;
+  restoreFocusTo: HTMLElement | null;
+}
+
+interface PaletteOpenDetail {
+  source: symbol;
+}
+
+let activePalette: ActivePalette | null = null;
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -32,7 +45,8 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const searchboxRef = useRef<HTMLInputElement>(null);
-  const dialogRef = useRef<HTMLElement>(null);
+  const instanceId = useRef(Symbol("command-palette"));
+  const isOpenRef = useRef(false);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const shouldRestoreFocus = useRef(false);
   const sequence = useRef(0);
@@ -48,18 +62,30 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
     return [...sections.entries()].map(([section, entries]) => ({ section, results: entries }));
   }, [results]);
 
-  const close = useCallback(() => {
+  const close = useCallback((restoreFocus = true) => {
+    if (!isOpenRef.current) return;
+    isOpenRef.current = false;
     sequence.current += 1;
     setQuery("");
     setResults([]);
     setSelectedIndex(0);
     setError(null);
-    shouldRestoreFocus.current = true;
+    shouldRestoreFocus.current = restoreFocus;
+    if (restoreFocus && activePalette?.source === instanceId.current) activePalette = null;
     setIsOpen(false);
   }, []);
 
   const open = useCallback(() => {
-    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (isOpenRef.current) {
+      searchboxRef.current?.focus();
+      return;
+    }
+    const restoreFocusTo = activePalette?.restoreFocusTo
+      ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
+    previousFocusRef.current = restoreFocusTo;
+    window.dispatchEvent(new CustomEvent<PaletteOpenDetail>(PALETTE_OPEN_EVENT, { detail: { source: instanceId.current } }));
+    activePalette = { source: instanceId.current, restoreFocusTo };
+    isOpenRef.current = true;
     setIsOpen(true);
   }, []);
 
@@ -79,6 +105,18 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [mode, open]);
+
+  useEffect(() => {
+    const onPaletteOpen = (event: Event) => {
+      const { source } = (event as CustomEvent<PaletteOpenDetail>).detail;
+      if (source !== instanceId.current) close(false);
+    };
+    window.addEventListener(PALETTE_OPEN_EVENT, onPaletteOpen);
+    return () => {
+      window.removeEventListener(PALETTE_OPEN_EVENT, onPaletteOpen);
+      if (activePalette?.source === instanceId.current) activePalette = null;
+    };
+  }, [close]);
 
   useEffect(() => {
     if (isOpen) {
@@ -121,106 +159,45 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
     void Promise.resolve(result.execute()).then(close, (executionError) => setError(errorMessage(executionError)));
   }, [close]);
 
-  const openSelected = useCallback(() => {
-    const result = groups.flatMap((group) => group.results)[selectedIndex];
-    if (result) executeEntry(result);
-  }, [executeEntry, groups, selectedIndex]);
+  const changeQuery = useCallback((nextQuery: string) => {
+    sequence.current += 1;
+    setQuery(nextQuery);
+    setResults([]);
+    setSelectedIndex(0);
+    setError(null);
+  }, []);
+
+  const selectNext = useCallback(() => {
+    if (results.length === 0) return;
+    setSelectedIndex((index) => (index + 1) % results.length);
+  }, [results.length]);
+
+  const selectPrevious = useCallback(() => {
+    if (results.length === 0) return;
+    setSelectedIndex((index) => (index - 1 + results.length) % results.length);
+  }, [results.length]);
+
+  const select = useCallback((index: number) => {
+    setSelectedIndex(index);
+  }, []);
 
   if (!isOpen) return null;
 
   return (
-    <div className="command-palette__backdrop" onMouseDown={close}>
-      <section
-        aria-label={label}
-        aria-modal="true"
-        className="command-palette"
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            close();
-            return;
-          }
-          if (event.key !== "Tab") return;
-          const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
-            "button:not([disabled]), input:not([disabled]), [href], select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])",
-          );
-          if (!focusable || focusable.length === 0) return;
-          const first = focusable[0];
-          const last = focusable[focusable.length - 1];
-          if (event.shiftKey && document.activeElement === first) {
-            event.preventDefault();
-            last.focus();
-          } else if (!event.shiftKey && document.activeElement === last) {
-            event.preventDefault();
-            first.focus();
-          }
-        }}
-        onMouseDown={(event) => event.stopPropagation()}
-        ref={dialogRef}
-        role="dialog"
-      >
-        <input
-          aria-label={label}
-          className="command-palette__input"
-          onChange={(event) => {
-            sequence.current += 1;
-            setQuery(event.target.value);
-            setSelectedIndex(0);
-          }}
-          onKeyDown={(event) => {
-            const flat = groups.flatMap((group) => group.results);
-            if (event.key === "ArrowDown" && flat.length > 0) {
-              event.preventDefault();
-              setSelectedIndex((index) => (index + 1) % flat.length);
-            } else if (event.key === "ArrowUp" && flat.length > 0) {
-              event.preventDefault();
-              setSelectedIndex((index) => (index - 1 + flat.length) % flat.length);
-            } else if (event.key === "Enter") {
-              event.preventDefault();
-              openSelected();
-            }
-          }}
-          placeholder={mode === "quick-open" ? "Search destinations…" : "Search commands…"}
-          ref={searchboxRef}
-          role="searchbox"
-          type="search"
-          value={query}
-        />
-        {error ? <div className="command-palette__error" role="alert"><p>{error}</p></div> : null}
-        {groups.length > 0 ? (
-          <ul aria-label="Results" className="command-palette__results">
-            {(() => {
-              let flatIndex = 0;
-              return groups.flatMap(({ section, results: sectionResults }) => {
-                const items = sectionResults.map((result) => {
-                  const index = flatIndex++;
-                  return (
-                    <li key={result.id}>
-                      <button
-                        aria-label={`${resultVerb(mode)} ${result.title}`}
-                        aria-selected={index === selectedIndex}
-                        className={index === selectedIndex ? "is-selected" : undefined}
-                        onClick={() => {
-                          setSelectedIndex(index);
-                          executeEntry(result);
-                        }}
-                        type="button"
-                      >
-                        <span>{result.title}</span>
-                        <small>{result.breadcrumb.join(" › ")}</small>
-                      </button>
-                    </li>
-                  );
-                });
-                return [
-                  <li key={`header-${section}`} aria-hidden="true" className="command-palette__section-header"><span>{section}</span></li>,
-                  ...items,
-                ];
-              });
-            })()}
-          </ul>
-        ) : null}
-      </section>
-    </div>
+    <CommandPaletteView
+      close={close}
+      error={error}
+      groups={groups}
+      label={label}
+      onExecute={executeEntry}
+      onQueryChange={changeQuery}
+      onSelect={select}
+      onSelectNext={selectNext}
+      onSelectPrevious={selectPrevious}
+      query={query}
+      resultVerb={resultVerb(mode)}
+      searchboxRef={searchboxRef}
+      selectedIndex={selectedIndex}
+    />
   );
 });

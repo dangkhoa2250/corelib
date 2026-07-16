@@ -74,6 +74,28 @@ test("selects the current Quick Open item with the keyboard", async () => {
   expect(execute).toHaveBeenCalledOnce();
 });
 
+test("executes only the second Quick Open item after ArrowDown then Enter", async () => {
+  const user = userEvent.setup();
+  const first = vi.fn();
+  const second = vi.fn();
+  render(
+    <CommandPalette
+      mode="quick-open"
+      search={vi.fn().mockResolvedValue([
+        entry({ id: "first", title: "First", execute: first }),
+        entry({ id: "second", title: "Second", execute: second }),
+      ])}
+    />,
+  );
+
+  await user.keyboard("{Control>}k{/Control}");
+  await screen.findByRole("button", { name: "Open Second" });
+  await user.keyboard("{ArrowDown}{Enter}");
+
+  expect(first).not.toHaveBeenCalled();
+  expect(second).toHaveBeenCalledOnce();
+});
+
 test("executes the item that was clicked", async () => {
   const user = userEvent.setup();
   const first = vi.fn();
@@ -90,6 +112,53 @@ test("executes the item that was clicked", async () => {
 
   expect(first).not.toHaveBeenCalled();
   expect(second).toHaveBeenCalledOnce();
+});
+
+test("clears stale results while a newer query is still searching", async () => {
+  const user = userEvent.setup();
+  const staleExecute = vi.fn();
+  let resolveLatestSearch: ((results: CommandEntry[]) => void) | undefined;
+  const latestSearch = new Promise<CommandEntry[]>((resolve) => {
+    resolveLatestSearch = resolve;
+  });
+  const latestExecute = vi.fn();
+  const search = vi.fn((query: string) => (
+    query === "new" ? latestSearch : Promise.resolve([entry({ id: "stale", title: "Stale", execute: staleExecute })])
+  ));
+  render(<CommandPalette mode="quick-open" search={search} />);
+
+  await user.keyboard("{Control>}k{/Control}");
+  await screen.findByRole("button", { name: "Open Stale, selected" });
+  await user.type(screen.getByRole("searchbox"), "new");
+
+  expect(screen.queryByRole("button", { name: /Open Stale/ })).not.toBeInTheDocument();
+  await user.keyboard("{Enter}");
+  expect(staleExecute).not.toHaveBeenCalled();
+
+  resolveLatestSearch?.([entry({ id: "latest", title: "Latest", execute: latestExecute })]);
+  await screen.findByRole("button", { name: "Open Latest, selected" });
+  await user.keyboard("{Enter}");
+  expect(latestExecute).toHaveBeenCalledOnce();
+});
+
+test("keeps a rejected clicked action selected", async () => {
+  const user = userEvent.setup();
+  const rejected = vi.fn().mockRejectedValue(new Error("Could not open second"));
+  render(
+    <CommandPalette
+      mode="quick-open"
+      search={vi.fn().mockResolvedValue([
+        entry({ id: "first", title: "First" }),
+        entry({ id: "second", title: "Second", execute: rejected }),
+      ])}
+    />,
+  );
+
+  await user.keyboard("{Control>}k{/Control}");
+  await user.click(await screen.findByRole("button", { name: "Open Second" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not open second");
+  expect(screen.getByRole("button", { name: "Open Second, selected" })).toHaveAttribute("data-selected", "true");
 });
 
 test("closes with Escape", async () => {
@@ -115,6 +184,46 @@ test("restores focus to the previously active element when it closes", async () 
   previous.focus();
   await user.keyboard("{Control>}k{/Control}");
   expect(screen.getByRole("searchbox")).toHaveFocus();
+  await user.keyboard("{Escape}");
+  expect(previous).toHaveFocus();
+});
+
+test("does not overwrite the focus restoration target when opened again", async () => {
+  const user = userEvent.setup();
+  render(
+    <>
+      <button type="button">Previous focus</button>
+      <CommandPalette mode="quick-open" search={vi.fn().mockResolvedValue([])} />
+    </>,
+  );
+
+  const previous = screen.getByRole("button", { name: "Previous focus" });
+  previous.focus();
+  await user.keyboard("{Control>}k{/Control}");
+  await user.keyboard("{Control>}k{/Control}");
+  await user.keyboard("{Escape}");
+
+  expect(previous).toHaveFocus();
+});
+
+test("switches surfaces without restoring focus to the covered palette", async () => {
+  const user = userEvent.setup();
+  render(
+    <>
+      <button type="button">Previous focus</button>
+      <CommandPalette mode="quick-open" search={vi.fn().mockResolvedValue([])} />
+      <CommandPalette mode="command-palette" search={vi.fn().mockResolvedValue([])} />
+    </>,
+  );
+
+  const previous = screen.getByRole("button", { name: "Previous focus" });
+  previous.focus();
+  await user.keyboard("{Control>}k{/Control}");
+  expect(screen.getByRole("dialog", { name: "Quick Open" })).toBeInTheDocument();
+  await user.keyboard("{Shift>}{Control>}k{/Control}{/Shift}");
+
+  expect(screen.queryByRole("dialog", { name: "Quick Open" })).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog", { name: "Command Palette" })).toBeInTheDocument();
   await user.keyboard("{Escape}");
   expect(previous).toHaveFocus();
 });
