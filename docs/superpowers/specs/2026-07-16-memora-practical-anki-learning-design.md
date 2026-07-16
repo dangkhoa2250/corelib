@@ -464,3 +464,16 @@ Desktop UI verification must follow the repository's version-sensitive Tauri ins
 - Ratings are session-validated, atomic, and safe against duplicate or stale submission.
 - Existing cards and review history migrate without loss.
 - No nested decks, burying, sibling behavior, or advanced Anki configuration is added.
+
+## Approved follow-up: review fixes and UI simplification
+
+The July 17 implementation review approved these corrections:
+
+- Queue previews and persisted ratings use the same elapsed-day input.
+- Every persisted learning and relearning rating updates FSRS memory state, while fixed short steps continue to own the immediate due time.
+- Relearning Hard uses the FSRS Hard memory result, not Again.
+- An expired study session is replaced in application route state so later ratings and refreshes use the replacement session ID.
+- Automatic refresh runs only when the visible queue is empty and waits until the next learning due time. There is no manual Refresh now action.
+- Stale-rating handling no longer performs a special UI refresh. The normal error is shown and the user can leave the session.
+- Practice uses a compact Practice heading without a persistent schedule disclaimer.
+- Restore defaults is removed from Memora settings.
