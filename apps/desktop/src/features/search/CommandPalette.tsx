@@ -156,7 +156,7 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
 
   const executeEntry = useCallback((result: CommandEntry) => {
     setError(null);
-    void Promise.resolve(result.execute()).then(close, (executionError) => setError(errorMessage(executionError)));
+    void Promise.resolve(result.execute()).then(() => close(), (executionError) => setError(errorMessage(executionError)));
   }, [close]);
 
   const changeQuery = useCallback((nextQuery: string) => {
