@@ -1,0 +1,4 @@
+interface:
+  display_name: "Command Registration Check"
+  short_description: "Keep new Corelib features discoverable"
+  default_prompt: "Use $checking-command-registration before adding a public Corelib page or feature."

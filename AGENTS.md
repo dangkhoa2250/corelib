@@ -1,5 +1,9 @@
 # Corelib agent instructions
 
+## Command registration
+
+Before adding or exposing a public desktop page, route, feature entry point, navigation destination, or user action, read and follow [checking-command-registration](skills/checking-command-registration/SKILL.md). Do not treat a feature as complete until its command registry coverage tests pass.
+
 ## Desktop app verification is version-sensitive
 
 Do **not** treat an already-open `Library.app` or an existing `tauri dev`
