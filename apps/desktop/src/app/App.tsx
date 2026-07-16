@@ -49,6 +49,7 @@ import { AdminPage } from "../features/admin/AdminPage";
 import { AnalyticsClient } from "../lib/analytics";
 import { createCommandRegistry } from "./commandRegistry";
 import type { AppRoute } from "./routes";
+import { InputPrivacyGuard } from "../components/InputPrivacyGuard";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -622,6 +623,7 @@ export function App({
 
   const palette = (
     <>
+      <InputPrivacyGuard />
       <CommandPalette
         ref={quickOpenRef}
         mode="quick-open"
