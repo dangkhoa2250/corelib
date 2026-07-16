@@ -1129,7 +1129,7 @@ test("Review Today starts a backend study session", async () => {
   await user.click(await screen.findByRole("button", { name: /Review/ }));
 
   expect(startStudySession).toHaveBeenCalledWith({ kind: "all" });
-  expect(await screen.findByText("Question")).toBeInTheDocument();
+  expect(await screen.findAllByText("Question")).toHaveLength(2);
 });
 
 test("Study a deck starts a deck-scoped study session", async () => {
@@ -1155,7 +1155,7 @@ test("Study a deck starts a deck-scoped study session", async () => {
   await user.click(await screen.findByRole("menuitem", { name: "Review Due" }));
 
   expect(startStudySession).toHaveBeenCalledWith({ kind: "deck", deckId: "deck-1" });
-  expect(await screen.findByText("Question")).toBeInTheDocument();
+  expect(await screen.findAllByText("Question")).toHaveLength(2);
 });
 
 test("an expired refresh starts a replacement session with the same scope", async () => {
