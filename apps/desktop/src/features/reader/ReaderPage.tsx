@@ -9,6 +9,7 @@ import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
 import { CardComposer, type CardSaveInput, type CardComposerDeck } from "../cards/CardComposer";
 import { createPageRenderQueue, PageRenderQueueError, type PageRenderQueueToken } from "./pageRenderQueue";
+import { ScrollArea } from "../../components/ScrollArea";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -1204,9 +1205,9 @@ export function ReaderPage({
         </div>
 
         {/* Content */}
-        <div className="reader-sidebar__content">
+        <ScrollArea ref={thumbnailListRef} className="reader-sidebar__content">
           {sidebarTab === "pages" ? (
-            <div ref={thumbnailListRef} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {pagesArray.map((pageNumber) => (
                 <ThumbnailPage
                   key={pageNumber}
@@ -1225,7 +1226,7 @@ export function ReaderPage({
               ))}
             </div>
           )}
-        </div>
+        </ScrollArea>
       </aside>
 
       {/* Main View Area */}
@@ -1401,12 +1402,11 @@ export function ReaderPage({
         </header>
 
         {/* Scrollable pages container */}
-        <div
+        <ScrollArea
           ref={pagesContainerRef}
           className="reader-canvas-container"
           style={{
             flex: 1,
-            overflow: "auto",
             background: "#8e8e93",
           }}
         >
@@ -1459,7 +1459,7 @@ export function ReaderPage({
             ))}
             </div>
           </div>
-        </div>
+        </ScrollArea>
         {selection && onCreateCard ? (
           <div style={{ position: "fixed", left: "50%", bottom: "24px", zIndex: 10, transform: "translateX(-50%)" }}>
             <CardSelectionToolbar

@@ -67,3 +67,11 @@ test("uses only public macOS view APIs to enable overlay scrollers", () => {
   expect(nativeApp).not.toContain("_scrollView");
   expect(manifest).toContain('objc2-app-kit = { version = "0.3", features = ["NSView", "NSScrollView", "NSScroller"] }');
 });
+
+test("uses the reusable ScrollArea for the reader's thumbnail and PDF panes", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const reader = readFileSync(join(currentDir, "../features/reader/ReaderPage.tsx"), "utf8");
+
+  expect(reader).toContain('import { ScrollArea } from "../../components/ScrollArea";');
+  expect(reader.match(/<ScrollArea/g)?.length).toBeGreaterThanOrEqual(2);
+});

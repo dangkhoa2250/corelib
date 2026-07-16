@@ -2250,7 +2250,31 @@ textarea::placeholder {
 .reader-sidebar__content {
   flex: 1;
   padding: 8px;
-  overflow-y: auto;
+}
+
+/* ScrollArea owns scrolling itself so WebKit cannot reserve a native track.
+   The thumb is portal-mounted and floats directly over the owning surface. */
+.scroll-area__thumb {
+  position: fixed;
+  z-index: 1000;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  opacity: 0.9;
+  touch-action: none;
+  cursor: default;
+}
+
+.scroll-area__thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  opacity: 1;
+}
+
+.scroll-area__thumb--vertical {
+  width: 8px;
+}
+
+.scroll-area__thumb--horizontal {
+  height: 8px;
 }
 
 .reader-thumbnail {
