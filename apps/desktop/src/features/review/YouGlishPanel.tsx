@@ -56,7 +56,7 @@ export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelPro
         marginTop: "16px",
         padding: "16px",
         borderRadius: "12px",
-        background: "var(--surface-2)",
+        background: "var(--main-bg)",
         border: "1px solid var(--border-subtle)",
         display: "flex",
         flexDirection: "column",

@@ -13,6 +13,12 @@ test("renders the official embedded player URL without waiting for the widget ha
   expect(player).toHaveAttribute("src", expect.stringContaining("&e_comp=8&e_notif_h=1"));
 });
 
+test("uses the same surface color as the flashcard and source viewer", () => {
+  const { container } = render(<YouGlishPanel word="Algorithms" frontLanguage="en" onClose={vi.fn()} />);
+
+  expect(container.firstElementChild).toHaveStyle({ background: "var(--main-bg)" });
+});
+
 test("locks the player height at the first resize after a caption change", () => {
   render(<YouGlishPanel word="Algorithms" frontLanguage="en" onClose={vi.fn()} />);
 

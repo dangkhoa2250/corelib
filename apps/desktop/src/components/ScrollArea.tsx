@@ -93,11 +93,13 @@ export const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(func
   useEffect(() => {
     const element = elementRef.current;
     if (!element) return;
+    const parent = element.parentElement;
 
     const resizeObserver = typeof ResizeObserver === "undefined"
       ? null
       : new ResizeObserver(scheduleMetricsUpdate);
     resizeObserver?.observe(element);
+    if (parent) resizeObserver?.observe(parent);
     for (const child of element.children) resizeObserver?.observe(child);
     const mutationObserver = new MutationObserver((records) => {
       for (const record of records) {
@@ -108,6 +110,10 @@ export const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(func
       scheduleMetricsUpdate();
     });
     mutationObserver.observe(element, { childList: true });
+    const parentMutationObserver = parent
+      ? new MutationObserver(scheduleMetricsUpdate)
+      : null;
+    parentMutationObserver?.observe(parent!, { childList: true });
 
     element.addEventListener("scroll", scheduleMetricsUpdate, { passive: true });
     window.addEventListener("resize", scheduleMetricsUpdate);
@@ -116,6 +122,7 @@ export const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(func
     return () => {
       resizeObserver?.disconnect();
       mutationObserver.disconnect();
+      parentMutationObserver?.disconnect();
       element.removeEventListener("scroll", scheduleMetricsUpdate);
       window.removeEventListener("resize", scheduleMetricsUpdate);
     };

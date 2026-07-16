@@ -68,6 +68,54 @@ test("uses only public macOS view APIs to enable overlay scrollers", () => {
   expect(manifest).toContain('objc2-app-kit = { version = "0.3", features = ["NSView", "NSScrollView", "NSScroller"] }');
 });
 
+test("anchors the review route and source split to the viewport height", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const root = css.match(/html,\nbody,\n#root \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const reviewPage = css.match(/\.review-page \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const reviewSplit = css.match(/\.review-page__split \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(root).toMatch(/^  height: 100%;$/m);
+  expect(reviewPage).toContain("height: 100vh;");
+  expect(reviewPage).toContain("overflow: hidden;");
+  expect(reviewSplit).toContain("height: 100%;");
+});
+
+test("keeps the flashcard compact while the source panel can fill the viewport", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const card = css.match(/\.review-page__card \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const sourcePanel = css.match(/\.review-page__split > \.source-viewer \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(card).toContain("flex: 0 1 440px;");
+  expect(card).toContain("height: min(440px, calc(100vh - 180px));");
+  expect(sourcePanel).toContain("align-self: stretch;");
+  expect(sourcePanel).not.toContain("margin-bottom");
+});
+
+test("splits the review and source panes evenly", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const reviewPane = css.match(/\.review-page__split--with-source \.review-page__body \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const sourcePane = css.match(/\.review-page__split--with-source > \.source-viewer \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(reviewPane).toContain("flex: 1 1 0;");
+  expect(reviewPane).not.toContain("max-width");
+  expect(sourcePane).toContain("flex: 1 1 0;");
+});
+
+test("shrinks the flashcard by viewport height while a video is open", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const videoCard = css.match(/\.review-page__body--with-video \.review-page__card \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(videoCard).toContain("flex: 0 0 clamp(240px, 28vh, 360px);");
+  expect(videoCard).toContain("height: clamp(240px, 28vh, 360px);");
+  expect(videoCard).not.toContain("overflow-y");
+  const videoBody = css.match(/\.review-page__body--with-video \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  expect(videoBody).toContain("padding-right: 16px;");
+});
+
 test("uses the reusable ScrollArea for the reader's thumbnail and PDF panes", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const reader = readFileSync(join(currentDir, "../features/reader/ReaderPage.tsx"), "utf8");

@@ -89,6 +89,7 @@
   /* Highlight (source viewer match) */
   --color-highlight: rgb(255 212 0 / 45%);
   --color-highlight-active: rgb(255 149 0 / 65%);
+  --color-highlight-source: rgb(59 130 246 / 55%);
 
   /* Apply main text; background stays transparent so native window vibrancy shows through */
   color: var(--text-primary);
@@ -177,6 +178,7 @@
   /* Highlight (source viewer match) */
   --color-highlight: rgb(255 212 0 / 55%);
   --color-highlight-active: rgb(255 149 0 / 75%);
+  --color-highlight-source: rgb(96 165 250 / 70%);
 }
 
 * {
@@ -225,6 +227,7 @@ html,
 body,
 #root {
   min-width: 320px;
+  height: 100%;
   min-height: 100%;
   margin: 0;
 }
@@ -3170,6 +3173,11 @@ textarea::placeholder {
   background: var(--color-highlight-active);
 }
 
+.source-viewer__highlight--source,
+.source-viewer__highlight--source.source-viewer__highlight--selected {
+  background: var(--color-highlight-source);
+}
+
 .source-viewer__close-btn {
   background: transparent;
   border: none;
@@ -3380,9 +3388,52 @@ textarea::placeholder {
   display: flex;
   flex-direction: column;
   height: 100%;
+  height: 100vh;
+  padding: 32px 24px 0 24px;
+  overflow: hidden;
+}
+
+.review-page__split {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+  gap: 16px;
   max-width: 720px;
   margin: 0 auto;
-  padding: 0 24px;
+  width: 100%;
+}
+
+.review-page__split--with-source {
+  max-width: none;
+  margin: 0;
+}
+
+.review-page__body {
+  flex: 0 1 720px;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.review-page__split:not(.review-page__split--with-source) .review-page__body {
+  margin: 0 auto;
+}
+
+.review-page__split--with-source .review-page__body {
+  flex: 1 1 0;
+}
+
+.review-page__split > .source-viewer {
+  min-width: 420px;
+  align-self: stretch;
+}
+
+.review-page__split--with-source > .source-viewer {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .review-page--done {
@@ -3509,11 +3560,42 @@ textarea::placeholder {
 }
 
 .review-page__card {
-  flex: 1;
+  flex: 0 1 440px;
+  height: min(440px, calc(100vh - 180px));
   perspective: 1200px;
   cursor: pointer;
   margin: 8px 0;
   min-height: 0;
+}
+
+.review-page__body--with-video {
+  padding-bottom: 16px;
+  padding-right: 16px;
+}
+
+.review-page__body--with-video .review-page__card {
+  flex: 0 0 clamp(240px, 28vh, 360px);
+  height: clamp(240px, 28vh, 360px);
+}
+
+.review-page__source-btn {
+  border: 0;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  color: var(--link);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.review-page__source-btn:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .review-page__card-inner {

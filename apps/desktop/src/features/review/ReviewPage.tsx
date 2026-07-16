@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import type { LearningCard, ReviewPreview, ReviewRating } from "../../domain/learning";
+import type { LearningCard, ReviewPreview, ReviewRating, CardSource } from "../../domain/learning";
 import { ClickableFrontText } from "./ClickableFrontText";
 import { YouGlishPanel } from "./YouGlishPanel";
 import { LanguagePicker } from "../cards/LanguagePicker";
+import { SourceViewer } from "../cards/SourceViewer";
 import { detectLanguage } from "../../lib/languageDetector";
 import { detectLanguage as detectSpeechLanguage } from "../../lib/language";
 import { updateCard } from "../../lib/learning";
 import { PronunciationButton } from "../../components/PronunciationButton";
+import { IconEye } from "../../app/icons";
+import { ScrollArea } from "../../components/ScrollArea";
 
 export interface ReviewPageProps {
   cards: LearningCard[];
@@ -14,6 +17,7 @@ export interface ReviewPageProps {
   mode?: "study" | "practice";
   onRate: (card: LearningCard, rating: ReviewRating, elapsedMs: number) => Promise<void>;
   onBack?: () => void;
+  getDocumentFileUrl?: (id: string) => Promise<string>;
 }
 
 const ratings: ReviewRating[] = ["again", "hard", "good", "easy"];
@@ -36,7 +40,27 @@ function formatTime(seconds: number): string {
 
 type RatingCounts = Record<ReviewRating, number>;
 
-export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: ReviewPageProps) {
+function SourceButton({ source, onOpen }: { source?: CardSource | null; onOpen: (source: CardSource) => void }) {
+  const isAvailable = Boolean(source?.documentId);
+
+  return (
+    <button
+      type="button"
+      className="review-page__source-btn"
+      aria-label={isAvailable ? "View source" : "Source unavailable"}
+      title={isAvailable ? "View source" : "The PDF source is no longer available"}
+      disabled={!isAvailable}
+      onClick={(event) => {
+        event.stopPropagation();
+        if (source && source.documentId) onOpen(source);
+      }}
+    >
+      <IconEye size={14} />
+    </button>
+  );
+}
+
+export function ReviewPage({ cards, previews, mode = "study", onRate, onBack, getDocumentFileUrl }: ReviewPageProps) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -47,6 +71,7 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [showYouGlish, setShowYouGlish] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
+  const [sourceView, setSourceView] = useState<CardSource | null>(null);
 
   const isPractice = mode === "practice";
   const card = cards[index];
@@ -164,169 +189,185 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
 
   return (
     <main className="review-page" aria-labelledby="review-title">
-      <header className="review-page__header">
-        <div className="review-page__header-left">
-          {onBack ? (
-            <button type="button" onClick={onBack} className="review-page__back-btn">
-              &larr; Back
-            </button>
-          ) : null}
-        </div>
-        <div className="review-page__progress">
-          <div
-            className="review-page__progress-bar"
-            style={{ width: `${((index + 1) / cards.length) * 100}%` }}
-          />
-        </div>
-        <p className="review-page__count">{index + 1} / {cards.length}</p>
-        <div className="review-page__nav">
-          <button
-            type="button"
-            className="review-page__nav-btn"
-            onClick={goToPrev}
-            disabled={index === 0}
-            aria-label="Previous card"
-          >
-            ◀
-          </button>
-          <button
-            type="button"
-            className="review-page__nav-btn"
-            onClick={goToNext}
-            disabled={index >= cards.length - 1}
-            aria-label="Next card"
-          >
-            ▶
-          </button>
-        </div>
-      </header>
-
-      <section
-        aria-label="Flashcard"
-        className={`review-page__card ${revealed ? "review-page__card--flipped" : ""}`}
-        onClick={() => !revealed && setRevealed(true)}
-        role="button"
-        tabIndex={0}
-        onKeyDown={(e) => {
-          if ((e.key === "Enter" || e.key === " ") && !revealed) {
-            e.preventDefault();
-            setRevealed(true);
-          }
-        }}
-      >
-        <div className="review-page__card-inner">
-          <div className="review-page__card-face review-page__card-face--front">
-            <div className="review-page__card-face-scroll">
-              <p className="review-page__label">Front</p>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-                <div className="review-page__content">
-                  <ClickableFrontText
-                    text={card.front}
-                    frontLanguage={card.frontLanguage}
-                    selectedWord={selectedWord}
-                    onWordSelect={(word) => {
-                      setSelectedWord(word);
-                      setShowYouGlish(true);
-                    }}
-                  />
-                </div>
-                <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
-              </div>
-            </div>
-            <div className="review-page__flip-hint">Tap to flip</div>
-          </div>
-          <div className="review-page__card-face review-page__card-face--back">
-            <div className="review-page__card-face-scroll">
-              <p className="review-page__label">Front</p>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-                <div className="review-page__content review-page__content--small">
-                  <ClickableFrontText
-                    text={card.front}
-                    frontLanguage={card.frontLanguage}
-                    selectedWord={selectedWord}
-                    onWordSelect={(word) => {
-                      setSelectedWord(word);
-                      setShowYouGlish(true);
-                    }}
-                  />
-                </div>
-                <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
-              </div>
-              <hr className="review-page__divider" />
-              <p className="review-page__label">Back</p>
-              <div className="review-page__content">{card.back}</div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {card && !card.frontLanguage && (
-        <div
-          style={{
-            marginTop: "16px",
-            padding: "16px",
-            borderRadius: "12px",
-            background: "var(--surface-2)",
-            border: "1px solid var(--border-subtle)",
-            color: "var(--text-secondary)",
-            fontSize: "13px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "10px",
-          }}
+      <div className={`review-page__split${sourceView ? " review-page__split--with-source" : ""}`}>
+        <ScrollArea
+          className={`review-page__body${showYouGlish && selectedWord ? " review-page__body--with-video" : ""}`}
+          data-testid="review-page-scroll-area"
         >
-          <span style={{ fontWeight: 600 }}>
-            No confirmed front language. Select a language to enable YouGlish:
-          </span>
-          <div style={{ width: "260px" }}>
-            <LanguagePicker
-              value={card.frontLanguage}
-              onChange={handleSelectLanguage}
-              detectedLanguage={detectLanguage(card.front)}
-            />
-          </div>
-        </div>
-      )}
-
-      {showYouGlish && selectedWord && (
-        <YouGlishPanel
-          word={selectedWord}
-          frontLanguage={card.frontLanguage}
-          onClose={() => {
-            setSelectedWord(null);
-            setShowYouGlish(false);
-          }}
-        />
-      )}
-
-      <footer className="review-page__footer">
-        <p className="review-page__elapsed" aria-live="polite">{formatTime(Math.floor(elapsed / 1000))}</p>
-        {revealed ? (
-          <div className="review-page__ratings" role="group" aria-label="Rate card">
-            {ratings.map((rating) => {
-              const interval = !isPractice ? preview?.[rating]?.intervalLabel ?? "" : "";
-              return (
-                <button
-                  key={rating}
-                  className="review-page__rating-btn"
-                  disabled={saving}
-                  style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleRateCard(rating);
-                  }}
-                >
-                  <span className="review-page__rating-label">{rating === "good" ? "Good" : rating.charAt(0).toUpperCase() + rating.slice(1)}</span>
-                  {interval ? <span className="review-page__rating-interval">{interval}</span> : null}
+          <header className="review-page__header">
+            <div className="review-page__header-left">
+              {onBack ? (
+                <button type="button" onClick={onBack} className="review-page__back-btn">
+                  &larr; Back
                 </button>
-              );
-            })}
-          </div>
+              ) : null}
+            </div>
+            <div className="review-page__progress">
+              <div
+                className="review-page__progress-bar"
+                style={{ width: `${((index + 1) / cards.length) * 100}%` }}
+              />
+            </div>
+            <p className="review-page__count">{index + 1} / {cards.length}</p>
+            <div className="review-page__nav">
+              <button
+                type="button"
+                className="review-page__nav-btn"
+                onClick={goToPrev}
+                disabled={index === 0}
+                aria-label="Previous card"
+              >
+                ◀
+              </button>
+              <button
+                type="button"
+                className="review-page__nav-btn"
+                onClick={goToNext}
+                disabled={index >= cards.length - 1}
+                aria-label="Next card"
+              >
+                ▶
+              </button>
+            </div>
+          </header>
+
+          <section
+            aria-label="Flashcard"
+            className={`review-page__card ${revealed ? "review-page__card--flipped" : ""}`}
+            onClick={() => !revealed && setRevealed(true)}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if ((e.key === "Enter" || e.key === " ") && !revealed) {
+                e.preventDefault();
+                setRevealed(true);
+              }
+            }}
+          >
+            <div className="review-page__card-inner">
+              <div className="review-page__card-face review-page__card-face--front">
+                <ScrollArea className="review-page__card-face-scroll">
+                  <p className="review-page__label">Front</p>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                    <div className="review-page__content">
+                      <ClickableFrontText
+                        text={card.front}
+                        frontLanguage={card.frontLanguage}
+                        selectedWord={selectedWord}
+                        onWordSelect={(word) => {
+                          setSelectedWord(word);
+                          setShowYouGlish(true);
+                        }}
+                      />
+                    </div>
+                    <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
+                    <SourceButton source={card.source} onOpen={setSourceView} />
+                  </div>
+                </ScrollArea>
+                <div className="review-page__flip-hint">Tap to flip</div>
+              </div>
+              <div className="review-page__card-face review-page__card-face--back">
+                <ScrollArea className="review-page__card-face-scroll">
+                  <p className="review-page__label">Front</p>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                    <div className="review-page__content review-page__content--small">
+                      <ClickableFrontText
+                        text={card.front}
+                        frontLanguage={card.frontLanguage}
+                        selectedWord={selectedWord}
+                        onWordSelect={(word) => {
+                          setSelectedWord(word);
+                          setShowYouGlish(true);
+                        }}
+                      />
+                    </div>
+                    <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
+                    <SourceButton source={card.source} onOpen={setSourceView} />
+                  </div>
+                  <hr className="review-page__divider" />
+                  <p className="review-page__label">Back</p>
+                  <div className="review-page__content">{card.back}</div>
+                </ScrollArea>
+              </div>
+            </div>
+          </section>
+
+          {card && !card.frontLanguage && (
+            <div
+              style={{
+                marginTop: "16px",
+                padding: "16px",
+                borderRadius: "12px",
+                background: "var(--surface-2)",
+                border: "1px solid var(--border-subtle)",
+                color: "var(--text-secondary)",
+                fontSize: "13px",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "10px",
+              }}
+            >
+              <span style={{ fontWeight: 600 }}>
+                No confirmed front language. Select a language to enable YouGlish:
+              </span>
+              <div style={{ width: "260px" }}>
+                <LanguagePicker
+                  value={card.frontLanguage}
+                  onChange={handleSelectLanguage}
+                  detectedLanguage={detectLanguage(card.front)}
+                />
+              </div>
+            </div>
+          )}
+
+          <footer className="review-page__footer">
+            <p className="review-page__elapsed" aria-live="polite">{formatTime(Math.floor(elapsed / 1000))}</p>
+            {revealed ? (
+              <div className="review-page__ratings" role="group" aria-label="Rate card">
+                {ratings.map((rating) => {
+                  const interval = !isPractice ? preview?.[rating]?.intervalLabel ?? "" : "";
+                  return (
+                    <button
+                      key={rating}
+                      className="review-page__rating-btn"
+                      disabled={saving}
+                      style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void handleRateCard(rating);
+                      }}
+                    >
+                      <span className="review-page__rating-label">{rating === "good" ? "Good" : rating.charAt(0).toUpperCase() + rating.slice(1)}</span>
+                      {interval ? <span className="review-page__rating-interval">{interval}</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {error ? <p className="review-page__error" role="alert">{error}</p> : null}
+          </footer>
+
+          {showYouGlish && selectedWord && (
+            <YouGlishPanel
+              word={selectedWord}
+              frontLanguage={card.frontLanguage}
+              onClose={() => {
+                setSelectedWord(null);
+                setShowYouGlish(false);
+              }}
+            />
+          )}
+        </ScrollArea>
+        {sourceView && getDocumentFileUrl ? (
+          <SourceViewer
+            source={sourceView}
+            getDocumentFileUrl={getDocumentFileUrl}
+            onClose={() => setSourceView(null)}
+          />
         ) : null}
-        {error ? <p className="review-page__error" role="alert">{error}</p> : null}
-      </footer>
+      </div>
     </main>
   );
 }

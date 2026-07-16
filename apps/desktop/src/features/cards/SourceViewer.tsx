@@ -4,6 +4,7 @@ import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { PDFViewer as PDFViewerType } from "pdfjs-dist/web/pdf_viewer.mjs";
 import type { CardSource } from "../../domain/learning";
+import { ScrollArea } from "../../components/ScrollArea";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 // pdfjs-dist/web/pdf_viewer.mjs reads its pdf.js API off `globalThis.pdfjsLib` at
@@ -12,6 +13,14 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 (globalThis as { pdfjsLib?: unknown }).pdfjsLib = pdfjs;
 
 let pdfViewerModulePromise: Promise<typeof import("pdfjs-dist/web/pdf_viewer.mjs")> | null = null;
+const SOURCE_PAGE_FIT_SCALE = 1.18;
+const SOURCE_SEARCH_CONCURRENCY = 8;
+
+function setSourceFitScale(pdfViewer: PDFViewerType) {
+  pdfViewer.currentScaleValue = "page-fit";
+  pdfViewer.currentScale = pdfViewer.currentScale * SOURCE_PAGE_FIT_SCALE;
+}
+
 function loadPdfViewerModule() {
   return (pdfViewerModulePromise ??= import("pdfjs-dist/web/pdf_viewer.mjs"));
 }
@@ -33,6 +42,8 @@ interface TextMatch {
   pageIndex: number;
   rects: HighlightRect[];
 }
+
+const completedSearchCache = new Map<string, TextMatch[]>();
 
 type TextItem = { str?: string; transform: number[]; width: number; height: number };
 type Viewport = { transform: number[]; width: number; height: number };
@@ -94,21 +105,35 @@ async function searchDocument(
   doc: pdfjs.PDFDocumentProxy,
   query: string,
   isActive: () => boolean,
+  sourcePage: number,
 ): Promise<TextMatch[]> {
-  const pageNumbers = Array.from({ length: doc.numPages }, (_, i) => i + 1);
-  const perPage = await Promise.all(
-    pageNumbers.map(async (pageNumber) => {
+  const pageNumbers = [
+    sourcePage,
+    ...Array.from({ length: doc.numPages }, (_, i) => i + 1).filter((pageNumber) => pageNumber !== sourcePage),
+  ];
+  const matches: TextMatch[] = [];
+  let nextPageIndex = 0;
+
+  const searchNextPage = async () => {
+    while (isActive()) {
+      const pageNumber = pageNumbers[nextPageIndex++];
+      if (!pageNumber) return;
       const page = await doc.getPage(pageNumber);
-      if (!isActive()) return [];
-      const [textContent, viewport] = await Promise.all([
-        page.getTextContent({ includeMarkedContent: true, disableNormalization: true } as never),
-        Promise.resolve(page.getViewport({ scale: 1.0 })),
-      ]);
+      if (!isActive()) return;
+      const textContent = await page.getTextContent({ includeMarkedContent: true, disableNormalization: true } as never);
+      if (!isActive()) return;
+      const viewport = page.getViewport({ scale: 1.0 });
       const rectsPerMatch = findMatchesOnPage(textContent.items as TextItem[], viewport, query);
-      return rectsPerMatch.map((rects): TextMatch => ({ pageIndex: pageNumber - 1, rects }));
-    }),
+      matches.push(...rectsPerMatch.map((rects): TextMatch => ({ pageIndex: pageNumber - 1, rects })));
+    }
+  };
+
+  const workers = Array.from(
+    { length: Math.min(SOURCE_SEARCH_CONCURRENCY, pageNumbers.length) },
+    () => searchNextPage(),
   );
-  return perPage.flat();
+  await Promise.all(workers);
+  return matches.sort((a, b) => a.pageIndex - b.pageIndex);
 }
 
 export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceViewerProps) {
@@ -117,6 +142,7 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
   const pdfViewerRef = useRef<PDFViewerType | null>(null);
   const matchesRef = useRef<TextMatch[]>([]);
   const highlightElsRef = useRef<HTMLDivElement[][]>([]);
+  const savedHighlightElsRef = useRef<HTMLDivElement[]>([]);
   const currentMatchIndexRef = useRef(-1);
 
   const [loading, setLoading] = useState(true);
@@ -140,7 +166,11 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
     setSearched(false);
     matchesRef.current = [];
     highlightElsRef.current = [];
+    savedHighlightElsRef.current = [];
     currentMatchIndexRef.current = -1;
+
+    let activeResizeObserver: ResizeObserver | null = null;
+    let initialAnchorFrame: number | null = null;
 
     const selectMatch = (index: number) => {
       const prevIndex = currentMatchIndexRef.current;
@@ -158,12 +188,16 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
       const pdfViewer = pdfViewerRef.current;
       if (!pdfViewer) return;
       highlightElsRef.current = matches.map((match) => {
+        // Rects captured while creating the card identify the exact source
+        // selection. Do not paint a second, text-search-based match on its
+        // page: the same quote can occur more than once on that page.
+        if (source.rects.length > 0 && match.pageIndex + 1 === source.page) return [];
         const pageView = pdfViewer.getPageView(match.pageIndex);
         const pageDiv: HTMLDivElement | undefined = pageView?.div;
         if (!pageDiv) return [];
         return match.rects.map((rect) => {
           const el = document.createElement("div");
-          el.className = "source-viewer__highlight";
+          el.className = `source-viewer__highlight${match.pageIndex + 1 === source.page ? " source-viewer__highlight--source" : ""}`;
           el.style.left = `${rect.left}%`;
           el.style.top = `${rect.top}%`;
           el.style.width = `${rect.width}%`;
@@ -171,6 +205,33 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
           pageDiv.appendChild(el);
           return el;
         });
+      });
+    };
+
+    const renderSavedSourceHighlights = async () => {
+      const pdfViewer = pdfViewerRef.current;
+      if (!pdfViewer || !pdfDoc || source.rects.length === 0) return;
+      const pageView = pdfViewer.getPageView(source.page - 1);
+      const pageDiv: HTMLDivElement | undefined = pageView?.div;
+      if (!pageDiv) return;
+
+      const page = await pdfDoc.getPage(source.page);
+      if (!active) return;
+      // PDF.js replaces the contents of pageDiv when a page is rendered or
+      // re-rendered. Remove stale handles and append the saved overlay only
+      // after that render has completed.
+      savedHighlightElsRef.current.forEach((el) => el.remove());
+      savedHighlightElsRef.current = [];
+      const viewport = page.getViewport({ scale: 1.0 });
+      savedHighlightElsRef.current = source.rects.map((rect) => {
+        const el = document.createElement("div");
+        el.className = "source-viewer__highlight source-viewer__highlight--saved source-viewer__highlight--source";
+        el.style.left = `${(100 * rect.x) / viewport.width}%`;
+        el.style.top = `${(100 * rect.y) / viewport.height}%`;
+        el.style.width = `${(100 * rect.width) / viewport.width}%`;
+        el.style.height = `${(100 * rect.height) / viewport.height}%`;
+        pageDiv.appendChild(el);
+        return el;
       });
     };
 
@@ -200,6 +261,76 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
         const pdfViewer = new PDFViewer({ container, viewer: viewerEl, eventBus, linkService });
         linkService.setViewer(pdfViewer);
         pdfViewerRef.current = pdfViewer;
+        let hasInitialAnchor = false;
+        let sourcePageRendered = false;
+        let searchQuery = "";
+        let searchStarted = false;
+
+        const anchorAtSavedPage = () => {
+          // Without a destination PDF.js only makes the page visible, which
+          // may leave the viewport straddling two pages. An explicit XYZ
+          // destination with y = null resolves to the top edge of this page.
+          pdfViewer.scrollPageIntoView({
+            pageNumber: source.page,
+            destArray: [null, { name: "XYZ" }, 0, null, null],
+          });
+          // PDF.js may retain the previous page's scroll offset while it
+          // recalculates the fit scale. Use the actual page element as the
+          // final vertical position so the source never opens between pages.
+          const pageDiv = pdfViewer.getPageView(source.page - 1)?.div;
+          if (pageDiv) container.scrollTop = pageDiv.offsetTop;
+        };
+
+        const startDocumentSearch = () => {
+          if (searchStarted || !pdfDoc || !searchQuery) return;
+          searchStarted = true;
+          setSearching(true);
+          const searchCacheKey = `${source.documentId}:${searchQuery}`;
+          const cachedMatches = completedSearchCache.get(searchCacheKey);
+          const search = cachedMatches
+            ? Promise.resolve(cachedMatches)
+            : searchDocument(pdfDoc, searchQuery, () => active, source.page);
+          void search
+            .then((matches) => {
+              if (!active) return;
+              if (!cachedMatches) completedSearchCache.set(searchCacheKey, matches);
+              matchesRef.current = matches;
+              setSearching(false);
+              setSearched(true);
+              setMatchCount(matches.length);
+              if (matches.length > 0) {
+                renderHighlights(matches);
+                const initialIndex = matches.findIndex((m) => m.pageIndex + 1 === source.page);
+                if (initialIndex !== -1) selectMatch(initialIndex);
+              }
+            })
+            .catch((e) => {
+              if (!active) return;
+              setSearching(false);
+              setError(e instanceof Error ? e.message : String(e));
+            });
+        };
+
+        const scheduleInitialAnchor = () => {
+          if (hasInitialAnchor || initialAnchorFrame !== null) return;
+          initialAnchorFrame = requestAnimationFrame(() => {
+            initialAnchorFrame = null;
+            if (!active) return;
+            anchorAtSavedPage();
+            if (!sourcePageRendered) return;
+            hasInitialAnchor = true;
+            startDocumentSearch();
+          });
+        };
+
+        const resizeObserver = new ResizeObserver(() => {
+          const activeViewer = pdfViewerRef.current;
+          if (!activeViewer) return;
+          setSourceFitScale(activeViewer);
+          scheduleInitialAnchor();
+        });
+        resizeObserver.observe(container);
+        activeResizeObserver = resizeObserver;
 
         eventBus.on("pagechanging", (evt: { pageNumber: number }) => {
           if (!active) return;
@@ -208,9 +339,21 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
 
         eventBus.on("pagesinit", () => {
           if (!active) return;
-          pdfViewer.currentScaleValue = "page-width";
-          pdfViewer.currentPageNumber = source.page;
+          setSourceFitScale(pdfViewer);
+          scheduleInitialAnchor();
           setLoading(false);
+        });
+
+        eventBus.on("pagerendered", (evt: { pageNumber: number }) => {
+          if (!active || evt.pageNumber !== source.page) return;
+          sourcePageRendered = true;
+          scheduleInitialAnchor();
+          void renderSavedSourceHighlights();
+        });
+
+        eventBus.on("pagesloaded", () => {
+          if (!active) return;
+          scheduleInitialAnchor();
         });
 
         const loadingTask = pdfjs.getDocument({ url: assetUrl });
@@ -221,21 +364,8 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
         linkService.setDocument(doc);
         pdfViewer.setDocument(doc);
 
-        const query = source.quote.replace(/\s+/g, " ").trim().toLowerCase();
-        if (query) {
-          setSearching(true);
-          const matches = await searchDocument(doc, query, () => active);
-          if (!active) return;
-          matchesRef.current = matches;
-          setSearching(false);
-          setSearched(true);
-          setMatchCount(matches.length);
-          if (matches.length > 0) {
-            renderHighlights(matches);
-            const initialIndex = matches.findIndex((m) => m.pageIndex + 1 >= source.page);
-            selectMatch(initialIndex === -1 ? 0 : initialIndex);
-          }
-        }
+        searchQuery = source.quote.replace(/\s+/g, " ").trim().toLowerCase();
+        if (hasInitialAnchor) startDocumentSearch();
       } catch (e) {
         if (active) {
           setError(e instanceof Error ? e.message : String(e));
@@ -248,7 +378,10 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
 
     return () => {
       active = false;
+      activeResizeObserver?.disconnect();
+      if (initialAnchorFrame !== null) cancelAnimationFrame(initialAnchorFrame);
       highlightElsRef.current.forEach((els) => els.forEach((el) => el.remove()));
+      savedHighlightElsRef.current.forEach((el) => el.remove());
       pdfViewerRef.current?.setDocument(null as unknown as pdfjs.PDFDocumentProxy);
       pdfViewerRef.current = null;
       pdfDoc?.destroy();
@@ -316,9 +449,13 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
       <div className="source-viewer__page">
         {loading && <div className="source-viewer__loading">Loading PDF…</div>}
         {error && <div className="source-viewer__error">{error}</div>}
-        <div ref={containerRef} className="source-viewer__pdf-container">
+        <ScrollArea
+          ref={containerRef}
+          className="source-viewer__pdf-container"
+          style={{ position: "absolute", inset: 0 }}
+        >
           <div ref={viewerRef} className="pdfViewer" />
-        </div>
+        </ScrollArea>
       </div>
     </section>
   );

@@ -74,6 +74,39 @@ test("keeps an open YouGlish panel visible when the card flips", async () => {
   expect(screen.getByTitle("YouGlish pronunciation for bonjour")).toBeInTheDocument();
 });
 
+test("uses the compact review layout while a YouGlish video is open", async () => {
+  const user = userEvent.setup();
+  const cardWithLanguage = { ...card, frontLanguage: "en" };
+  const { container } = render(<ReviewPage cards={[cardWithLanguage]} previews={{}} onRate={vi.fn()} />);
+
+  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
+
+  expect(container.querySelector(".review-page__body")).toHaveClass("review-page__body--with-video");
+});
+
+test("uses the app scroll area for review content while a YouGlish video is open", async () => {
+  const user = userEvent.setup();
+  const cardWithLanguage = { ...card, frontLanguage: "en" };
+  render(<ReviewPage cards={[cardWithLanguage]} previews={{}} onRate={vi.fn()} />);
+
+  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
+
+  expect(screen.getByTestId("review-page-scroll-area")).toHaveStyle({ overflow: "hidden" });
+});
+
+test("places rating controls before an open YouGlish video", async () => {
+  const user = userEvent.setup();
+  const cardWithLanguage = { ...card, frontLanguage: "en" };
+  render(<ReviewPage cards={[cardWithLanguage]} previews={{}} onRate={vi.fn()} />);
+
+  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
+  await user.click(screen.getByRole("button", { name: /Flashcard/i }));
+
+  const ratings = screen.getByRole("group", { name: "Rate card" });
+  const video = screen.getByTitle("YouGlish pronunciation for bonjour");
+  expect(ratings.compareDocumentPosition(video) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
 test("shows error on failed rate", async () => {
   const user = userEvent.setup();
   render(<ReviewPage cards={[card]} previews={{}} onRate={vi.fn().mockRejectedValue(new Error("offline"))} />);
@@ -105,6 +138,30 @@ test("practice mode shows summary after all cards reviewed", async () => {
   }
   expect(screen.getByText("Practice Complete")).toBeInTheDocument();
   expect(screen.getByText("2")).toBeInTheDocument();
+});
+
+test("shows source controls in Practice All for cards linked to a PDF", () => {
+  const sourcedCard: LearningCard = {
+    ...card,
+    source: {
+      documentId: "linear-algebra",
+      page: 3,
+      quote: "A vector space has a basis.",
+      rects: [],
+    },
+  };
+
+  render(<ReviewPage cards={[sourcedCard]} previews={{}} onRate={vi.fn()} mode="practice" />);
+
+  expect(screen.getAllByRole("button", { name: "View source" })).toHaveLength(2);
+});
+
+test("keeps the source control visible in Practice All when a card has no available PDF", () => {
+  render(<ReviewPage cards={[card]} previews={{}} onRate={vi.fn()} mode="practice" />);
+
+  const sourceButtons = screen.getAllByRole("button", { name: "Source unavailable" });
+  expect(sourceButtons).toHaveLength(2);
+  sourceButtons.forEach((button) => expect(button).toBeDisabled());
 });
 
 test("shows pronunciation control on the front face", () => {

@@ -44,3 +44,25 @@ test("scrolls the clipped content in response to a wheel gesture", () => {
 
   expect(area.scrollTop).toBe(120);
 });
+
+test("updates the thumb position when a split pane adds a sibling", async () => {
+  const { getByTestId } = render(
+    <div data-testid="split-pane">
+      <ScrollArea data-testid="scroll-area"><div style={{ height: 1_000 }} /></ScrollArea>
+    </div>,
+  );
+  const area = getByTestId("scroll-area") as HTMLDivElement;
+  const splitPane = getByTestId("split-pane");
+  makeVerticallyScrollable(area);
+
+  let width = 300;
+  area.getBoundingClientRect = () => new DOMRect(100, 20, width, 200);
+  fireEvent.scroll(area);
+
+  width = 100;
+  splitPane.appendChild(document.createElement("aside"));
+  await Promise.resolve();
+
+  const thumb = document.querySelector<HTMLElement>(".scroll-area__thumb--vertical");
+  expect(thumb).toHaveStyle({ left: "188px" });
+});
