@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AccountApi, SessionSnapshot } from "../../domain/account";
 import { SignInPage } from "./SignInPage";
 import { RegisterPage } from "./RegisterPage";
@@ -29,6 +29,7 @@ export function useAccount() {
 }
 
 const isTest = typeof globalThis !== "undefined" && (globalThis as any).process?.env?.NODE_ENV === "test";
+const LOGIN_BACKGROUND_VIDEO_SRC = "/corelib-login-page-ping-pong.mp4";
 
 const defaultTestSession: SessionSnapshot = {
   profile: {
@@ -84,26 +85,31 @@ export function AccountGate({
     };
   }, [api]);
 
-  // WebKit-based desktop webviews can evaluate declarative autoplay before
-  // React has applied the muted property. Start it again after mount and once
-  // media is ready, so the muted background reliably begins on app launch.
-  useEffect(() => {
-    if (state.kind === "approved") return;
+  // WebKit applies autoplay policy when the source starts loading. Configure
+  // the element and its readiness listener before assigning the source so the
+  // initial app launch has the same lifecycle as a later sign-out.
+  const showAccountGate = state.kind !== "approved";
+  useLayoutEffect(() => {
+    if (!showAccountGate) return;
     const video = backgroundVideoRef.current;
     if (!video) return;
 
+    video.muted = true;
+    video.defaultMuted = true;
+
     const start = () => {
-      video.muted = true;
-      video.defaultMuted = true;
       try {
         void video.play().catch(() => {});
       } catch (_) {}
     };
 
+    video.addEventListener("canplay", start);
+    video.src = LOGIN_BACKGROUND_VIDEO_SRC;
+    video.load();
     start();
-    video.addEventListener("canplay", start, { once: true });
+
     return () => video.removeEventListener("canplay", start);
-  }, [state.kind]);
+  }, [showAccountGate]);
 
   const handleSignOut = async () => {
     try {
@@ -190,7 +196,6 @@ export function AccountGate({
       <video
         ref={backgroundVideoRef}
         className="account-gate-video"
-        src="/corelib-login-page-ping-pong.mp4"
         autoPlay
         muted
         loop

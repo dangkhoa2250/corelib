@@ -40,6 +40,7 @@ const mockSession: SessionSnapshot = {
 
 beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -184,6 +185,21 @@ describe("AccountGate Component", () => {
     );
 
     await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
+  });
+
+  it("loads the login video only after it is configured as muted", () => {
+    const load = vi.mocked(HTMLMediaElement.prototype.load).mockImplementation(function (this: HTMLMediaElement) {
+      expect(this.defaultMuted).toBe(true);
+      expect(this.muted).toBe(true);
+    });
+
+    render(
+      <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
+        <div>Protected app</div>
+      </AccountGate>,
+    );
+
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
   it("defines a responsive overlay treatment for the video background", () => {
