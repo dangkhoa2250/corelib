@@ -4116,3 +4116,19 @@ textarea::placeholder {
     opacity: 1;
   }
 }
+
+.review-page__practice-notice,
+.review-page__waiting {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  padding: 12px 16px;
+}
+
+.review-page__waiting {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  text-align: center;
+}
