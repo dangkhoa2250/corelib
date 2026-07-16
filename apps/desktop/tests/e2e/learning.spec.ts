@@ -52,7 +52,13 @@ interface MemoraSettings {
   desiredRetention: number;
 }
 
-function installLearningMock(seedCards: LearningCard[]) {
+function installLearningMock({
+  seedCards,
+  learningDelayMs = 60_000,
+}: {
+  seedCards: LearningCard[];
+  learningDelayMs?: number;
+}) {
   const window = globalThis as unknown as Window;
 
   function previewFor(state: CardState, learningStep: number | null): ReviewPreview {
@@ -166,8 +172,18 @@ function installLearningMock(seedCards: LearningCard[]) {
       const selected = scopeCards
         .filter((card) => card.state === "new")
         .slice(0, memoraSettings.newCardsPerDay)
-        .concat(scopeCards.filter((card) => card.state === "learning" || card.state === "relearning"))
-        .concat(scopeCards.filter((card) => card.state === "review"));
+        .concat(
+          scopeCards.filter(
+            (card) =>
+              (card.state === "learning" || card.state === "relearning") &&
+              new Date(card.dueAt).getTime() <= now,
+          ),
+        )
+        .concat(
+          scopeCards.filter(
+            (card) => card.state === "review" && new Date(card.dueAt).getTime() <= now,
+          ),
+        );
       const grants = selected.map((card) => grantFor(card, card.state));
       const counts = {
         learning: grants.filter((grant) => grant.card.state === "learning" || grant.card.state === "relearning")
@@ -175,13 +191,13 @@ function installLearningMock(seedCards: LearningCard[]) {
         review: grants.filter((grant) => grant.card.state === "review").length,
         new: grants.filter((grant) => grant.card.state === "new").length,
       };
-      const dueLearning = grants
+      const dueLearning = scopeCards
         .filter(
-          (grant) =>
-            (grant.card.state === "learning" || grant.card.state === "relearning") &&
-            new Date(grant.card.dueAt).getTime() > now,
+          (card) =>
+            (card.state === "learning" || card.state === "relearning") &&
+            new Date(card.dueAt).getTime() > now,
         )
-        .map((grant) => grant.card.dueAt)
+        .map((card) => card.dueAt)
         .sort();
       const session: StudySession = {
         sessionId,
@@ -201,7 +217,7 @@ function installLearningMock(seedCards: LearningCard[]) {
       card.reps += 1;
       if (rating === "again") card.lapses += 1;
       card.lastReviewAt = new Date().toISOString();
-      card.dueAt = new Date(Date.now() + 60_000).toISOString();
+      card.dueAt = new Date(Date.now() + learningDelayMs).toISOString();
       reviewLogs.push({ cardId: card.id, rating });
       return result.intervalLabel;
     };
@@ -364,7 +380,7 @@ function installLearningMock(seedCards: LearningCard[]) {
 
 test("manages a card through Browser and Trash lifecycle", async ({ page }) => {
   const seed: LearningCard[] = [];
-  await page.addInitScript(installLearningMock, seed);
+  await page.addInitScript(installLearningMock, { seedCards: seed });
 
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto("http://127.0.0.1:1420");
@@ -421,7 +437,7 @@ test("learns and practices a card without changing the real schedule", async ({ 
       frontLanguage: null,
     },
   ];
-  await page.addInitScript(installLearningMock, seed);
+  await page.addInitScript(installLearningMock, { seedCards: seed, learningDelayMs: 1_500 });
 
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto("http://127.0.0.1:1420");
@@ -438,8 +454,7 @@ test("learns and practices a card without changing the real schedule", async ({ 
 
   await expect(page.getByText(/Next learning card is on its way|1m/)).toBeVisible();
 
-  await page.getByRole("button", { name: "Refresh now" }).click();
-  await expect(page.getByRole("button", { name: "← Back" })).toBeVisible();
+  await expect(flashcard).toBeVisible();
 });
 
 test("changes settings and deck override", async ({ page }) => {
@@ -462,7 +477,7 @@ test("changes settings and deck override", async ({ page }) => {
       frontLanguage: null,
     },
   ];
-  await page.addInitScript(installLearningMock, seed);
+  await page.addInitScript(installLearningMock, { seedCards: seed });
 
   page.on("dialog", (dialog) => dialog.accept());
   await page.goto("http://127.0.0.1:1420");

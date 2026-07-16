@@ -1160,10 +1160,16 @@ test("Study a deck starts a deck-scoped study session", async () => {
 
 test("an expired refresh starts a replacement session with the same scope", async () => {
   const user = userEvent.setup();
-  const expired = studySession();
+  const expired = studySession({
+    cards: [],
+    nextLearningDueAt: new Date(Date.now() - 1).toISOString(),
+  });
   const replacement = { ...studySession(), sessionId: "session-2" };
-  const refreshStudySession = vi.fn().mockRejectedValue(new Error("study session expired"));
+  const refreshStudySession = vi.fn()
+    .mockRejectedValueOnce(new Error("study session expired"))
+    .mockResolvedValue({ ...replacement, cards: [] });
   const startStudySession = vi.fn().mockResolvedValueOnce(expired).mockResolvedValueOnce(replacement);
+  const rateStudyCard = vi.fn().mockResolvedValue({ card: replacement.cards[0].card, reviewLogId: "log-2" });
   render(
     <App
       libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
@@ -1173,13 +1179,15 @@ test("an expired refresh starts a replacement session with the same scope", asyn
         getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         startStudySession,
         refreshStudySession,
-        rateStudyCard: vi.fn(),
+        rateStudyCard,
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
   );
   await user.click(screen.getByRole("button", { name: "Memora" }));
   await user.click(await screen.findByRole("button", { name: /Review/ }));
-  await user.click(screen.getByRole("button", { name: "Refresh now" }));
+  await user.click(await screen.findByRole("button", { name: /Flashcard/i }));
+  await user.click(screen.getByRole("button", { name: "Good" }));
   expect(startStudySession).toHaveBeenLastCalledWith({ kind: "all" });
+  expect(rateStudyCard).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session-2" }));
 });

@@ -64,8 +64,7 @@ fn insert_card(
 
 fn insert_new_cards(database: &mut LibraryDatabase, deck_id: &str, count: usize) {
     for index in 0..count {
-        let created = utc("2026-07-16T00:00:00.000Z")
-            + chrono::Duration::seconds(index as i64);
+        let created = utc("2026-07-16T00:00:00.000Z") + chrono::Duration::seconds(index as i64);
         let id = format!("{deck_id}-new-{index}");
         let created_str = rfc3339(created);
         database
@@ -156,18 +155,24 @@ fn memora_settings_default_and_validate_safe_ranges() {
     assert_eq!(defaults.new_cards_per_day, 20);
     assert_eq!(defaults.desired_retention, 0.90);
 
-    assert!(database.update_memora_settings(MemoraSettingsUpdate {
-        new_cards_per_day: 0,
-        desired_retention: 0.80,
-    }).is_ok());
-    assert!(database.update_memora_settings(MemoraSettingsUpdate {
-        new_cards_per_day: 1000,
-        desired_retention: 0.90,
-    }).is_err());
-    assert!(database.update_memora_settings(MemoraSettingsUpdate {
-        new_cards_per_day: 20,
-        desired_retention: 0.98,
-    }).is_err());
+    assert!(database
+        .update_memora_settings(MemoraSettingsUpdate {
+            new_cards_per_day: 0,
+            desired_retention: 0.80,
+        })
+        .is_ok());
+    assert!(database
+        .update_memora_settings(MemoraSettingsUpdate {
+            new_cards_per_day: 1000,
+            desired_retention: 0.90,
+        })
+        .is_err());
+    assert!(database
+        .update_memora_settings(MemoraSettingsUpdate {
+            new_cards_per_day: 20,
+            desired_retention: 0.98,
+        })
+        .is_err());
 }
 
 #[test]
@@ -179,23 +184,23 @@ fn deck_settings_inherit_until_a_custom_limit_is_saved() {
     assert_eq!(inherited.new_cards_per_day, None);
     assert_eq!(inherited.effective_new_cards_per_day, 20);
 
-    database.update_deck_learning_settings(
-        &deck.id,
-        DeckLearningSettingsUpdate::Custom(7),
-    ).expect("save override");
+    database
+        .update_deck_learning_settings(&deck.id, DeckLearningSettingsUpdate::Custom(7))
+        .expect("save override");
     assert_eq!(
-        database.deck_learning_settings(&deck.id)
+        database
+            .deck_learning_settings(&deck.id)
             .expect("custom")
             .effective_new_cards_per_day,
         7
     );
 
-    database.update_deck_learning_settings(
-        &deck.id,
-        DeckLearningSettingsUpdate::Inherit,
-    ).expect("remove override");
+    database
+        .update_deck_learning_settings(&deck.id, DeckLearningSettingsUpdate::Inherit)
+        .expect("remove override");
     assert_eq!(
-        database.deck_learning_settings(&deck.id)
+        database
+            .deck_learning_settings(&deck.id)
             .expect("inherited again")
             .new_cards_per_day,
         None
@@ -208,7 +213,14 @@ fn queue_prioritizes_learning_then_review_then_new() {
     let now = utc("2026-07-16T09:00:00.000Z");
     insert_card(&mut database, "new-1", "deck-1", "new", now, None);
     insert_card(&mut database, "review-1", "deck-1", "review", now, None);
-    insert_card(&mut database, "learning-1", "deck-1", "learning", now, Some(0));
+    insert_card(
+        &mut database,
+        "learning-1",
+        "deck-1",
+        "learning",
+        now,
+        Some(0),
+    );
     insert_card(
         &mut database,
         "future-review",
@@ -217,7 +229,14 @@ fn queue_prioritizes_learning_then_review_then_new() {
         utc("2026-07-17T09:00:00.000Z"),
         None,
     );
-    insert_card(&mut database, "suspended-1", "deck-1", "suspended", now, None);
+    insert_card(
+        &mut database,
+        "suspended-1",
+        "deck-1",
+        "suspended",
+        now,
+        None,
+    );
 
     let session = database
         .start_study_session(StudyScope::Deck("deck-1".into()), now, "2026-07-16")
@@ -231,6 +250,25 @@ fn queue_prioritizes_learning_then_review_then_new() {
     assert_eq!(session.counts.learning, 1);
     assert_eq!(session.counts.review, 1);
     assert_eq!(session.counts.new, 1);
+}
+
+#[test]
+fn expired_refresh_uses_the_recoverable_session_error() {
+    let (_directory, mut database) = seeded_learning_database();
+    let now = utc("2026-07-16T09:00:00.000Z");
+    let session = database
+        .start_study_session(StudyScope::All, now, "2026-07-16")
+        .expect("start session");
+
+    let error = database
+        .refresh_study_session(
+            &session.session_id,
+            now + chrono::Duration::hours(24),
+            "2026-07-17",
+        )
+        .expect_err("expired session");
+
+    assert_eq!(error.to_string(), "study session expired");
 }
 
 #[test]
@@ -249,7 +287,11 @@ fn queue_applies_global_and_per_deck_new_card_limits() {
     insert_new_cards(&mut database, "deck-2", 4);
 
     let session = database
-        .start_study_session(StudyScope::All, utc("2026-07-16T09:00:00.000Z"), "2026-07-16")
+        .start_study_session(
+            StudyScope::All,
+            utc("2026-07-16T09:00:00.000Z"),
+            "2026-07-16",
+        )
         .unwrap();
     assert_eq!(new_count(&session, "deck-1"), 2);
     assert_eq!(new_count(&session, "deck-2"), 1);
@@ -268,7 +310,11 @@ fn zero_new_limit_keeps_due_reviews_available() {
     insert_due_review(&mut database, "review-1", "deck-1");
 
     let session = database
-        .start_study_session(StudyScope::All, utc("2026-07-16T09:00:00.000Z"), "2026-07-16")
+        .start_study_session(
+            StudyScope::All,
+            utc("2026-07-16T09:00:00.000Z"),
+            "2026-07-16",
+        )
         .unwrap();
     assert_eq!(session.cards.len(), 1);
     assert_eq!(session.cards[0].card.id, "review-1");
@@ -280,7 +326,14 @@ fn queue_preview_matches_direct_scheduler_preview() {
     let now = utc("2026-07-16T09:00:00.000Z");
     insert_card(&mut database, "new-1", "deck-1", "new", now, None);
     insert_card(&mut database, "review-1", "deck-1", "review", now, None);
-    insert_card(&mut database, "learning-1", "deck-1", "learning", now, Some(0));
+    insert_card(
+        &mut database,
+        "learning-1",
+        "deck-1",
+        "learning",
+        now,
+        Some(0),
+    );
 
     let settings = database.memora_settings().expect("settings");
     let session = database
@@ -308,10 +361,7 @@ fn queue_preview_matches_direct_scheduler_preview() {
             .preview(
                 CardScheduleInput {
                     state,
-                    learning_step: grant
-                        .card
-                        .learning_step
-                        .map(|step| step as u8),
+                    learning_step: grant.card.learning_step.map(|step| step as u8),
                     memory_state_json: memory,
                     elapsed_days: 0,
                 },
@@ -320,6 +370,43 @@ fn queue_preview_matches_direct_scheduler_preview() {
             .expect("preview");
         assert_eq!(grant.preview, expected);
     }
+}
+
+#[test]
+fn overdue_review_preview_uses_elapsed_days_since_last_review() {
+    let (_directory, mut database) = seeded_learning_database();
+    let now = utc("2026-07-16T09:00:00.000Z");
+    insert_due_review(&mut database, "review-1", "deck-1");
+    database
+        .connection
+        .execute(
+            "UPDATE cards
+             SET last_review_at = '2026-07-12T09:00:00.000Z',
+                 memory_state_json = '{\"stability\":3.0,\"difficulty\":5.0}',
+                 stability = 3.0,
+                 difficulty = 5.0
+             WHERE id = 'review-1'",
+            [],
+        )
+        .expect("seed review memory");
+
+    let session = database
+        .start_study_session(StudyScope::Deck("deck-1".into()), now, "2026-07-16")
+        .expect("start session");
+    let scheduler = ReviewScheduler::default();
+    let expected = scheduler
+        .preview(
+            CardScheduleInput {
+                state: CardState::Review,
+                learning_step: None,
+                memory_state_json: Some(r#"{"stability":3.0,"difficulty":5.0}"#.into()),
+                elapsed_days: 4,
+            },
+            now,
+        )
+        .expect("preview overdue review");
+
+    assert_eq!(session.cards[0].preview, expected);
 }
 
 #[test]

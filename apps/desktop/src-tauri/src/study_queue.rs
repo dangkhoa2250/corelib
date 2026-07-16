@@ -145,7 +145,10 @@ impl LibraryDatabase {
             .map_err(Into::into)
     }
 
-    pub fn update_memora_settings(&mut self, update: MemoraSettingsUpdate) -> Result<MemoraSettings> {
+    pub fn update_memora_settings(
+        &mut self,
+        update: MemoraSettingsUpdate,
+    ) -> Result<MemoraSettings> {
         validate_new_cards_per_day(update.new_cards_per_day)?;
         validate_retention(update.desired_retention)?;
         self.connection.execute(
@@ -286,16 +289,12 @@ impl LibraryDatabase {
         let (scope_kind, deck_id, expires_at) = session
             .ok_or_else(|| LibraryDbError::InvalidLearning("study session not found".into()))?;
         if expires_at.as_str() <= now_str.as_str() {
-            return Err(LibraryDbError::InvalidLearning(
-                "study session has expired".into(),
-            ));
+            return Err(LibraryDbError::InvalidLearning("study session expired".into()));
         }
         let scope = match scope_kind.as_str() {
-            "deck" => StudyScope::Deck(
-                deck_id.ok_or_else(|| {
-                    LibraryDbError::InvalidLearning("study session is missing a deck".into())
-                })?,
-            ),
+            "deck" => StudyScope::Deck(deck_id.ok_or_else(|| {
+                LibraryDbError::InvalidLearning("study session is missing a deck".into())
+            })?),
             _ => StudyScope::All,
         };
 
@@ -351,10 +350,22 @@ impl LibraryDatabase {
             "SELECT id FROM cards WHERE state = 'review' AND due_at <= ?1 AND deleted_at IS NULL AND (?2 IS NULL OR deck_id = ?2){exclusion} ORDER BY due_at ASC, id ASC"
         );
 
-        for id in self.select_ids(&learning_sql, &now_str, deck_filter, session_id, exclude_open_grants)? {
+        for id in self.select_ids(
+            &learning_sql,
+            &now_str,
+            deck_filter,
+            session_id,
+            exclude_open_grants,
+        )? {
             ordered_ids.push(id);
         }
-        for id in self.select_ids(&review_sql, &now_str, deck_filter, session_id, exclude_open_grants)? {
+        for id in self.select_ids(
+            &review_sql,
+            &now_str,
+            deck_filter,
+            session_id,
+            exclude_open_grants,
+        )? {
             ordered_ids.push(id);
         }
 
@@ -372,7 +383,9 @@ impl LibraryDatabase {
         };
 
         for deck in decks {
-            let effective_limit = self.deck_learning_settings(&deck)?.effective_new_cards_per_day;
+            let effective_limit = self
+                .deck_learning_settings(&deck)?
+                .effective_new_cards_per_day;
             let introduced: i64 = self.connection.query_row(
                 "SELECT COUNT(*) FROM card_introductions WHERE deck_id = ?1 AND study_day = ?2",
                 params![deck, study_day],
@@ -408,19 +421,13 @@ impl LibraryDatabase {
                 .card_by_id(&id)?
                 .ok_or(LibraryDbError::DocumentNotFound)?;
             let memory = self.card_memory_state(&id)?;
-            let input = CardScheduleInput {
-                state: parse_card_state(&card.state)?,
-                learning_step: card
-                    .learning_step
-                    .map(|step| {
-                        u8::try_from(step).map_err(|_| {
-                            LibraryDbError::InvalidLearning("invalid learning step".into())
-                        })
-                    })
-                    .transpose()?,
-                memory_state_json: memory,
-                elapsed_days: 0,
-            };
+            let input = card_schedule_input(
+                &card.state,
+                card.learning_step,
+                memory,
+                card.last_review_at.as_deref(),
+                now,
+            )?;
             let preview = scheduler
                 .preview(input, now)
                 .map_err(|error| LibraryDbError::InvalidLearning(error.to_string()))?;
@@ -509,19 +516,13 @@ impl LibraryDatabase {
                 .card_by_id(&card_id)?
                 .ok_or(LibraryDbError::DocumentNotFound)?;
             let memory = self.card_memory_state(&card_id)?;
-            let input = CardScheduleInput {
-                state: parse_card_state(&card.state)?,
-                learning_step: card
-                    .learning_step
-                    .map(|step| {
-                        u8::try_from(step).map_err(|_| {
-                            LibraryDbError::InvalidLearning("invalid learning step".into())
-                        })
-                    })
-                    .transpose()?,
-                memory_state_json: memory,
-                elapsed_days: 0,
-            };
+            let input = card_schedule_input(
+                &card.state,
+                card.learning_step,
+                memory,
+                card.last_review_at.as_deref(),
+                now,
+            )?;
             let preview = scheduler
                 .preview(input, now)
                 .map_err(|error| LibraryDbError::InvalidLearning(error.to_string()))?;
@@ -554,7 +555,11 @@ impl LibraryDatabase {
         Ok(due)
     }
 
-    pub fn study_ready_counts(&self, now: DateTime<Utc>, study_day: &str) -> Result<StudyReadyCounts> {
+    pub fn study_ready_counts(
+        &self,
+        now: DateTime<Utc>,
+        study_day: &str,
+    ) -> Result<StudyReadyCounts> {
         NaiveDate::parse_from_str(study_day, "%Y-%m-%d")
             .map_err(|_| LibraryDbError::InvalidLearning("invalid study day".into()))?;
         let now_str = rfc3339(now);
@@ -578,7 +583,9 @@ impl LibraryDatabase {
             .query_map([], |row| row.get::<_, String>(0))?
             .collect::<std::result::Result<Vec<_>, _>>()?;
         for deck in decks {
-            let effective_limit = self.deck_learning_settings(&deck)?.effective_new_cards_per_day;
+            let effective_limit = self
+                .deck_learning_settings(&deck)?
+                .effective_new_cards_per_day;
             let introduced: i64 = self.connection.query_row(
                 "SELECT COUNT(*) FROM card_introductions WHERE deck_id = ?1 AND study_day = ?2",
                 params![deck, study_day],
@@ -653,7 +660,9 @@ impl LibraryDatabase {
             |row| row.get(0),
         )?;
         if expires_at.as_str() <= now_str.as_str() {
-            return Err(LibraryDbError::InvalidLearning("study session expired".into()));
+            return Err(LibraryDbError::InvalidLearning(
+                "study session expired".into(),
+            ));
         }
 
         if grant_state != rating.expected_state || grant_due_at != rating.expected_due_at {
@@ -707,18 +716,13 @@ impl LibraryDatabase {
             )?;
         }
 
-        let elapsed_days = elapsed_days(last_review_at.as_deref(), rating.now)?;
-        let input = CardScheduleInput {
-            state: parse_card_state(&card_state)?,
-            learning_step: learning_step
-                .map(|step| {
-                    u8::try_from(step)
-                        .map_err(|_| LibraryDbError::InvalidLearning("invalid learning step".into()))
-                })
-                .transpose()?,
+        let input = card_schedule_input(
+            &card_state,
+            learning_step,
             memory_state_json,
-            elapsed_days,
-        };
+            last_review_at.as_deref(),
+            rating.now,
+        )?;
         let scheduled = scheduler
             .apply(input, rating.rating, rating.now)
             .map_err(|error| LibraryDbError::InvalidLearning(error.to_string()))?;
@@ -732,8 +736,8 @@ impl LibraryDatabase {
             &now_str,
         )?;
 
-        let card = hydrate_card_in_tx(&tx, &rating.card_id)?
-            .ok_or(LibraryDbError::DocumentNotFound)?;
+        let card =
+            hydrate_card_in_tx(&tx, &rating.card_id)?.ok_or(LibraryDbError::DocumentNotFound)?;
         let result = StudyRatingResult {
             card,
             review_log_id: review_log_id.clone(),
@@ -824,6 +828,26 @@ fn elapsed_days(last: Option<&str>, now: DateTime<Utc>) -> Result<u32> {
     Ok((now.signed_duration_since(then).num_seconds().max(0) as f64 / 86_400.0).floor() as u32)
 }
 
+fn card_schedule_input(
+    state: &str,
+    learning_step: Option<i64>,
+    memory_state_json: Option<String>,
+    last_review_at: Option<&str>,
+    now: DateTime<Utc>,
+) -> Result<CardScheduleInput> {
+    Ok(CardScheduleInput {
+        state: parse_card_state(state)?,
+        learning_step: learning_step
+            .map(|step| {
+                u8::try_from(step)
+                    .map_err(|_| LibraryDbError::InvalidLearning("invalid learning step".into()))
+            })
+            .transpose()?,
+        memory_state_json,
+        elapsed_days: elapsed_days(last_review_at, now)?,
+    })
+}
+
 fn deck_effective_new_cards_per_day(tx: &Transaction<'_>, deck_id: &str) -> Result<i64> {
     let inherited: i64 = tx.query_row(
         "SELECT new_cards_per_day FROM memora_settings WHERE id = 1",
@@ -840,10 +864,7 @@ fn deck_effective_new_cards_per_day(tx: &Transaction<'_>, deck_id: &str) -> Resu
     Ok(custom.unwrap_or(inherited))
 }
 
-fn hydrate_card_in_tx(
-    tx: &Transaction<'_>,
-    card_id: &str,
-) -> Result<Option<LearningCardSummary>> {
+fn hydrate_card_in_tx(tx: &Transaction<'_>, card_id: &str) -> Result<Option<LearningCardSummary>> {
     tx.query_row(
         "SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language,learning_step FROM cards WHERE id=?1 AND deleted_at IS NULL",
         params![card_id],

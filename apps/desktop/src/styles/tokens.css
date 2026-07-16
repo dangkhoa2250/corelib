@@ -3632,6 +3632,13 @@ textarea::placeholder {
   min-width: 60px;
 }
 
+.review-page__mode-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 .review-page__back-btn {
   border: 0;
   background: transparent;
@@ -4301,7 +4308,6 @@ textarea::placeholder {
   }
 }
 
-.review-page__practice-notice,
 .review-page__waiting {
   border: 1px solid var(--border-subtle);
   border-radius: 12px;

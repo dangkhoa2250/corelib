@@ -32,7 +32,7 @@ test("edits the new-card limit and keeps advanced settings collapsed", async () 
   });
 });
 
-test("shows safe advanced settings and restores defaults", async () => {
+test("shows safe advanced settings without a restore-defaults action", async () => {
   const user = userEvent.setup();
   const save = vi.fn().mockResolvedValue({
     newCardsPerDay: 20,
@@ -52,7 +52,5 @@ test("shows safe advanced settings and restores defaults", async () => {
   expect(screen.getByLabelText("Desired retention")).toHaveValue(95);
   expect(screen.getByText("1 minute → 10 minutes")).toBeInTheDocument();
   expect(screen.getByText("10 minutes")).toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Restore defaults" }));
-  expect(screen.getByLabelText("New cards per day")).toHaveValue(20);
-  expect(screen.getByLabelText("Desired retention")).toHaveValue(90);
+  expect(screen.queryByRole("button", { name: "Restore defaults" })).not.toBeInTheDocument();
 });

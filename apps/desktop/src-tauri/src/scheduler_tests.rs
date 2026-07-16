@@ -1,8 +1,6 @@
 use chrono::{TimeZone, Timelike, Utc};
 
-use crate::scheduler::{
-    CardScheduleInput, CardState, Rating, ReviewScheduler, SchedulerConfig,
-};
+use crate::scheduler::{CardScheduleInput, CardState, Rating, ReviewScheduler, SchedulerConfig};
 
 fn fixed_now() -> chrono::DateTime<Utc> {
     Utc.with_ymd_and_hms(2026, 7, 10, 5, 30, 0)
@@ -66,9 +64,49 @@ fn new_card_uses_fixed_learning_steps() {
 }
 
 #[test]
+fn new_card_fixed_steps_initialize_fsrs_memory() {
+    let scheduler = ReviewScheduler::default();
+    for rating in [Rating::Again, Rating::Hard, Rating::Good] {
+        let scheduled = scheduler
+            .apply(input(CardState::New, None), rating, fixed_now())
+            .expect("schedule new card");
+
+        assert!(
+            scheduled.memory_state_json.is_some(),
+            "missing memory for {rating:?}"
+        );
+        assert!(
+            scheduled.stability.is_some(),
+            "missing stability for {rating:?}"
+        );
+        assert!(
+            scheduled.difficulty.is_some(),
+            "missing difficulty for {rating:?}"
+        );
+    }
+}
+
+#[test]
+fn learning_fixed_step_rating_updates_existing_fsrs_memory() {
+    let previous = r#"{"stability":1.0,"difficulty":6.0}"#;
+    let mut learning = input(CardState::Learning, Some(0));
+    learning.memory_state_json = Some(previous.into());
+
+    let scheduled = ReviewScheduler::default()
+        .apply(learning, Rating::Hard, fixed_now())
+        .expect("schedule learning card");
+
+    assert_ne!(scheduled.memory_state_json.as_deref(), Some(previous));
+}
+
+#[test]
 fn final_learning_good_graduates_to_fsrs_review() {
     let scheduled = ReviewScheduler::default()
-        .apply(input(CardState::Learning, Some(1)), Rating::Good, fixed_now())
+        .apply(
+            input(CardState::Learning, Some(1)),
+            Rating::Good,
+            fixed_now(),
+        )
         .unwrap();
     assert_eq!(scheduled.state, CardState::Review);
     assert_eq!(scheduled.learning_step, None);
@@ -98,6 +136,21 @@ fn relearning_again_does_not_increment_lapses_again() {
         .apply(relearning, Rating::Again, fixed_now())
         .unwrap();
     assert!(!scheduled.increment_lapses);
+}
+
+#[test]
+fn relearning_hard_uses_a_different_memory_result_than_again() {
+    let mut relearning = input(CardState::Relearning, Some(0));
+    relearning.memory_state_json = Some(r#"{"stability":1.0,"difficulty":6.0}"#.into());
+
+    let again = ReviewScheduler::default()
+        .apply(relearning.clone(), Rating::Again, fixed_now())
+        .expect("schedule Again");
+    let hard = ReviewScheduler::default()
+        .apply(relearning, Rating::Hard, fixed_now())
+        .expect("schedule Hard");
+
+    assert_ne!(hard.memory_state_json, again.memory_state_json);
 }
 
 #[test]

@@ -245,7 +245,7 @@ Practice All is explicitly separate from real study:
 - It never changes state, due time, reps, lapses, stability, difficulty, memory state, or daily new-card counts.
 - The four buttons are self-assessment labels used only for the in-memory practice summary.
 
-The UI should label the mode as Practice and state that answers do not affect the schedule.
+The UI should label the mode simply as Practice. It does not need a persistent schedule disclaimer.
 
 ## Suspend behavior
 
@@ -278,7 +278,8 @@ An `Advanced` disclosure contains:
   - Default `90%`.
 - Read-only learning-step text: `1 minute → 10 minutes`.
 - Read-only relearning-step text: `10 minutes`.
-- `Restore defaults`, which restores `20` and `90%` after confirmation.
+
+There is no `Restore defaults` action; changes are saved explicitly to avoid an input-only reset that looks persisted.
 
 Settings search should match terms such as Memora, learning, cards, review, retention, and FSRS.
 
@@ -434,11 +435,11 @@ Use fixed timestamps and deterministic configuration to cover every transition:
 - Settings sidebar shows `Apps → Memora`.
 - New-card limit validates `0–999`.
 - Advanced disclosure contains retention and read-only steps.
-- Restore defaults restores `20` and `90%`.
+- Memora settings do not expose a misleading input-only Restore defaults action.
 - Deck menu opens Learning settings and supports inherit/custom modes.
 - Real study uses session commands rather than local card filtering.
 - Practice All never invokes a persistence/rating command.
-- Stale-session errors refresh the queue without advancing incorrectly.
+- Stale-session errors stop the rating and ask the user to leave and start a fresh session.
 - A temporarily empty learning queue communicates the next due time.
 
 ### End-to-end tests

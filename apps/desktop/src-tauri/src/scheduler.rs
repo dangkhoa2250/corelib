@@ -167,43 +167,78 @@ impl ReviewScheduler {
     ) -> Result<ScheduledState, SchedulerError> {
         let memory = input.memory_state_json.as_deref();
         match (input.state, rating) {
-            (CardState::New, Rating::Again) => {
-                Ok(fixed(CardState::Learning, Some(0), AGAIN_LEARNING_SECONDS, None, now)?)
+            (CardState::New, Rating::Again) => self.fixed_with_fsrs(
+                None,
+                rating,
+                input,
+                CardState::Learning,
+                Some(0),
+                AGAIN_LEARNING_SECONDS,
+                now,
+            ),
+            (CardState::New, Rating::Hard) => self.fixed_with_fsrs(
+                None,
+                rating,
+                input,
+                CardState::Learning,
+                Some(0),
+                HARD_LEARNING_SECONDS,
+                now,
+            ),
+            (CardState::New, Rating::Good) => self.fixed_with_fsrs(
+                None,
+                rating,
+                input,
+                CardState::Learning,
+                Some(1),
+                GOOD_LEARNING_SECONDS,
+                now,
+            ),
+            (CardState::New, Rating::Easy) => {
+                self.graduate_with_fsrs(None, Rating::Easy, input, now)
             }
-            (CardState::New, Rating::Hard) => {
-                Ok(fixed(CardState::Learning, Some(0), HARD_LEARNING_SECONDS, None, now)?)
-            }
-            (CardState::New, Rating::Good) => {
-                Ok(fixed(CardState::Learning, Some(1), GOOD_LEARNING_SECONDS, None, now)?)
-            }
-            (CardState::New, Rating::Easy) => self.graduate_with_fsrs(None, Rating::Easy, input, now),
 
-            (CardState::Learning, Rating::Again) => {
-                Ok(fixed(CardState::Learning, Some(0), AGAIN_LEARNING_SECONDS, memory, now)?)
-            }
-            (CardState::Learning, Rating::Hard) => Ok(fixed(
+            (CardState::Learning, Rating::Again) => self.fixed_with_fsrs(
+                memory,
+                rating,
+                input,
+                CardState::Learning,
+                Some(0),
+                AGAIN_LEARNING_SECONDS,
+                now,
+            ),
+            (CardState::Learning, Rating::Hard) => self.fixed_with_fsrs(
+                memory,
+                rating,
+                input,
                 CardState::Learning,
                 input.learning_step,
                 HARD_LEARNING_SECONDS,
-                memory,
                 now,
-            )?),
-            (CardState::Learning, Rating::Good) if input.learning_step == Some(0) => {
-                Ok(fixed(CardState::Learning, Some(1), GOOD_LEARNING_SECONDS, memory, now)?)
-            }
+            ),
+            (CardState::Learning, Rating::Good) if input.learning_step == Some(0) => self
+                .fixed_with_fsrs(
+                    memory,
+                    rating,
+                    input,
+                    CardState::Learning,
+                    Some(1),
+                    GOOD_LEARNING_SECONDS,
+                    now,
+                ),
             (CardState::Learning, Rating::Good | Rating::Easy) => {
                 self.graduate_with_fsrs(memory, rating, input, now)
             }
 
             (CardState::Review, Rating::Again) => {
-                self.relearn_with_fsrs(memory, true, input, now)
+                self.relearn_with_fsrs(memory, rating, true, input, now)
             }
             (CardState::Review, Rating::Hard | Rating::Good | Rating::Easy) => {
                 self.review_with_fsrs(memory, rating, input, now)
             }
 
             (CardState::Relearning, Rating::Again | Rating::Hard) => {
-                self.relearn_with_fsrs(memory, false, input, now)
+                self.relearn_with_fsrs(memory, rating, false, input, now)
             }
             (CardState::Relearning, Rating::Good | Rating::Easy) => {
                 self.review_with_fsrs(memory, rating, input, now)
@@ -236,6 +271,22 @@ impl ReviewScheduler {
         review_scheduled_state(CardState::Review, None, item_state, false, now)
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn fixed_with_fsrs(
+        &self,
+        memory: Option<&str>,
+        rating: Rating,
+        input: &CardScheduleInput,
+        state: CardState,
+        learning_step: Option<u8>,
+        interval_seconds: i64,
+        now: DateTime<Utc>,
+    ) -> Result<ScheduledState, SchedulerError> {
+        let next_states = self.next_states(memory, input.elapsed_days)?;
+        let item_state = rating_item_state(next_states, rating);
+        fixed_scheduled_state(state, learning_step, interval_seconds, item_state, now)
+    }
+
     fn review_with_fsrs(
         &self,
         memory: Option<&str>,
@@ -251,12 +302,13 @@ impl ReviewScheduler {
     fn relearn_with_fsrs(
         &self,
         memory: Option<&str>,
+        rating: Rating,
         is_from_review: bool,
         input: &CardScheduleInput,
         now: DateTime<Utc>,
     ) -> Result<ScheduledState, SchedulerError> {
         let next_states = self.next_states(memory, input.elapsed_days)?;
-        let item_state = next_states.again;
+        let item_state = rating_item_state(next_states, rating);
         let memory_state_json = serialize_memory_state(&item_state.memory)?;
         let due_at = due_at(now, RELEARNING_SECONDS)?;
 
@@ -330,25 +382,24 @@ fn serialize_memory_state(memory: &MemoryState) -> Result<String, SchedulerError
     .map_err(|_| SchedulerError::SerializationFailed)
 }
 
-fn fixed(
+fn fixed_scheduled_state(
     state: CardState,
     learning_step: Option<u8>,
     interval_seconds: i64,
-    memory: Option<&str>,
+    item_state: ItemState,
     now: DateTime<Utc>,
 ) -> Result<ScheduledState, SchedulerError> {
-    let parsed = parse_memory_state(memory)?;
     let due_at = due_at(now, interval_seconds)?;
-    let memory_state_json = memory.map(|value| value.to_string());
+    let memory_state_json = serialize_memory_state(&item_state.memory)?;
 
     Ok(ScheduledState {
         state,
         learning_step,
         due_at,
         interval_seconds,
-        stability: parsed.map(|memory| memory.stability),
-        difficulty: parsed.map(|memory| memory.difficulty),
-        memory_state_json,
+        stability: Some(item_state.memory.stability),
+        difficulty: Some(item_state.memory.difficulty),
+        memory_state_json: Some(memory_state_json),
         increment_lapses: false,
     })
 }

@@ -95,24 +95,21 @@ test("rates a grant and refreshes the backend queue", async () => {
   await user.click(screen.getByRole("button", { name: "Again" }));
 
   expect(onRate).toHaveBeenCalledWith(
+    studySession.sessionId,
     studySession.cards[0],
     "again",
     expect.any(Number),
   );
-  expect(onRefresh).toHaveBeenCalledOnce();
+  expect(onRefresh).toHaveBeenCalledWith(studySession.sessionId);
   expect(await screen.findByText(/Next learning card/)).toBeInTheDocument();
 });
 
-test("stale ratings refresh without advancing the wrong card", async () => {
+test("stale ratings show an error without refreshing the queue", async () => {
   const user = userEvent.setup();
   const onRate = vi.fn().mockRejectedValue(
     new Error("study card changed; refresh the session"),
   );
-  const refreshed = {
-    ...studySession,
-    cards: [replacementGrant],
-  };
-  const onRefresh = vi.fn().mockResolvedValue(refreshed);
+  const onRefresh = vi.fn();
   render(
     <ReviewPage
       mode="study"
@@ -125,21 +122,91 @@ test("stale ratings refresh without advancing the wrong card", async () => {
   await user.click(screen.getByRole("button", { name: /Flashcard/i }));
   await user.click(screen.getByRole("button", { name: "Good" }));
 
-  expect(await screen.findByText(replacementGrant.card.front)).toBeInTheDocument();
   expect(screen.getByRole("alert")).toHaveTextContent(
-    "This card changed elsewhere. The study queue was refreshed.",
+    "This card changed elsewhere. Leave this session and start again.",
   );
+  expect(onRefresh).not.toHaveBeenCalled();
 });
 
 test("practice labels ratings locally and never accepts a persistence callback", async () => {
   const user = userEvent.setup();
   render(<ReviewPage mode="practice" cards={[card]} />);
 
-  expect(screen.getByText("Practice mode")).toBeInTheDocument();
-  expect(screen.getByText(/does not affect your schedule/i)).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Practice" })).toBeInTheDocument();
+  expect(screen.queryByText(/does not affect your schedule/i)).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /Flashcard/i }));
   await user.click(screen.getByRole("button", { name: "Good" }));
   expect(screen.getByText("Practice Complete")).toBeInTheDocument();
+});
+
+test("does not offer manual refresh controls", () => {
+  const onRate = vi.fn();
+  const onRefresh = vi.fn();
+  const { rerender } = render(
+    <ReviewPage mode="study" session={studySession} onRate={onRate} onRefresh={onRefresh} />,
+  );
+  expect(screen.queryByRole("button", { name: "Refresh now" })).not.toBeInTheDocument();
+
+  rerender(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, cards: [], nextLearningDueAt: null }}
+      onRate={onRate}
+      onRefresh={onRefresh}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Refresh now" })).not.toBeInTheDocument();
+});
+
+test("waits for the due time only when the visible queue is empty", async () => {
+  const dueNow = new Date(Date.now() - 1).toISOString();
+  const onRefreshWithCard = vi.fn().mockResolvedValue(studySession);
+  const { rerender } = render(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, nextLearningDueAt: dueNow }}
+      onRate={vi.fn()}
+      onRefresh={onRefreshWithCard}
+    />,
+  );
+  await new Promise((resolve) => window.setTimeout(resolve, 300));
+  expect(onRefreshWithCard).not.toHaveBeenCalled();
+
+  const replacement = { ...studySession, sessionId: "session-2", cards: [replacementGrant] };
+  const onRefreshEmpty = vi.fn().mockResolvedValue(replacement);
+  rerender(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, cards: [], nextLearningDueAt: dueNow }}
+      onRate={vi.fn()}
+      onRefresh={onRefreshEmpty}
+    />,
+  );
+  expect(await screen.findByText(replacementGrant.card.front)).toBeInTheDocument();
+  expect(onRefreshEmpty).toHaveBeenCalledWith(studySession.sessionId);
+});
+
+test("rates with the replacement session id after an automatic refresh", async () => {
+  const dueNow = new Date(Date.now() - 1).toISOString();
+  const replacement = { ...studySession, sessionId: "session-2", cards: [replacementGrant] };
+  const onRate = vi.fn().mockResolvedValue({ card: replacementGrant.card, reviewLogId: "log-2" });
+  render(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, cards: [], nextLearningDueAt: dueNow }}
+      onRate={onRate}
+      onRefresh={vi.fn().mockResolvedValue(replacement)}
+    />,
+  );
+
+  await userEvent.click(await screen.findByRole("button", { name: /Flashcard/i }));
+  await userEvent.click(screen.getByRole("button", { name: "Good" }));
+  expect(onRate).toHaveBeenCalledWith(
+    replacement.sessionId,
+    replacementGrant,
+    "good",
+    expect.any(Number),
+  );
 });
 
 test("practice keeps YouGlish available from the front text after the card flips", async () => {

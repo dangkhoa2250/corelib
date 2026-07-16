@@ -7,9 +7,6 @@ interface MemoraSettingsSectionProps {
   save: (settings: MemoraSettings) => Promise<MemoraSettings>;
 }
 
-const DEFAULT_NEW_CARDS = 20;
-const DEFAULT_RETENTION_PERCENT = 90;
-
 function parseInteger(value: string): number | null {
   if (!/^\d+$/.test(value.trim())) return null;
   return Number.parseInt(value.trim(), 10);
@@ -61,13 +58,6 @@ export function MemoraSettingsSection({ load, save }: MemoraSettingsSectionProps
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleRestoreDefaults = () => {
-    setNewCards(String(DEFAULT_NEW_CARDS));
-    setRetentionPercent(String(DEFAULT_RETENTION_PERCENT));
-    setSuccess(false);
-    setError(null);
   };
 
   return (
@@ -143,13 +133,6 @@ export function MemoraSettingsSection({ load, save }: MemoraSettingsSectionProps
       <div className="settings-page__actions">
         <button disabled={!canSave} onClick={() => void handleSave()} type="button">
           {saving ? "Saving…" : "Save Memora settings"}
-        </button>
-        <button
-          className="settings-page__secondary-button"
-          onClick={handleRestoreDefaults}
-          type="button"
-        >
-          Restore defaults
         </button>
       </div>
 

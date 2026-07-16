@@ -693,9 +693,9 @@ export function App({
           mode="study"
           session={session}
           onBack={onBack}
-          onRate={(grant: StudyGrant, rating: ReviewRating, elapsedMs: number) =>
+          onRate={(activeSessionId: string, grant: StudyGrant, rating: ReviewRating, elapsedMs: number) =>
             learning.rateStudyCard({
-              sessionId: session.sessionId,
+              sessionId: activeSessionId,
               cardId: grant.card.id,
               grantToken: grant.grantToken,
               expectedState: grant.expectedState,
@@ -704,12 +704,16 @@ export function App({
               elapsedMs,
             })
           }
-          onRefresh={async () => {
+          onRefresh={async (activeSessionId: string) => {
             try {
-              return await learning.refreshStudySession(session.sessionId);
+              return await learning.refreshStudySession(activeSessionId);
             } catch (refreshError) {
               if (errorMessage(refreshError) !== "study session expired") throw refreshError;
-              return learning.startStudySession(session.scope);
+              const replacement = await learning.startStudySession(session.scope);
+              setRoute((current) => current.name === "review" && current.mode === "study"
+                ? { ...current, session: replacement }
+                : current);
+              return replacement;
             }
           }}
         />

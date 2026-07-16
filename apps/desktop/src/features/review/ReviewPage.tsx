@@ -11,8 +11,8 @@ import { PronunciationButton } from "../../components/PronunciationButton";
 export interface StudyReviewPageProps {
   mode: "study";
   session: StudySession;
-  onRate: (grant: StudyGrant, rating: ReviewRating, elapsedMs: number) => Promise<StudyRatingResult>;
-  onRefresh: () => Promise<StudySession>;
+  onRate: (sessionId: string, grant: StudyGrant, rating: ReviewRating, elapsedMs: number) => Promise<StudyRatingResult>;
+  onRefresh: (sessionId: string) => Promise<StudySession>;
   onBack?: () => void;
 }
 
@@ -25,7 +25,7 @@ export interface PracticeReviewPageProps {
 export type ReviewPageProps = StudyReviewPageProps | PracticeReviewPageProps;
 
 const STALE_CARD_MESSAGE = "study card changed; refresh the session";
-const STALE_ALERT_MESSAGE = "This card changed elsewhere. The study queue was refreshed.";
+const STALE_ALERT_MESSAGE = "This card changed elsewhere. Leave this session and start again.";
 
 const ratings: ReviewRating[] = ["again", "hard", "good", "easy"];
 const ratingColors: Record<ReviewRating, string> = {
@@ -64,7 +64,6 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
   const [revealed, setRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [staleAlert, setStaleAlert] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
 
   useEffect(() => {
@@ -81,7 +80,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
   const refreshSession = useCallback(async () => {
     setError(null);
     try {
-      const next = await onRefresh();
+      const next = await onRefresh(current.sessionId);
       setCurrent(next);
       setIndex(0);
       return next;
@@ -89,16 +88,16 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
       setError(errorMessage(refreshError));
       return null;
     }
-  }, [onRefresh]);
+  }, [current.sessionId, onRefresh]);
 
   useEffect(() => {
-    if (!current.nextLearningDueAt) return;
+    if (current.cards.length > 0 || !current.nextLearningDueAt) return;
     const delay = Math.max(250, new Date(current.nextLearningDueAt).getTime() - Date.now());
     const timer = window.setTimeout(() => {
       void refreshSession();
-    }, Math.min(delay, 60_000));
+    }, delay);
     return () => window.clearTimeout(timer);
-  }, [current.nextLearningDueAt, refreshSession]);
+  }, [current.cards.length, current.nextLearningDueAt, refreshSession]);
 
   const grant = current.cards[index];
 
@@ -110,9 +109,6 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
             <h1 id="review-title">Review today</h1>
             <div className="review-page__waiting">
               <p>Next learning card is on its way. Check back soon.</p>
-              <button type="button" onClick={() => void refreshSession()} className="review-page__back-btn">
-                Refresh now
-              </button>
             </div>
             {onBack ? (
               <button type="button" onClick={onBack} className="review-page__back-btn">
@@ -129,9 +125,6 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
         <div className="review-page__done-content">
           <h1 id="review-title">Review today</h1>
           <p>Nothing due today</p>
-          <button type="button" onClick={() => void refreshSession()} className="review-page__back-btn">
-            Refresh now
-          </button>
           {onBack ? (
             <button type="button" onClick={onBack} className="review-page__back-btn">
               Back to Library
@@ -149,14 +142,12 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
   const handleRateCard = async (rating: ReviewRating) => {
     setSaving(true);
     setError(null);
-    setStaleAlert(null);
     try {
-      await onRate(grant, rating, Date.now() - startedAt);
+      await onRate(current.sessionId, grant, rating, Date.now() - startedAt);
       await refreshSession();
     } catch (rateError) {
       if (errorMessage(rateError) === STALE_CARD_MESSAGE) {
-        await refreshSession();
-        setStaleAlert(STALE_ALERT_MESSAGE);
+        setError(STALE_ALERT_MESSAGE);
       } else {
         setError(errorMessage(rateError));
       }
@@ -175,12 +166,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
             </button>
           ) : null}
         </div>
-        <button type="button" className="review-page__back-btn" onClick={() => void refreshSession()}>
-          Refresh now
-        </button>
       </header>
-
-      {staleAlert ? <p className="review-page__error" role="alert">{staleAlert}</p> : null}
 
       <section
         aria-label="Flashcard"
@@ -347,6 +333,7 @@ function PracticeReviewPage({ cards, onBack }: PracticeReviewPageProps) {
             </button>
           ) : null}
         </div>
+        <h1 className="review-page__mode-title" id="review-title">Practice</h1>
         <div className="review-page__progress">
           <div
             className="review-page__progress-bar"
@@ -375,10 +362,6 @@ function PracticeReviewPage({ cards, onBack }: PracticeReviewPageProps) {
           </button>
         </div>
       </header>
-
-      <p className="review-page__practice-notice">
-        <strong>Practice mode</strong> — rating cards here does not affect your schedule.
-      </p>
 
       <section
         aria-label="Flashcard"
