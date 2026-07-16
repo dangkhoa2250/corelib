@@ -3578,6 +3578,10 @@ textarea::placeholder {
   text-align: center;
 }
 
+.review-page--lowered .review-page__done-content {
+  transform: translateY(clamp(32px, 6vh, 64px));
+}
+
 .review-page__done-content h1 {
   font-size: 1.5rem;
   font-weight: 600;

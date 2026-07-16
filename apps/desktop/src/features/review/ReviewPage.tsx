@@ -107,7 +107,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
   if (!grant) {
     if (current.nextLearningDueAt) {
       return (
-        <main className="review-page review-page--done" aria-labelledby="review-title">
+        <main className="review-page review-page--done review-page--lowered" aria-labelledby="review-title">
           <div className="review-page__done-content">
             <h1 id="review-title">Review today</h1>
             <div className="review-page__waiting">
@@ -274,7 +274,7 @@ function PracticeReviewPage({ cards, onBack }: PracticeReviewPageProps) {
     const totalRated = Object.values(ratingCounts).reduce((a, b) => a + b, 0);
     const practiceElapsed = Math.max(0, Date.now() - practiceStartedAt);
     return (
-      <main className="review-page review-page--done">
+      <main className="review-page review-page--done review-page--lowered">
         <div className="review-page__done-content">
           <h1>Practice Complete</h1>
           <p className="review-page__summary-stats">

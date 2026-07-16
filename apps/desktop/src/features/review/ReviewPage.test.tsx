@@ -139,6 +139,38 @@ test("study and practice share the same two-face flip structure", async () => {
   expect(practiceCard.querySelectorAll(".review-page__card-face--back")).toHaveLength(1);
 });
 
+test("lowers the waiting review state without moving the nothing-due state", () => {
+  const onRate = vi.fn();
+  const onRefresh = vi.fn();
+  const { rerender } = render(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, cards: [], nextLearningDueAt: "2026-07-17T01:00:00.000Z" }}
+      onRate={onRate}
+      onRefresh={onRefresh}
+    />,
+  );
+
+  expect(screen.getByRole("main")).toHaveClass("review-page--lowered");
+
+  rerender(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, cards: [], nextLearningDueAt: null }}
+      onRate={onRate}
+      onRefresh={onRefresh}
+    />,
+  );
+
+  expect(screen.getByRole("main")).not.toHaveClass("review-page--lowered");
+});
+
+test("lowers the practice-complete state", () => {
+  render(<ReviewPage mode="practice" cards={[]} />);
+
+  expect(screen.getByRole("main")).toHaveClass("review-page--lowered");
+});
+
 test("rates a grant and refreshes the backend queue", async () => {
   const user = userEvent.setup();
   const onRate = vi.fn().mockResolvedValue({
