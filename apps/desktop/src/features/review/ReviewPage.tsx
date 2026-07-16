@@ -8,6 +8,7 @@ import { detectLanguage as detectSpeechLanguage } from "../../lib/language";
 import { updateCard } from "../../lib/learning";
 import { PronunciationButton } from "../../components/PronunciationButton";
 import { ReviewFlashcard } from "./ReviewFlashcard";
+import { useElapsedTime } from "./useElapsedTime";
 
 export interface StudyReviewPageProps {
   mode: "study";
@@ -66,6 +67,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(() => Date.now());
+  const elapsed = useElapsedTime(startedAt);
 
   useEffect(() => {
     setCurrent(session);
@@ -182,6 +184,9 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
       />
 
       <footer className="review-page__footer">
+        <p className="review-page__elapsed" aria-live="polite">
+          {formatTime(Math.floor(elapsed / 1000))}
+        </p>
         {revealed ? (
           <div className="review-page__ratings" role="group" aria-label="Rate card">
             {ratings.map((rating) => {
@@ -216,14 +221,15 @@ function PracticeReviewPage({ cards, onBack }: PracticeReviewPageProps) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [startedAt] = useState(() => Date.now());
-  const [now, setNow] = useState(() => Date.now());
+  const [practiceStartedAt] = useState(() => Date.now());
+  const [cardStartedAt, setCardStartedAt] = useState(() => Date.now());
   const [ratingCounts, setRatingCounts] = useState<RatingCounts>({ again: 0, hard: 0, good: 0, easy: 0 });
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [showYouGlish, setShowYouGlish] = useState(false);
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   const card = cards[index];
+  const elapsed = useElapsedTime(cardStartedAt, Boolean(card));
 
   const handleSelectLanguage = async (lang: string | null) => {
     if (!lang || !card) return;
@@ -249,14 +255,10 @@ function PracticeReviewPage({ cards, onBack }: PracticeReviewPageProps) {
 
   useEffect(() => {
     if (!card) return;
-    setNow(Date.now());
+    setCardStartedAt(Date.now());
     setRevealed(false);
     setError(null);
-    const timer = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(timer);
   }, [card?.id]);
-
-  const elapsed = Math.max(0, now - startedAt);
 
   const goToPrev = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -270,12 +272,13 @@ function PracticeReviewPage({ cards, onBack }: PracticeReviewPageProps) {
 
   if (!card) {
     const totalRated = Object.values(ratingCounts).reduce((a, b) => a + b, 0);
+    const practiceElapsed = Math.max(0, Date.now() - practiceStartedAt);
     return (
       <main className="review-page review-page--done">
         <div className="review-page__done-content">
           <h1>Practice Complete</h1>
           <p className="review-page__summary-stats">
-            Reviewed {totalRated} cards in {formatTime(Math.floor(elapsed / 1000))}
+            Reviewed {totalRated} cards in {formatTime(Math.floor(practiceElapsed / 1000))}
           </p>
           <div className="review-page__summary-grid">
             {ratings.map((r) => (

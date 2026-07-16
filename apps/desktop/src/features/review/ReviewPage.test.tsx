@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi, beforeEach } from "vitest";
 import type { LearningCard, StudyGrant, StudySession } from "../../domain/learning";
@@ -68,7 +68,49 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
+});
+
+test("study shows a per-card timer and resets it for a replacement session", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-17T00:00:00.000Z"));
+  const { rerender } = render(
+    <ReviewPage
+      mode="study"
+      session={studySession}
+      onRate={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
+
+  expect(screen.getByText("0s")).toHaveClass("review-page__elapsed");
+  act(() => vi.advanceTimersByTime(2_000));
+  expect(screen.getByText("2s")).toHaveClass("review-page__elapsed");
+
+  rerender(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, sessionId: "session-2" }}
+      onRate={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
+  expect(screen.getByText("0s")).toHaveClass("review-page__elapsed");
+});
+
+test("practice resets its visible timer for each card", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-17T00:00:00.000Z"));
+  render(<ReviewPage mode="practice" cards={[card, replacementGrant.card]} />);
+
+  act(() => vi.advanceTimersByTime(2_000));
+  expect(screen.getByText("2s")).toHaveClass("review-page__elapsed");
+
+  fireEvent.click(screen.getByRole("button", { name: "Flashcard" }));
+  fireEvent.click(screen.getByRole("button", { name: "Good" }));
+
+  expect(screen.getByText("0s")).toHaveClass("review-page__elapsed");
 });
 
 test("study and practice share the same two-face flip structure", async () => {
