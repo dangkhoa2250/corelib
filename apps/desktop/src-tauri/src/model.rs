@@ -204,6 +204,29 @@ pub struct CardPagePayload {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoraSettingsPayload {
+    pub new_cards_per_day: i64,
+    pub desired_retention: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeckLearningSettingsPayload {
+    pub deck_id: String,
+    pub inherited_new_cards_per_day: i64,
+    pub new_cards_per_day: Option<i64>,
+    pub effective_new_cards_per_day: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDeckLearningSettingsPayload {
+    pub deck_id: String,
+    pub new_cards_per_day: Option<i64>,
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

@@ -13,6 +13,10 @@ import {
   restoreCards,
   deleteCardsPermanently,
   emptyTrash,
+  getMemoraSettings,
+  updateMemoraSettings,
+  getDeckLearningSettings,
+  updateDeckLearningSettings,
 } from "./learning";
 
 describe("learning bridge", () => {
@@ -63,5 +67,31 @@ describe("learning bridge", () => {
 
     await emptyTrash(call);
     expect(call).toHaveBeenLastCalledWith("empty_trash");
+  });
+  it("invokes Memora and deck learning settings commands", async () => {
+    const call = vi.fn().mockResolvedValue({});
+
+    await getMemoraSettings(call);
+    await updateMemoraSettings(
+      { newCardsPerDay: 30, desiredRetention: 0.92 },
+      call,
+    );
+    await getDeckLearningSettings("deck-1", call);
+    await updateDeckLearningSettings("deck-1", 8, call);
+    await updateDeckLearningSettings("deck-1", null, call);
+
+    expect(call).toHaveBeenNthCalledWith(1, "get_memora_settings");
+    expect(call).toHaveBeenNthCalledWith(2, "update_memora_settings", {
+      settings: { newCardsPerDay: 30, desiredRetention: 0.92 },
+    });
+    expect(call).toHaveBeenNthCalledWith(3, "get_deck_learning_settings", {
+      deckId: "deck-1",
+    });
+    expect(call).toHaveBeenNthCalledWith(4, "update_deck_learning_settings", {
+      payload: { deckId: "deck-1", newCardsPerDay: 8 },
+    });
+    expect(call).toHaveBeenNthCalledWith(5, "update_deck_learning_settings", {
+      payload: { deckId: "deck-1", newCardsPerDay: null },
+    });
   });
 });

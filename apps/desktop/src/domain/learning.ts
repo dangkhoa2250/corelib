@@ -65,6 +65,18 @@ export type ReviewPreview = Record<
   { dueAt: string; intervalLabel: string }
 >;
 
+export interface MemoraSettings {
+  newCardsPerDay: number;
+  desiredRetention: number;
+}
+
+export interface DeckLearningSettings {
+  deckId: string;
+  inheritedNewCardsPerDay: number;
+  newCardsPerDay: number | null;
+  effectiveNewCardsPerDay: number;
+}
+
 export function isSchedulableCard(card: LearningCard): boolean {
   return (
     card.state !== "suspended" &&

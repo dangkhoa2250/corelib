@@ -22,10 +22,14 @@ use crate::{
     library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
     model::DocumentSummary,
     model::{
-        CardSourcePayload, DeckSummary, LearningCardSummary, ReviewIntervalPayload,
-        ReviewPreviewPayload, SearchResultPayload, SelectionRect,
+        CardSourcePayload, DeckLearningSettingsPayload, DeckSummary, LearningCardSummary,
+        MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload, SearchResultPayload,
+        SelectionRect, UpdateDeckLearningSettingsPayload,
     },
     scheduler::{Rating, ReviewScheduler, ScheduledState},
+    study_queue::{
+        DeckLearningSettings, DeckLearningSettingsUpdate, MemoraSettings, MemoraSettingsUpdate,
+    },
 };
 
 pub type IndexTask = Box<dyn FnOnce() + Send + 'static>;
@@ -1157,6 +1161,76 @@ pub fn empty_trash(
         affected_ids: res.affected_ids,
         affected_count: res.affected_count,
     })
+}
+
+impl From<MemoraSettings> for MemoraSettingsPayload {
+    fn from(settings: MemoraSettings) -> Self {
+        Self {
+            new_cards_per_day: settings.new_cards_per_day,
+            desired_retention: settings.desired_retention,
+        }
+    }
+}
+
+impl From<DeckLearningSettings> for DeckLearningSettingsPayload {
+    fn from(settings: DeckLearningSettings) -> Self {
+        Self {
+            deck_id: settings.deck_id,
+            inherited_new_cards_per_day: settings.inherited_new_cards_per_day,
+            new_cards_per_day: settings.new_cards_per_day,
+            effective_new_cards_per_day: settings.effective_new_cards_per_day,
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_memora_settings(
+    state: State<'_, LibraryStore>,
+) -> Result<MemoraSettingsPayload, String> {
+    learning_lock(&state)?
+        .memora_settings()
+        .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_memora_settings(
+    settings: MemoraSettingsPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<MemoraSettingsPayload, String> {
+    learning_lock(&state)?
+        .update_memora_settings(MemoraSettingsUpdate {
+            new_cards_per_day: settings.new_cards_per_day,
+            desired_retention: settings.desired_retention,
+        })
+        .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_deck_learning_settings(
+    deck_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<DeckLearningSettingsPayload, String> {
+    learning_lock(&state)?
+        .deck_learning_settings(&deck_id)
+        .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_deck_learning_settings(
+    payload: UpdateDeckLearningSettingsPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<DeckLearningSettingsPayload, String> {
+    let update = match payload.new_cards_per_day {
+        Some(value) => DeckLearningSettingsUpdate::Custom(value),
+        None => DeckLearningSettingsUpdate::Inherit,
+    };
+    learning_lock(&state)?
+        .update_deck_learning_settings(&payload.deck_id, update)
+        .map(Into::into)
+        .map_err(|e| e.to_string())
 }
 
 pub struct AccountServiceState {
