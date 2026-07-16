@@ -18,7 +18,7 @@ function disableNativeSuggestionsIn(node: Node) {
   node.querySelectorAll(EDITABLE_SELECTOR).forEach(disableNativeSuggestions);
 }
 
-export function InputPrivacyGuard() {
+export function useInputPrivacyGuard() {
   useLayoutEffect(() => {
     document.querySelectorAll(EDITABLE_SELECTOR).forEach(disableNativeSuggestions);
 
@@ -38,5 +38,10 @@ export function InputPrivacyGuard() {
     };
   }, []);
 
+  return null;
+}
+
+export function InputPrivacyGuard() {
+  useInputPrivacyGuard();
   return null;
 }
