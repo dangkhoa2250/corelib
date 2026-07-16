@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AccountGate } from "./AccountGate";
 import type { AccountApi, SessionSnapshot } from "../../domain/account";
 
@@ -37,15 +37,6 @@ const mockSession: SessionSnapshot = {
     refreshedAt: "2026-07-13T21:00:00Z",
   },
 };
-
-beforeEach(() => {
-  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
-  vi.spyOn(HTMLMediaElement.prototype, "load").mockImplementation(() => {});
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-});
 
 describe("AccountGate Component", () => {
   it("renders loading spinner on mount and does not render children", () => {
@@ -162,7 +153,7 @@ describe("AccountGate Component", () => {
     });
   });
 
-  it("renders the ping-pong video as a muted looping background", () => {
+  it("renders the original animated video as a muted looping background", () => {
     const { container } = render(
       <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
         <div>Protected app</div>
@@ -170,36 +161,13 @@ describe("AccountGate Component", () => {
     );
 
     const video = container.querySelector(".account-gate-video");
-    expect(video).toHaveAttribute("src", "/corelib-login-page-ping-pong.mp4");
+    expect(video?.tagName).toBe("VIDEO");
+    expect(video).toHaveAttribute("src", "/corelib-login-page.mp4");
     expect(video).toHaveAttribute("autoplay");
     expect(video).toHaveProperty("muted", true);
     expect(video).toHaveAttribute("loop");
     expect(video).toHaveAttribute("playsinline");
-  });
-
-  it("starts the login background video after the gate mounts", async () => {
-    render(
-      <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
-        <div>Protected app</div>
-      </AccountGate>,
-    );
-
-    await waitFor(() => expect(HTMLMediaElement.prototype.play).toHaveBeenCalled());
-  });
-
-  it("loads the login video only after it is configured as muted", () => {
-    const load = vi.mocked(HTMLMediaElement.prototype.load).mockImplementation(function (this: HTMLMediaElement) {
-      expect(this.defaultMuted).toBe(true);
-      expect(this.muted).toBe(true);
-    });
-
-    render(
-      <AccountGate api={mockApi()} initialState={{ kind: "anonymous" }}>
-        <div>Protected app</div>
-      </AccountGate>,
-    );
-
-    expect(load).toHaveBeenCalledTimes(1);
+    expect(container.querySelector(".account-gate-ascii")).toBeNull();
   });
 
   it("defines a responsive overlay treatment for the video background", () => {

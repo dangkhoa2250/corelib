@@ -1,6 +1,6 @@
 # Corelib project memory
 
-Last updated: 2026-07-11
+Last updated: 2026-07-16
 
 ## What this project is
 
@@ -19,6 +19,8 @@ The Library v1 slice and the Memora (native Anki-style learning) slice are imple
 - `Cmd+K` command palette with metadata/full-text search and keyboard navigation.
 - PDF.js reader with page thumbnails, outline, in-document search, zoom, reading-position persistence, and lazy rendering.
 - Zoom fix: cursor-anchored Ctrl-wheel/pinch, center-anchored toolbar zoom, and scroll layout that follows the zoom scale.
+- Reader scroll areas use a reusable `ScrollArea` component with portal-mounted overlay thumbs. This avoids the white native scrollbar track that macOS WebKit can paint in the Tauri webview.
+- Account gate uses the supplied 3328×1872, 30fps looping MP4 (`/corelib-login-page.mp4`) as its decorative background. Keep the declarative `autoPlay`, `muted`, `loop`, `playsInline`, and `preload="auto"` attributes; verify playback in a freshly built Tauri release rather than an already-open app.
 - Google Drive: browse/select PDFs or folders, read-only OAuth flow, download-on-demand cache, lazy covers, cache clearing, and offline cached reading.
 - Persistent Apple Books-style sidebar with Search, Library, and Memora sections; Feather-style icons; deck rename/delete from the sidebar.
 - Memora Card Browser: full card lifecycle UI scoped to decks — create, edit (front/back/tags/deck), move, suspend/unsuspend, trash, restore (to original or different deck), delete permanently, and empty trash. Tag pills, status filters, sort, search, and infinite scroll.
@@ -38,6 +40,8 @@ The Library v1 slice and the Memora (native Anki-style learning) slice are imple
 - `b662719`, `1200ce1`, `630861f`, `3dfb3f8` — persistent sidebar, deck management, flashcard browsing UI, and interactive slideshow.
 - `99e6e9c`, `3f9c630` — Memora card browser lifecycle design and implementation (trash, restore, suspend, move, bulk actions).
 - `749c685` — scope Card Browser to Memora decks.
+- `d89ad7a` — initial login-video autoplay investigation.
+- `b24a9e0` — add reusable overlay scroll areas for Reader panes.
 
 ## How to run
 
@@ -56,7 +60,7 @@ cargo test --all-targets --manifest-path src-tauri/Cargo.toml
 cargo clippy --all-targets --all-features --manifest-path src-tauri/Cargo.toml -- -D warnings
 ```
 
-The current verified baseline is 91 frontend tests, 89 Rust unit tests, 1 PDF extraction isolation test, and 2 Playwright E2E tests (library + learning lifecycle) passing; production TypeScript/Vite build, Rust fmt, and clippy with `-D warnings` are green.
+The latest verified frontend baseline is 262 Vitest tests passing; the production TypeScript/Vite build is green. Historical Rust and Playwright results above should be re-run before relying on them as a current release baseline.
 
 ## Architecture notes
 
@@ -70,6 +74,8 @@ The current verified baseline is 91 frontend tests, 89 Rust unit tests, 1 PDF ex
 - Card editing uses a single atomic `update_and_move_card` command that combines content update and optional deck move in one transaction; if the deck move fails, the content change rolls back too.
 - `Cmd/Ctrl+K` searches documents and cards. Card results open Review today; Show source resolves the source document/page and keeps review usable when a source is unavailable.
 - OAuth tokens belong in the OS credential store; do not put secrets in SQLite or logs.
+- `ScrollArea` deliberately uses `overflow: hidden` and translates wheel gestures into `scrollTop`/`scrollLeft`; its visual thumbs are portals so they do not create a native WebKit scroller or consume layout space.
+- For account-gate video changes, retain the high-resolution MP4 and the declarative autoplay attributes. Check playback only in a freshly built release artifact; an open app can be a stale binary.
 
 ## Design rules
 

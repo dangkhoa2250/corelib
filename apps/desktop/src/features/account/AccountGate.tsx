@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import type { AccountApi, SessionSnapshot } from "../../domain/account";
 import { SignInPage } from "./SignInPage";
 import { RegisterPage } from "./RegisterPage";
@@ -29,8 +29,6 @@ export function useAccount() {
 }
 
 const isTest = typeof globalThis !== "undefined" && (globalThis as any).process?.env?.NODE_ENV === "test";
-const LOGIN_BACKGROUND_VIDEO_SRC = "/corelib-login-page-ping-pong.mp4";
-
 const defaultTestSession: SessionSnapshot = {
   profile: {
     id: "u-test",
@@ -64,7 +62,6 @@ export function AccountGate({
   const [activeTab, setActiveTab] = useState<"signin" | "register">("signin");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const backgroundVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Load session on mount
   useEffect(() => {
@@ -84,32 +81,6 @@ export function AccountGate({
       active = false;
     };
   }, [api]);
-
-  // WebKit applies autoplay policy when the source starts loading. Configure
-  // the element and its readiness listener before assigning the source so the
-  // initial app launch has the same lifecycle as a later sign-out.
-  const showAccountGate = state.kind !== "approved";
-  useLayoutEffect(() => {
-    if (!showAccountGate) return;
-    const video = backgroundVideoRef.current;
-    if (!video) return;
-
-    video.muted = true;
-    video.defaultMuted = true;
-
-    const start = () => {
-      try {
-        void video.play().catch(() => {});
-      } catch (_) {}
-    };
-
-    video.addEventListener("canplay", start);
-    video.src = LOGIN_BACKGROUND_VIDEO_SRC;
-    video.load();
-    start();
-
-    return () => video.removeEventListener("canplay", start);
-  }, [showAccountGate]);
 
   const handleSignOut = async () => {
     try {
@@ -194,8 +165,8 @@ export function AccountGate({
   return (
     <div className="account-gate-container">
       <video
-        ref={backgroundVideoRef}
         className="account-gate-video"
+        src="/corelib-login-page.mp4"
         autoPlay
         muted
         loop
@@ -234,15 +205,17 @@ export function AccountGate({
           width: 100%;
           height: 100%;
           object-fit: cover;
+          z-index: 0;
         }
 
         .account-gate-video-overlay {
+          z-index: 1;
           background: linear-gradient(90deg, rgba(4, 8, 11, 0.2), rgba(4, 8, 11, 0.82));
         }
 
         .account-gate-card {
           position: relative;
-          z-index: 1;
+          z-index: 3;
           width: 100%;
           max-width: 440px;
           background: rgba(10, 16, 21, 0.78);
@@ -483,7 +456,7 @@ export function AccountGate({
 
         .page-spinner {
           position: relative;
-          z-index: 1;
+          z-index: 3;
           width: 40px;
           height: 40px;
           border: 3px solid rgba(255, 255, 255, 0.08);
