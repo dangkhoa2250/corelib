@@ -2083,7 +2083,6 @@ textarea::placeholder {
   width: 100%;
   padding: 18px 20px;
   border: 0;
-  border-bottom: 1px solid var(--border-subtle);
   outline: 0;
   color: var(--text-primary);
   background: transparent;
@@ -2111,7 +2110,7 @@ textarea::placeholder {
 
 .command-palette__results button {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   width: 100%;
   min-height: 38px;
@@ -2123,15 +2122,6 @@ textarea::placeholder {
   background: transparent;
   text-align: left;
   cursor: pointer;
-}
-
-.command-palette__results button::before {
-  width: 12px;
-  height: 12px;
-  border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  background: var(--surface-2);
-  content: "";
 }
 
 .command-palette__results button.is-selected,
@@ -2234,14 +2224,19 @@ textarea::placeholder {
    this scrollable surface explicit and leave only a themed floating thumb. */
 .command-palette__results::-webkit-scrollbar {
   width: 10px;
+  background: var(--surface-1);
 }
 
 .command-palette__results::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--surface-1);
 }
 
 .command-palette__results::-webkit-scrollbar-track-piece {
-  background: transparent;
+  background: var(--surface-1);
+}
+
+.command-palette__results::-webkit-scrollbar-corner {
+  background: var(--surface-1);
 }
 
 .command-palette__results::-webkit-scrollbar-thumb {

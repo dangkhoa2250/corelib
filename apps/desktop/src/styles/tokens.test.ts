@@ -83,8 +83,15 @@ test("uses neutral palette-specific scrollbars and match highlights", () => {
   const paletteEnd = css.indexOf("@media", paletteStart);
   const paletteCss = css.slice(paletteStart, paletteEnd);
 
-  expect(paletteCss).toContain(".command-palette__results::-webkit-scrollbar-track {\n  background: transparent;");
-  expect(paletteCss).toContain(".command-palette__results::-webkit-scrollbar-track-piece {\n  background: transparent;");
+  const paletteInput = paletteCss.match(/\.command-palette__input \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(paletteInput).toContain("border: 0;");
+  expect(paletteInput).not.toContain("border-bottom");
+  expect(paletteCss).not.toContain(".command-palette__results button::before");
+  expect(paletteCss).toContain(".command-palette__results::-webkit-scrollbar {\n  width: 10px;\n  background: var(--surface-1);");
+  expect(paletteCss).toContain(".command-palette__results::-webkit-scrollbar-track {\n  background: var(--surface-1);");
+  expect(paletteCss).toContain(".command-palette__results::-webkit-scrollbar-track-piece {\n  background: var(--surface-1);");
+  expect(paletteCss).toContain(".command-palette__results::-webkit-scrollbar-corner {\n  background: var(--surface-1);");
   expect(paletteCss).toMatch(/\.command-palette__results::-webkit-scrollbar-thumb \{[\s\S]*?background: var\(--scrollbar-thumb\);/);
   expect(paletteCss).toContain(".command-palette__match {");
   expect(paletteCss).toContain("background: transparent;");
