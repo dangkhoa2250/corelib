@@ -23,6 +23,34 @@ import { ProviderBrandIcon } from "../../components/ProviderBrandIcon";
 import { useContext } from "react";
 import { AccountContext } from "../account/AccountGate";
 import { AccountSettingsSection } from "../account/AccountSettingsSection";
+import { MemoraSettingsSection } from "./MemoraSettingsSection";
+import type { MemoraSettings } from "../../domain/learning";
+
+export type SettingsSection =
+  | "account"
+  | "appearance"
+  | "drive"
+  | "models"
+  | "memora";
+
+interface SettingsNavItem {
+  section: SettingsSection;
+  keywords: string[];
+}
+
+const SETTINGS_NAV_KEYWORDS: Record<SettingsSection, string[]> = {
+  account: ["account"],
+  appearance: ["appearance", "theme", "dark", "light"],
+  drive: ["drive", "google", "cloud"],
+  models: ["model", "provider", "translate", "ai"],
+  memora: ["memora", "learning", "fsrs", "cards", "retention"],
+};
+
+function matchesSearch(item: SettingsNavItem, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return item.keywords.some((keyword) => keyword.includes(q) || q.includes(keyword));
+}
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
@@ -50,12 +78,15 @@ export interface SettingsPageProps {
   saveApiKey: (provider: AiProviderId, apiKey: string) => Promise<void>;
   clearApiKey: (provider: AiProviderId) => Promise<void>;
   listModels: (provider: AiProviderId) => Promise<AiModel[]>;
+  getMemoraSettings: () => Promise<MemoraSettings>;
+  updateMemoraSettings: (settings: MemoraSettings) => Promise<MemoraSettings>;
   appleTranslationAvailable?: () => Promise<boolean>;
   onDefaultChange?: (engineId: TranslationEngineId | null) => void;
   onBack?: () => void;
   saveDriveCredentials?: (clientId: string, clientSecret: string) => Promise<void>;
   loadDriveCredentials?: () => Promise<{ clientId: string; clientSecret: string } | null>;
   clearDriveCredentials?: () => Promise<void>;
+  initialSection?: SettingsSection;
 }
 
 function readProvider(): AiProviderId {
@@ -73,7 +104,7 @@ export function readTranslationPreference(): { engineId: TranslationEngineId | n
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, initialSection = "models" }: SettingsPageProps) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
@@ -118,12 +149,18 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveSuccess, setDriveSuccess] = useState(false);
 
-  const showAccountSettings = searchQuery.trim().toLowerCase().includes("account");
-  const showAppearanceSettings = searchQuery.trim().toLowerCase().includes("appearance");
-  const showDriveSettings = searchQuery.trim().toLowerCase().includes("drive");
-  const showModelSettings = "model provider translate".includes(searchQuery.trim().toLowerCase()) && !showDriveSettings && !showAppearanceSettings && !showAccountSettings;
+  const [section, setSection] = useState<SettingsSection>(initialSection);
+
+  const showAccountSettings = section === "account";
+  const showAppearanceSettings = section === "appearance";
+  const showDriveSettings = section === "drive";
+  const showModelSettings = section === "models";
+  const showMemoraSettings = section === "memora";
 
   const accountContext = useContext(AccountContext);
+
+  const isNavVisible = (target: SettingsSection): boolean =>
+    matchesSearch({ section: target, keywords: SETTINGS_NAV_KEYWORDS[target] }, searchQuery);
 
   useEffect(() => {
     if (!loadDriveCredentials) return;
@@ -349,10 +386,10 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
           <input aria-label="Search settings" onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search settings…" value={searchQuery} />
         </label>
         <p className="settings-page__nav-label">General</p>
-        {accountContext && (
+        {accountContext && isNavVisible("account") && (
           <button 
             className={`settings-page__nav-item ${showAccountSettings ? "is-active" : ""}`}
-            onClick={() => setSearchQuery("account")}
+            onClick={() => setSection("account")}
             type="button"
           >
             <span className="settings-page__nav-icon">
@@ -364,53 +401,74 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
             Account
           </button>
         )}
-        <button 
-          className={`settings-page__nav-item ${showAppearanceSettings ? "is-active" : ""}`}
-          onClick={() => setSearchQuery("appearance")}
-          type="button"
-        >
-          <span className="settings-page__nav-icon"><IconAppearance /></span>
-          Appearance
-        </button>
-        <button 
-          className={`settings-page__nav-item ${showDriveSettings ? "is-active" : ""}`}
-          onClick={() => setSearchQuery("drive")}
-          type="button"
-        >
-          <span className="settings-page__nav-icon"><IconCloud /></span>
-          Google Drive
-        </button>
+        {isNavVisible("appearance") && (
+          <button 
+            className={`settings-page__nav-item ${showAppearanceSettings ? "is-active" : ""}`}
+            onClick={() => setSection("appearance")}
+            type="button"
+          >
+            <span className="settings-page__nav-icon"><IconAppearance /></span>
+            Appearance
+          </button>
+        )}
+        {isNavVisible("drive") && (
+          <button 
+            className={`settings-page__nav-item ${showDriveSettings ? "is-active" : ""}`}
+            onClick={() => setSection("drive")}
+            type="button"
+          >
+            <span className="settings-page__nav-icon"><IconCloud /></span>
+            Google Drive
+          </button>
+        )}
         <p className="settings-page__nav-label">Models</p>
-        <button 
-          className={`settings-page__nav-item ${showModelSettings ? "is-active" : ""}`}
-          onClick={() => setSearchQuery("")}
-          type="button"
-        >
-          <span className="settings-page__nav-icon"><IconMemora /></span>
-          Model
-        </button>
+        {isNavVisible("models") && (
+          <button 
+            className={`settings-page__nav-item ${showModelSettings ? "is-active" : ""}`}
+            onClick={() => setSection("models")}
+            type="button"
+          >
+            <span className="settings-page__nav-icon"><IconMemora /></span>
+            Model
+          </button>
+        )}
+        <p className="settings-page__nav-label">Apps</p>
+        {isNavVisible("memora") && (
+          <button 
+            className={`settings-page__nav-item ${showMemoraSettings ? "is-active" : ""}`}
+            onClick={() => setSection("memora")}
+            type="button"
+          >
+            <span className="settings-page__nav-icon"><IconMemora /></span>
+            Memora
+          </button>
+        )}
       </aside>
 
       <section className="settings-page__main">
-        <header className="settings-page__header">
-          <p className="settings-page__eyebrow">
-            {showAccountSettings ? "Account" : showAppearanceSettings ? "General" : showDriveSettings ? "General" : "Models"}
-          </p>
-          <h1>
-            {showAccountSettings ? "Account" : showAppearanceSettings ? "Appearance" : showDriveSettings ? "Google Drive" : "Model"}
-          </h1>
-          <p>
-            {showAccountSettings
-              ? "Manage your account settings."
-              : showAppearanceSettings 
-                ? "Customize how Memora looks." 
-                : showDriveSettings 
-                  ? "Configure Google Drive OAuth client credentials." 
-                  : "Choose the providers and model used by Memora."}
-          </p>
-        </header>
+        {showMemoraSettings ? null : (
+          <header className="settings-page__header">
+            <p className="settings-page__eyebrow">
+              {showAccountSettings ? "Account" : showAppearanceSettings ? "General" : showDriveSettings ? "General" : "Models"}
+            </p>
+            <h1>
+              {showAccountSettings ? "Account" : showAppearanceSettings ? "Appearance" : showDriveSettings ? "Google Drive" : "Model"}
+            </h1>
+            <p>
+              {showAccountSettings
+                ? "Manage your account settings."
+                : showAppearanceSettings 
+                  ? "Customize how Memora looks." 
+                  : showDriveSettings 
+                    ? "Configure Google Drive OAuth client credentials." 
+                    : "Choose the providers and model used by Memora."}
+            </p>
+          </header>
+        )}
 
-        {showAccountSettings && accountContext ? (
+        {showMemoraSettings ? (
+          <MemoraSettingsSection load={getMemoraSettings} save={updateMemoraSettings} />
+        ) : showAccountSettings && accountContext ? (
           <AccountSettingsSection
             session={accountContext.session!}
             onUpdateAnalytics={accountContext.updateAnalytics}

@@ -1077,6 +1077,36 @@ test("opens the search palette from the sidebar search field", async () => {
   expect(screen.getByRole("searchbox", { name: "Search everything" })).toHaveFocus();
 });
 
+test("Quick Open surfaces Settings → Memora and deep-links its section", async () => {
+  const user = userEvent.setup();
+  vi.mocked(invoke).mockImplementation(async (cmd) => {
+    if (cmd === "search_everything") return [] as any;
+    if (cmd === "list_trashed_cards") return { rows: [], total: 0, nextCursor: null } as any;
+    return undefined as any;
+  });
+  const getMemoraSettings = vi.fn().mockResolvedValue({ newCardsPerDay: 20, desiredRetention: 0.9 });
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([]),
+        createCard: vi.fn(),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
+        getMemoraSettings,
+        updateMemoraSettings: vi.fn().mockResolvedValue({ newCardsPerDay: 20, desiredRetention: 0.9 }),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
+  await user.type(await screen.findByRole("searchbox", { name: "Search everything" }), "Settings Memora");
+  await user.click(await screen.findByRole("button", { name: "Open Settings → Memora" }));
+
+  expect(await screen.findByRole("heading", { name: "Memora" })).toBeInTheDocument();
+  expect(await screen.findByLabelText("New cards per day")).toBeInTheDocument();
+  expect(getMemoraSettings).toHaveBeenCalled();
+});
+
 test("Review Today starts a backend study session", async () => {
   const user = userEvent.setup();
   const startStudySession = vi.fn().mockResolvedValue(studySession());

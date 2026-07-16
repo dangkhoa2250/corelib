@@ -900,6 +900,77 @@ textarea::placeholder {
   font-size: 13px;
 }
 
+.settings-page__number-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-page__number-row > input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  font-size: 14px;
+}
+
+.settings-page__number-suffix {
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-page__disclosure {
+  margin-top: 18px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  align-self: start;
+  justify-self: start;
+  width: fit-content;
+}
+
+.settings-page__policy {
+  display: grid;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.settings-page__policy-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.settings-page__policy-row dt {
+  font-weight: 700;
+}
+
+.settings-page__policy-row dd {
+  margin: 0;
+}
+
+.settings-page__success {
+  margin: 12px 0 0;
+  color: var(--success);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .settings-page__privacy {
   margin: 20px 0 0;
   font-size: 12px;

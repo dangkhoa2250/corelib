@@ -35,12 +35,12 @@ import { AppSidebar, type AppSection } from "./AppSidebar";
 import type { PendingImport } from "./ImportProgress";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
-import { SettingsPage, readTranslationPreference } from "../features/settings/SettingsPage";
+import { SettingsPage, readTranslationPreference, type SettingsSection } from "../features/settings/SettingsPage";
 import { appleTranslationAvailable, clearAiApiKey, hasAiApiKey, listAiModels, saveAiApiKey, translateText } from "../lib/ai";
 import type { AiModel, AiProviderId } from "../domain/ai";
 import type { TranslationEngineId } from "../domain/translation";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics, startStudySession as nativeStartStudySession, refreshStudySession as nativeRefreshStudySession, rateStudyCard as nativeRateStudyCard } from "../lib/learning";
-import { type BulkResult, type CardBrowserQuery, type CardPage, type CardSource, type Deck, type DeckStatistics, type LearningCard, type ReviewPreview, type ReviewRating, type UpdateCardInput, type UpdateAndMoveCardInput, type StudyScope, type StudySession, type StudyRatingInput, type StudyRatingResult, type StudyGrant } from "../domain/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics, startStudySession as nativeStartStudySession, refreshStudySession as nativeRefreshStudySession, rateStudyCard as nativeRateStudyCard, getMemoraSettings as nativeGetMemoraSettings, updateMemoraSettings as nativeUpdateMemoraSettings } from "../lib/learning";
+import { type BulkResult, type CardBrowserQuery, type CardPage, type CardSource, type Deck, type DeckStatistics, type LearningCard, type ReviewPreview, type ReviewRating, type UpdateCardInput, type UpdateAndMoveCardInput, type StudyScope, type StudySession, type StudyRatingInput, type StudyRatingResult, type StudyGrant, type MemoraSettings } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
 import { AccountGate, useAccount } from "../features/account/AccountGate";
 import { PocketBaseAccountApiClient } from "../lib/account";
@@ -146,6 +146,8 @@ interface LearningApi {
   startStudySession?: (scope: StudyScope) => Promise<StudySession>;
   refreshStudySession?: (sessionId: string) => Promise<StudySession>;
   rateStudyCard?: (payload: StudyRatingInput) => Promise<StudyRatingResult>;
+  getMemoraSettings?: () => Promise<MemoraSettings>;
+  updateMemoraSettings?: (settings: MemoraSettings) => Promise<MemoraSettings>;
 }
 
 const nativeLearningApi: LearningApi = {
@@ -173,6 +175,8 @@ const nativeLearningApi: LearningApi = {
   startStudySession: nativeStartStudySession,
   refreshStudySession: nativeRefreshStudySession,
   rateStudyCard: nativeRateStudyCard,
+  getMemoraSettings: nativeGetMemoraSettings,
+  updateMemoraSettings: nativeUpdateMemoraSettings,
 };
 
 interface AppProps {
@@ -191,7 +195,7 @@ type AppRoute =
   | { name: "cardBrowser"; deckId: string }
   | { name: "deckDetail"; deck: Deck; searchQuery?: string }
   | { name: "trash" }
-  | { name: "settings" }
+  | { name: "settings"; section?: SettingsSection }
   | { name: "admin" };
 
 const ROUTE_FEATURE_KEYS: Partial<Record<AppRoute["name"], string>> = {
@@ -304,6 +308,8 @@ export function App({
     startStudySession: learningApi.startStudySession ?? nativeStartStudySession,
     refreshStudySession: learningApi.refreshStudySession ?? nativeRefreshStudySession,
     rateStudyCard: learningApi.rateStudyCard ?? nativeRateStudyCard,
+    getMemoraSettings: learningApi.getMemoraSettings ?? nativeGetMemoraSettings,
+    updateMemoraSettings: learningApi.updateMemoraSettings ?? nativeUpdateMemoraSettings,
   }), [learningApi]);
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
   const [route, setRoute] = useState<AppRoute>({ name: "library" });
@@ -495,6 +501,7 @@ export function App({
         { kind: "nav", id: "trash", title: "Trash", subtitle: null },
         { kind: "nav", id: "settings", title: "Settings", subtitle: null },
         { kind: "nav", id: "settings-model", title: "Settings \u2192 Model", subtitle: "AI providers, API keys, translate model" },
+        { kind: "nav", id: "settings-memora", title: "Settings \u2192 Memora", subtitle: "Learning limits, FSRS retention, study steps" },
       ];
       const docResults: SearchResult[] = (documents ?? [])
         .filter((d) => fuzzyMatch(d.title, q))
@@ -523,6 +530,7 @@ export function App({
       setRoute(
         result.id === "memora" ? { name: "memora" }
         : result.id === "trash" ? { name: "trash" }
+        : result.id === "settings-memora" ? { name: "settings", section: "memora" }
         : result.id === "settings" || result.id === "settings-model" ? { name: "settings" }
         : { name: "library" },
       );
@@ -750,6 +758,9 @@ export function App({
         saveApiKey={aiApi.saveApiKey}
         clearApiKey={aiApi.clearApiKey}
         listModels={aiApi.listModels}
+        getMemoraSettings={learning.getMemoraSettings}
+        updateMemoraSettings={learning.updateMemoraSettings}
+        initialSection={route.section}
         appleTranslationAvailable={aiApi.appleTranslationAvailable}
         onDefaultChange={handleTranslationDefaultChange}
         onBack={() => setRoute({ name: "library" })}
