@@ -91,6 +91,41 @@ pub struct ReviewPreviewPayload {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyScopePayload {
+    pub kind: String,
+    pub deck_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyCountsPayload {
+    pub learning: usize,
+    pub review: usize,
+    pub new: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyGrantPayload {
+    pub grant_token: String,
+    pub expected_state: String,
+    pub expected_due_at: String,
+    pub card: LearningCardSummary,
+    pub preview: ReviewPreviewPayload,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudySessionPayload {
+    pub session_id: String,
+    pub scope: StudyScopePayload,
+    pub cards: Vec<StudyGrantPayload>,
+    pub counts: StudyCountsPayload,
+    pub next_learning_due_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SearchResultPayload {
     pub kind: String,
     pub id: String,
