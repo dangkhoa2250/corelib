@@ -212,14 +212,20 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
   useEffect(() => {
     let active = true;
     setError(null);
-    Promise.all([listDecks(), listDueCards()])
-      .then(([loadedDecks, dueCards]) => {
-        if (!active) return;
-        setDecks(loadedDecks);
-        setDueCount(dueCards.length);
+    listDecks()
+      .then((loadedDecks) => {
+        if (active) setDecks(loadedDecks);
       })
       .catch((loadError) => {
         if (active) setError(errorMessage(loadError));
+      });
+    Promise.resolve()
+      .then(() => listDueCards())
+      .then((dueCards) => {
+        if (active) setDueCount(dueCards.length);
+      })
+      .catch(() => {
+        if (active) setDueCount(null);
       });
     return () => {
       active = false;
@@ -310,7 +316,6 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
             <Button onClick={() => setCreatingDeck(true)}>New Deck</Button>
           )}
           <Button
-            disabled={!dueCount}
             onClick={onReviewToday}
           >
             {dueCount ? `Review ${dueCount} Ready` : "Review"}

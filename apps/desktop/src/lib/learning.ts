@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Invoke } from "./desktop";
-import type { Deck, DeckStatistics, LearningCard, NewCardSource, ReviewPreview, ReviewRating, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult, MemoraSettings, DeckLearningSettings } from "../domain/learning";
+import type { Deck, DeckStatistics, LearningCard, NewCardSource, ReviewPreview, ReviewRating, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult, MemoraSettings, DeckLearningSettings, StudyScope, StudySession, StudyRatingInput, StudyRatingResult } from "../domain/learning";
 import type { LibraryDocument } from "../domain/document";
 
 export type SearchResult = { kind: "nav" | "document" | "card" | "deck" | "trash"; id: string; title: string; subtitle: string | null };
@@ -42,3 +42,7 @@ export function getMemoraSettings(call: Invoke = invoke as Invoke): Promise<Memo
 export function updateMemoraSettings(settings: MemoraSettings, call: Invoke = invoke as Invoke): Promise<MemoraSettings> { return call("update_memora_settings", { settings }); }
 export function getDeckLearningSettings(deckId: string, call: Invoke = invoke as Invoke): Promise<DeckLearningSettings> { return call("get_deck_learning_settings", { deckId }); }
 export function updateDeckLearningSettings(deckId: string, newCardsPerDay: number | null, call: Invoke = invoke as Invoke): Promise<DeckLearningSettings> { return call("update_deck_learning_settings", { payload: { deckId, newCardsPerDay } }); }
+
+export function startStudySession(scope: StudyScope, call: Invoke = invoke as Invoke): Promise<StudySession> { return call("start_study_session", { scope }); }
+export function refreshStudySession(sessionId: string, call: Invoke = invoke as Invoke): Promise<StudySession> { return call("refresh_study_session", { sessionId }); }
+export function rateStudyCard(payload: StudyRatingInput, call: Invoke = invoke as Invoke): Promise<StudyRatingResult> { return call("rate_study_card", { payload }); }

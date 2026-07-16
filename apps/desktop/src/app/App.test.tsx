@@ -119,6 +119,62 @@ const emptyDeckStatistics = {
   dueCards: 0,
 };
 
+const englishDeck = {
+  id: "deck-1",
+  name: "English",
+  description: null,
+  color: "#ff9500",
+  archived: false,
+};
+
+function studyCard(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "card-1",
+    deckId: "deck-1",
+    front: "Question",
+    back: "Answer",
+    state: "review" as const,
+    dueAt: "2026-07-16T09:00:00.000Z",
+    reps: 1,
+    lapses: 0,
+    stability: 1,
+    difficulty: 1,
+    lastReviewAt: null,
+    learningStep: null,
+    source: null,
+    tags: [],
+    frontLanguage: null,
+    ...overrides,
+  };
+}
+
+function studyGrant(overrides: Record<string, unknown> = {}) {
+  return {
+    grantToken: "grant-1",
+    expectedState: "review" as const,
+    expectedDueAt: "2026-07-16T09:00:00.000Z",
+    card: studyCard(),
+    preview: {
+      again: { dueAt: "2026-07-16T09:10:00.000Z", intervalLabel: "10m" },
+      hard: { dueAt: "2026-07-17T09:00:00.000Z", intervalLabel: "1d" },
+      good: { dueAt: "2026-07-19T09:00:00.000Z", intervalLabel: "3d" },
+      easy: { dueAt: "2026-07-23T09:00:00.000Z", intervalLabel: "7d" },
+    },
+    ...overrides,
+  };
+}
+
+function studySession(overrides: Record<string, unknown> = {}) {
+  return {
+    sessionId: "session-1",
+    scope: { kind: "all" as const },
+    cards: [studyGrant()],
+    counts: { learning: 0, review: 1, new: 0 },
+    nextLearningDueAt: null,
+    ...overrides,
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -1019,4 +1075,81 @@ test("opens the search palette from the sidebar search field", async () => {
   await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(screen.getByRole("searchbox", { name: "Search everything" })).toHaveFocus();
+});
+
+test("Review Today starts a backend study session", async () => {
+  const user = userEvent.setup();
+  const startStudySession = vi.fn().mockResolvedValue(studySession());
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([englishDeck]),
+        createCard: vi.fn(),
+        listDueCards: vi.fn(() => { throw new Error("legacy due query must not be used"); }),
+        startStudySession,
+        refreshStudySession: vi.fn().mockResolvedValue(studySession()),
+        rateStudyCard: vi.fn(),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await user.click(await screen.findByRole("button", { name: /Review/ }));
+
+  expect(startStudySession).toHaveBeenCalledWith({ kind: "all" });
+  expect(await screen.findByText("Question")).toBeInTheDocument();
+});
+
+test("Study a deck starts a deck-scoped study session", async () => {
+  const user = userEvent.setup();
+  const startStudySession = vi.fn().mockResolvedValue(studySession({ scope: { kind: "deck", deckId: "deck-1" } }));
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([englishDeck]),
+        createCard: vi.fn(),
+        listDueCards: vi.fn().mockResolvedValue([]),
+        startStudySession,
+        refreshStudySession: vi.fn().mockResolvedValue(studySession()),
+        rateStudyCard: vi.fn(),
+        getDeckStatistics: vi.fn().mockResolvedValue({ ...emptyDeckStatistics, newCards: 1 }),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await user.click(await screen.findByRole("button", { name: "Study English" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Review Due" }));
+
+  expect(startStudySession).toHaveBeenCalledWith({ kind: "deck", deckId: "deck-1" });
+  expect(await screen.findByText("Question")).toBeInTheDocument();
+});
+
+test("an expired refresh starts a replacement session with the same scope", async () => {
+  const user = userEvent.setup();
+  const expired = studySession();
+  const replacement = { ...studySession(), sessionId: "session-2" };
+  const refreshStudySession = vi.fn().mockRejectedValue(new Error("study session expired"));
+  const startStudySession = vi.fn().mockResolvedValueOnce(expired).mockResolvedValueOnce(replacement);
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([englishDeck]),
+        createCard: vi.fn(),
+        listDueCards: vi.fn().mockResolvedValue([]),
+        startStudySession,
+        refreshStudySession,
+        rateStudyCard: vi.fn(),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
+      }}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await user.click(await screen.findByRole("button", { name: /Review/ }));
+  await user.click(screen.getByRole("button", { name: "Refresh now" }));
+  expect(startStudySession).toHaveBeenLastCalledWith({ kind: "all" });
 });

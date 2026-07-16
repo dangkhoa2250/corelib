@@ -37,6 +37,7 @@ export interface LearningCard {
   stability: number | null;
   difficulty: number | null;
   lastReviewAt: string | null;
+  learningStep: number | null;
   source: CardSource | null;
   tags: string[];
   frontLanguage: string | null;
@@ -64,6 +65,41 @@ export type ReviewPreview = Record<
   ReviewRating,
   { dueAt: string; intervalLabel: string }
 >;
+
+export interface StudyGrant {
+  grantToken: string;
+  expectedState: CardState;
+  expectedDueAt: string;
+  card: LearningCard;
+  preview: ReviewPreview;
+}
+
+export type StudyScope =
+  | { kind: "all" }
+  | { kind: "deck"; deckId: string };
+
+export interface StudySession {
+  sessionId: string;
+  scope: StudyScope;
+  cards: StudyGrant[];
+  counts: { learning: number; review: number; new: number };
+  nextLearningDueAt: string | null;
+}
+
+export interface StudyRatingInput {
+  sessionId: string;
+  cardId: string;
+  grantToken: string;
+  expectedState: CardState;
+  expectedDueAt: string;
+  rating: ReviewRating;
+  elapsedMs: number;
+}
+
+export interface StudyRatingResult {
+  card: LearningCard;
+  reviewLogId: string;
+}
 
 export interface MemoraSettings {
   newCardsPerDay: number;

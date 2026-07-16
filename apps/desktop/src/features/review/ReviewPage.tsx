@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { LearningCard, ReviewPreview, ReviewRating } from "../../domain/learning";
+import type { LearningCard, ReviewPreview, ReviewRating, StudyGrant, StudySession } from "../../domain/learning";
 import { ClickableFrontText } from "./ClickableFrontText";
 import { YouGlishPanel } from "./YouGlishPanel";
 import { LanguagePicker } from "../cards/LanguagePicker";
@@ -8,13 +8,34 @@ import { detectLanguage as detectSpeechLanguage } from "../../lib/language";
 import { updateCard } from "../../lib/learning";
 import { PronunciationButton } from "../../components/PronunciationButton";
 
-export interface ReviewPageProps {
+export interface LegacyReviewPageProps {
   cards: LearningCard[];
   previews: Record<string, ReviewPreview>;
-  mode?: "study" | "practice";
+  mode?: "practice";
   onRate: (card: LearningCard, rating: ReviewRating, elapsedMs: number) => Promise<void>;
   onBack?: () => void;
 }
+
+export interface PracticeReviewPageProps {
+  mode: "practice";
+  cards: LearningCard[];
+  previews?: Record<string, ReviewPreview>;
+  onRate?: (card: LearningCard, rating: ReviewRating, elapsedMs: number) => Promise<void>;
+  onBack?: () => void;
+}
+
+export interface StudyReviewPageProps {
+  mode: "study";
+  session: StudySession;
+  onRate: (grant: StudyGrant, rating: ReviewRating, elapsedMs: number) => Promise<unknown>;
+  onRefresh: () => Promise<StudySession>;
+  onBack?: () => void;
+}
+
+export type ReviewPageProps =
+  | LegacyReviewPageProps
+  | PracticeReviewPageProps
+  | StudyReviewPageProps;
 
 const ratings: ReviewRating[] = ["again", "hard", "good", "easy"];
 const ratingColors: Record<ReviewRating, string> = {
@@ -36,7 +57,164 @@ function formatTime(seconds: number): string {
 
 type RatingCounts = Record<ReviewRating, number>;
 
-export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: ReviewPageProps) {
+export function ReviewPage(props: ReviewPageProps) {
+  if (props.mode === "study") {
+    return <StudyReviewPage {...props} />;
+  }
+  return <LegacyReviewPage {...props} />;
+}
+
+function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPageProps) {
+  const [current, setCurrent] = useState(session);
+  const [index, setIndex] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState(() => Date.now());
+
+  useEffect(() => {
+    setCurrent(session);
+  }, [session]);
+
+  useEffect(() => {
+    setRevealed(false);
+    setError(null);
+    setStartedAt(Date.now());
+  }, [index, current.sessionId]);
+
+  const grant = current.cards[index];
+
+  const applyRefresh = async () => {
+    setError(null);
+    try {
+      const next = await onRefresh();
+      setCurrent(next);
+      setIndex(0);
+    } catch (refreshError) {
+      setError(errorMessage(refreshError));
+    }
+  };
+
+  if (!grant) {
+    return (
+      <main className="review-page review-page--done">
+        <div className="review-page__done-content">
+          <h1>Review today</h1>
+          <p>Nothing due today</p>
+          <button type="button" onClick={() => void applyRefresh()} className="review-page__back-btn">
+            Refresh now
+          </button>
+          {onBack ? (
+            <button type="button" onClick={onBack} className="review-page__back-btn">
+              Back to Library
+            </button>
+          ) : null}
+          {error ? <p className="review-page__error" role="alert">{error}</p> : null}
+        </div>
+      </main>
+    );
+  }
+
+  const card = grant.card;
+  const preview = grant.preview;
+
+  const handleRateCard = async (rating: ReviewRating) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onRate(grant, rating, Date.now() - startedAt);
+      const next = await onRefresh();
+      setCurrent(next);
+      setIndex(0);
+    } catch (rateError) {
+      setError(errorMessage(rateError));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <main className="review-page" aria-labelledby="review-title">
+      <header className="review-page__header">
+        <div className="review-page__header-left">
+          {onBack ? (
+            <button type="button" onClick={onBack} className="review-page__back-btn">
+              &larr; Back
+            </button>
+          ) : null}
+        </div>
+        <button type="button" className="review-page__back-btn" onClick={() => void applyRefresh()}>
+          Refresh now
+        </button>
+      </header>
+
+      <section
+        aria-label="Flashcard"
+        className={`review-page__card ${revealed ? "review-page__card--flipped" : ""}`}
+        onClick={() => !revealed && setRevealed(true)}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if ((e.key === "Enter" || e.key === " ") && !revealed) {
+            e.preventDefault();
+            setRevealed(true);
+          }
+        }}
+      >
+        <div className="review-page__card-inner">
+          {revealed ? (
+            <div className="review-page__card-face review-page__card-face--back">
+              <div className="review-page__card-face-scroll">
+                <p className="review-page__label">Front</p>
+                <div className="review-page__content review-page__content--small">{card.front}</div>
+                <hr className="review-page__divider" />
+                <p className="review-page__label">Back</p>
+                <div className="review-page__content">{card.back}</div>
+              </div>
+            </div>
+          ) : (
+            <div className="review-page__card-face review-page__card-face--front">
+              <div className="review-page__card-face-scroll">
+                <p className="review-page__label">Front</p>
+                <div className="review-page__content">{card.front}</div>
+              </div>
+              <div className="review-page__flip-hint">Tap to flip</div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <footer className="review-page__footer">
+        {revealed ? (
+          <div className="review-page__ratings" role="group" aria-label="Rate card">
+            {ratings.map((rating) => {
+              const interval = preview?.[rating]?.intervalLabel ?? "";
+              return (
+                <button
+                  key={rating}
+                  className="review-page__rating-btn"
+                  disabled={saving}
+                  style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleRateCard(rating);
+                  }}
+                >
+                  <span className="review-page__rating-label">{rating === "good" ? "Good" : rating.charAt(0).toUpperCase() + rating.slice(1)}</span>
+                  {interval ? <span className="review-page__rating-interval">{interval}</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+        {error ? <p className="review-page__error" role="alert">{error}</p> : null}
+      </footer>
+    </main>
+  );
+}
+
+function LegacyReviewPage({ cards, previews, mode, onRate, onBack }: LegacyReviewPageProps | PracticeReviewPageProps) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -50,7 +228,7 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
 
   const isPractice = mode === "practice";
   const card = cards[index];
-  const preview = card ? previews[card.id] : undefined;
+  const preview = card ? previews?.[card.id] : undefined;
 
   const handleSelectLanguage = async (lang: string | null) => {
     if (!lang || !card) return;
@@ -152,7 +330,7 @@ export function ReviewPage({ cards, previews, mode = "study", onRate, onBack }: 
       setSaving(true);
       setError(null);
       try {
-        await onRate(card, rating, Date.now() - startedAt);
+        await onRate?.(card, rating, Date.now() - startedAt);
         setIndex((current) => current + 1);
       } catch (rateError) {
         setError(errorMessage(rateError));

@@ -7,7 +7,7 @@ import { ReviewPage } from "./ReviewPage";
 const card: LearningCard = {
   id: "card-1", deckId: "english", front: "bonjour", back: "hello", state: "new",
   dueAt: "2026-07-10T00:00:00Z", reps: 0, lapses: 0, stability: null, difficulty: null,
-  lastReviewAt: null, tags: [], source: null, frontLanguage: null,
+  lastReviewAt: null, learningStep: null, tags: [], source: null, frontLanguage: null,
 };
 
 beforeEach(() => {

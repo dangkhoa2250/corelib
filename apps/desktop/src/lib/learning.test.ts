@@ -17,6 +17,9 @@ import {
   updateMemoraSettings,
   getDeckLearningSettings,
   updateDeckLearningSettings,
+  startStudySession,
+  refreshStudySession,
+  rateStudyCard,
 } from "./learning";
 
 describe("learning bridge", () => {
@@ -93,5 +96,27 @@ describe("learning bridge", () => {
     expect(call).toHaveBeenNthCalledWith(5, "update_deck_learning_settings", {
       payload: { deckId: "deck-1", newCardsPerDay: null },
     });
+  });
+  it("invokes backend-owned study session commands", async () => {
+    const call = vi.fn().mockResolvedValue({});
+    const rating = {
+      sessionId: "session-1",
+      cardId: "card-1",
+      grantToken: "grant-1",
+      expectedState: "review" as const,
+      expectedDueAt: "2026-07-16T09:00:00.000Z",
+      rating: "good" as const,
+      elapsedMs: 1500,
+    };
+
+    await startStudySession({ kind: "all" }, call);
+    await startStudySession({ kind: "deck", deckId: "deck-1" }, call);
+    await refreshStudySession("session-1", call);
+    await rateStudyCard(rating, call);
+
+    expect(call).toHaveBeenNthCalledWith(1, "start_study_session", { scope: { kind: "all" } });
+    expect(call).toHaveBeenNthCalledWith(2, "start_study_session", { scope: { kind: "deck", deckId: "deck-1" } });
+    expect(call).toHaveBeenNthCalledWith(3, "refresh_study_session", { sessionId: "session-1" });
+    expect(call).toHaveBeenNthCalledWith(4, "rate_study_card", { payload: rating });
   });
 });

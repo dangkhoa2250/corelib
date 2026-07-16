@@ -342,6 +342,7 @@ export function CardBrowser({
       frontLanguage: null,
       difficulty: null,
       lastReviewAt: null,
+      learningStep: null,
       source: null,
       tags: [],
       createdAt: new Date().toISOString(),
