@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 import { ActionMenu } from "../../components/ActionMenu";
 import { Button } from "../../components/Button";
-import type { Deck, LearningCard, DeckStatistics } from "../../domain/learning";
+import type { Deck, LearningCard, DeckStatistics, DeckLearningSettings } from "../../domain/learning";
+import { DeckLearningSettingsDialog } from "./DeckLearningSettingsDialog";
 
 interface MemoraPageProps {
   listDecks: () => Promise<Deck[]>;
@@ -13,6 +14,8 @@ interface MemoraPageProps {
   deleteDeck: (id: string) => Promise<void>;
   countDeckCards: (id: string) => Promise<number>;
   getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
+  getDeckLearningSettings: (deckId: string) => Promise<DeckLearningSettings>;
+  updateDeckLearningSettings: (deckId: string, newCardsPerDay: number | null) => Promise<DeckLearningSettings>;
   onOpenDeck: (deck: Deck) => void;
   onStudyDeck: (deckId: string) => void;
   onPracticeAll: (deckId: string) => void;
@@ -21,6 +24,8 @@ interface MemoraPageProps {
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
+
+type DeckRowMode = "idle" | "rename" | "delete" | "learning";
 
 interface DeckRowProps {
   deck: Deck;
@@ -33,14 +38,17 @@ interface DeckRowProps {
   onPracticeAll: () => void;
   countDeckCards: (id: string) => Promise<number>;
   getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
+  getDeckLearningSettings: (deckId: string) => Promise<DeckLearningSettings>;
+  updateDeckLearningSettings: (deckId: string, newCardsPerDay: number | null) => Promise<DeckLearningSettings>;
 }
 
-function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onStudy, onPracticeAll, countDeckCards, getDeckStatistics: fetchStats }: DeckRowProps) {
-  const [mode, setMode] = useState<"idle" | "rename" | "delete">("idle");
+function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onStudy, onPracticeAll, countDeckCards, getDeckStatistics: fetchStats, getDeckLearningSettings, updateDeckLearningSettings }: DeckRowProps) {
+  const [mode, setMode] = useState<DeckRowMode>("idle");
   const [nameValue, setNameValue] = useState(deck.name);
   const [saving, setSaving] = useState(false);
   const [cardCount, setCardCount] = useState<number | null>(null);
   const [stats, setStats] = useState<DeckStatistics | null>(null);
+  const [learningSettings, setLearningSettings] = useState<DeckLearningSettings | null>(null);
 
   useEffect(() => {
     fetchStats(deck.id)
@@ -54,6 +62,14 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
     void countDeckCards(deck.id)
       .then(setCardCount)
       .catch(() => setCardCount(null));
+  };
+
+  const openLearningSettings = () => {
+    setLearningSettings(null);
+    setMode("learning");
+    void getDeckLearningSettings(deck.id)
+      .then(setLearningSettings)
+      .catch(() => setMode("idle"));
   };
 
   if (mode === "rename") {
@@ -175,6 +191,16 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
               onClick={(event) => {
                 event.stopPropagation();
                 onMenuToggle(false);
+                openLearningSettings();
+              }}
+              type="button"
+            >
+              Learning settings
+            </button>
+            <button
+              onClick={(event) => {
+                event.stopPropagation();
+                onMenuToggle(false);
                 setNameValue(deck.name);
                 setMode("rename");
               }}
@@ -196,11 +222,27 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
           </div>
         )}
       </div>
+      {mode === "learning" && learningSettings ? (
+        <DeckLearningSettingsDialog
+          deckName={deck.name}
+          onCancel={() => {
+            setMode("idle");
+            setLearningSettings(null);
+          }}
+          onSave={async (newCardsPerDay) => {
+            const updated = await updateDeckLearningSettings(deck.id, newCardsPerDay);
+            setMode("idle");
+            setLearningSettings(null);
+            return updated;
+          }}
+          settings={learningSettings}
+        />
+      ) : null}
     </li>
   );
 }
 
-export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, getDeckStatistics, onOpenDeck, onStudyDeck, onPracticeAll }: MemoraPageProps) {
+export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, getDeckStatistics, getDeckLearningSettings, updateDeckLearningSettings, onOpenDeck, onStudyDeck, onPracticeAll }: MemoraPageProps) {
   const [decks, setDecks] = useState<Deck[] | null>(null);
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -333,8 +375,10 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
             <DeckRow
               countDeckCards={countDeckCards}
               deck={deck}
+              getDeckLearningSettings={getDeckLearningSettings}
               getDeckStatistics={getDeckStatistics}
               key={deck.id}
+              updateDeckLearningSettings={updateDeckLearningSettings}
               menuOpen={openMenuId === deck.id}
               onDelete={() => handleDeleteDeck(deck.id)}
               onPracticeAll={() => onPracticeAll(deck.id)}

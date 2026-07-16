@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { MemoraPage } from "./MemoraPage";
 
@@ -11,32 +12,44 @@ const englishDeck = {
   archived: false,
 };
 
-function renderMemora() {
+function renderMemora(overrides: Partial<ComponentProps<typeof MemoraPage>> = {}) {
   const onOpenDeck = vi.fn();
   const onStudyDeck = vi.fn();
   const onPracticeAll = vi.fn();
 
-  render(
-    <MemoraPage
-      countDeckCards={vi.fn().mockResolvedValue(4)}
-      createDeck={vi.fn()}
-      deleteDeck={vi.fn()}
-      getDeckStatistics={vi.fn().mockResolvedValue({
-        totalCards: 4,
-        newCards: 1,
-        learningCards: 1,
-        reviewCards: 1,
-        dueCards: 0,
-      })}
-      listDecks={vi.fn().mockResolvedValue([englishDeck])}
-      listDueCards={vi.fn().mockResolvedValue([{ id: "due-1" }, { id: "due-2" }])}
-      onOpenDeck={onOpenDeck}
-      onPracticeAll={onPracticeAll}
-      onReviewToday={vi.fn()}
-      onStudyDeck={onStudyDeck}
-      renameDeck={vi.fn()}
-    />,
-  );
+  const defaults: ComponentProps<typeof MemoraPage> = {
+    countDeckCards: vi.fn().mockResolvedValue(4),
+    createDeck: vi.fn(),
+    deleteDeck: vi.fn(),
+    getDeckStatistics: vi.fn().mockResolvedValue({
+      totalCards: 4,
+      newCards: 1,
+      learningCards: 1,
+      reviewCards: 1,
+      dueCards: 0,
+    }),
+    getDeckLearningSettings: vi.fn().mockResolvedValue({
+      deckId: "english",
+      inheritedNewCardsPerDay: 20,
+      newCardsPerDay: null,
+      effectiveNewCardsPerDay: 20,
+    }),
+    updateDeckLearningSettings: vi.fn().mockResolvedValue({
+      deckId: "english",
+      inheritedNewCardsPerDay: 20,
+      newCardsPerDay: null,
+      effectiveNewCardsPerDay: 20,
+    }),
+    listDecks: vi.fn().mockResolvedValue([englishDeck]),
+    listDueCards: vi.fn().mockResolvedValue([{ id: "due-1" }, { id: "due-2" }]),
+    onOpenDeck,
+    onPracticeAll,
+    onReviewToday: vi.fn(),
+    onStudyDeck,
+    renameDeck: vi.fn(),
+  };
+
+  render(<MemoraPage {...defaults} {...overrides} />);
 
   return { onOpenDeck, onPracticeAll, onStudyDeck };
 }
@@ -66,5 +79,28 @@ describe("MemoraPage", () => {
     renderMemora();
 
     expect(await screen.findByRole("button", { name: "Review 2 Ready" })).toBeInTheDocument();
+  });
+
+  it("opens Learning settings from the deck actions menu", async () => {
+    const user = userEvent.setup();
+    const getDeckLearningSettings = vi.fn().mockResolvedValue({
+      deckId: "english",
+      inheritedNewCardsPerDay: 20,
+      newCardsPerDay: null,
+      effectiveNewCardsPerDay: 20,
+    });
+    renderMemora({ getDeckLearningSettings });
+
+    await user.click(await screen.findByRole("button", {
+      name: "Actions for English",
+    }));
+    await user.click(screen.getByRole("button", {
+      name: "Learning settings",
+    }));
+
+    expect(getDeckLearningSettings).toHaveBeenCalledWith("english");
+    expect(await screen.findByRole("dialog", {
+      name: "Learning settings for English",
+    })).toBeInTheDocument();
   });
 });
