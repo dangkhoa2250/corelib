@@ -3,9 +3,10 @@ use tempfile::TempDir;
 
 use crate::{
     library_db::LibraryDatabase,
-    scheduler::{CardScheduleInput, CardState, ReviewScheduler, SchedulerConfig},
+    scheduler::{CardScheduleInput, CardState, Rating, ReviewScheduler, SchedulerConfig},
     study_queue::{
-        DeckLearningSettingsUpdate, MemoraSettingsUpdate, StudyScope, StudySession,
+        DeckLearningSettingsUpdate, MemoraSettingsUpdate, StudyGrant, StudyRating, StudyScope,
+        StudySession,
     },
 };
 
@@ -87,6 +88,57 @@ fn insert_due_review(database: &mut LibraryDatabase, id: &str, deck_id: &str) {
         utc("2026-07-16T08:00:00.000Z"),
         None,
     );
+}
+
+fn rating_from(grant: &StudyGrant, session: &StudySession, now: DateTime<Utc>) -> StudyRating {
+    StudyRating {
+        session_id: session.session_id.clone(),
+        card_id: grant.card.id.clone(),
+        grant_token: grant.grant_token.clone(),
+        expected_state: grant.expected_state.clone(),
+        expected_due_at: grant.expected_due_at.clone(),
+        rating: Rating::Good,
+        elapsed_ms: 1000,
+        now,
+        study_day: "2026-07-16".into(),
+    }
+}
+
+fn review_log_count(database: &LibraryDatabase, card_id: &str) -> i64 {
+    database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM review_logs WHERE card_id = ?1",
+            rusqlite::params![card_id],
+            |row| row.get(0),
+        )
+        .expect("count review logs")
+}
+
+fn replace_open_grant_for_test(
+    database: &mut LibraryDatabase,
+    session_id: &str,
+    original: &StudyGrant,
+    replacement_card_id: &str,
+) -> StudyGrant {
+    let card = database
+        .card_by_id(replacement_card_id)
+        .expect("read replacement")
+        .expect("replacement card");
+    database
+        .connection
+        .execute(
+            "UPDATE study_session_cards SET card_id=?1, expected_state=?2, expected_due_at=?3 WHERE session_id=?4 AND grant_token=?5 AND consumed_at IS NULL",
+            rusqlite::params![replacement_card_id, card.state, card.due_at, session_id, original.grant_token],
+        )
+        .expect("replace test grant");
+    StudyGrant {
+        grant_token: original.grant_token.clone(),
+        expected_state: card.state.clone(),
+        expected_due_at: card.due_at.clone(),
+        card,
+        preview: original.preview.clone(),
+    }
 }
 
 fn new_count(session: &StudySession, deck_id: &str) -> usize {
@@ -268,4 +320,89 @@ fn queue_preview_matches_direct_scheduler_preview() {
             .expect("preview");
         assert_eq!(grant.preview, expected);
     }
+}
+
+#[test]
+fn rating_consumes_one_grant_and_writes_one_review_atomically() {
+    let (_directory, mut database) = seeded_learning_database();
+    insert_due_review(&mut database, "review-1", "deck-1");
+    let now = utc("2026-07-16T09:00:00.000Z");
+    let session = database
+        .start_study_session(StudyScope::Deck("deck-1".into()), now, "2026-07-16")
+        .unwrap();
+    let grant = &session.cards[0];
+
+    let rating = StudyRating {
+        session_id: session.session_id.clone(),
+        card_id: grant.card.id.clone(),
+        grant_token: grant.grant_token.clone(),
+        expected_state: grant.expected_state.clone(),
+        expected_due_at: grant.expected_due_at.clone(),
+        rating: Rating::Good,
+        elapsed_ms: 1200,
+        now,
+        study_day: "2026-07-16".into(),
+    };
+
+    let first = database.rate_study_card(rating.clone()).expect("rate card");
+    let second = database.rate_study_card(rating).expect("idempotent retry");
+    assert_eq!(second.review_log_id, first.review_log_id);
+    assert_eq!(review_log_count(&database, "review-1"), 1);
+}
+
+#[test]
+fn stale_or_suspended_grant_is_rejected_without_writes() {
+    let (_directory, mut database) = seeded_learning_database();
+    insert_due_review(&mut database, "review-1", "deck-1");
+    let now = utc("2026-07-16T09:00:00.000Z");
+    let session = database
+        .start_study_session(StudyScope::Deck("deck-1".into()), now, "2026-07-16")
+        .unwrap();
+    let grant = session.cards[0].clone();
+    database
+        .set_cards_suspended(&["review-1".into()], true)
+        .unwrap();
+
+    let error = database
+        .rate_study_card(rating_from(&grant, &session, now))
+        .expect_err("reject suspended card");
+    assert_eq!(error.to_string(), "study card changed; refresh the session");
+    assert_eq!(review_log_count(&database, "review-1"), 0);
+}
+
+#[test]
+fn new_card_allowance_is_checked_when_rating_not_when_granted() {
+    let (_directory, mut database) = seeded_learning_database();
+    database
+        .update_memora_settings(MemoraSettingsUpdate {
+            new_cards_per_day: 1,
+            desired_retention: 0.90,
+        })
+        .unwrap();
+    insert_new_cards(&mut database, "deck-1", 2);
+    let now = utc("2026-07-16T09:00:00.000Z");
+    let first_session = database
+        .start_study_session(StudyScope::All, now, "2026-07-16")
+        .unwrap();
+    let second_session = database
+        .start_study_session(StudyScope::All, now, "2026-07-16")
+        .unwrap();
+    let second_grant = replace_open_grant_for_test(
+        &mut database,
+        &second_session.session_id,
+        &second_session.cards[0],
+        "deck-1-new-1",
+    );
+
+    database
+        .rate_study_card(rating_from(&first_session.cards[0], &first_session, now))
+        .unwrap();
+
+    let error = database
+        .rate_study_card(rating_from(&second_grant, &second_session, now))
+        .expect_err("limit reached");
+    assert_eq!(
+        error.to_string(),
+        "new card limit reached; refresh the session"
+    );
 }

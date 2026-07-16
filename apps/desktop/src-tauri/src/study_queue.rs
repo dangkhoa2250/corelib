@@ -1,14 +1,26 @@
 use chrono::{DateTime, Duration, NaiveDate, SecondsFormat, Utc};
-use rusqlite::{params, OptionalExtension};
+use rusqlite::{params, OptionalExtension, Row, Transaction};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::library_db::{LibraryDatabase, LibraryDbError, Result};
-use crate::model::LearningCardSummary;
+use crate::model::{CardSourcePayload, LearningCardSummary, SelectionRect};
 use crate::scheduler::{
-    CardScheduleInput, CardState, ReviewPreview, ReviewScheduler, SchedulerConfig,
+    CardScheduleInput, CardState, Rating, ReviewPreview, ReviewScheduler, ScheduledState,
+    SchedulerConfig,
 };
 
 const SCHEDULER_VERSION: &str = "memora-learning-v2+fsrs-6.6.0";
+
+type GrantRow = (String, String, i64, Option<String>, Option<String>);
+type CardStateRow = (
+    String,
+    String,
+    Option<i64>,
+    Option<String>,
+    String,
+    Option<String>,
+);
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StudyScope {
@@ -39,6 +51,26 @@ pub struct StudySession {
     pub cards: Vec<StudyGrant>,
     pub counts: StudyCounts,
     pub next_learning_due_at: Option<String>,
+}
+
+#[derive(Clone)]
+pub struct StudyRating {
+    pub session_id: String,
+    pub card_id: String,
+    pub grant_token: String,
+    pub expected_state: String,
+    pub expected_due_at: String,
+    pub rating: Rating,
+    pub elapsed_ms: i64,
+    pub now: DateTime<Utc>,
+    pub study_day: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyRatingResult {
+    pub card: LearningCardSummary,
+    pub review_log_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -513,6 +545,307 @@ impl LibraryDatabase {
         )?;
         Ok(due)
     }
+
+    pub fn rate_study_card(&mut self, rating: StudyRating) -> Result<StudyRatingResult> {
+        let now_str = rfc3339(rating.now);
+        let desired_retention = self.memora_settings()?.desired_retention as f32;
+        let scheduler = ReviewScheduler::new(SchedulerConfig {
+            desired_retention,
+            version: SCHEDULER_VERSION.into(),
+        })
+        .map_err(|error| LibraryDbError::InvalidLearning(error.to_string()))?;
+
+        let tx = self
+            .connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+
+        let grant: Option<GrantRow> = tx
+            .query_row(
+                "SELECT expected_state, expected_due_at, admitted_as_new, consumed_at, result_json
+                 FROM study_session_cards
+                 WHERE grant_token = ?1 AND session_id = ?2 AND card_id = ?3",
+                params![rating.grant_token, rating.session_id, rating.card_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<String>>(4)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let (grant_state, grant_due_at, admitted_as_new, consumed_at, result_json) =
+            grant.ok_or_else(stale_grant)?;
+
+        if consumed_at.is_some() {
+            if let Some(result_json) = result_json {
+                let result: StudyRatingResult = serde_json::from_str(&result_json)
+                    .map_err(|error| LibraryDbError::InvalidLearning(error.to_string()))?;
+                tx.commit()?;
+                return Ok(result);
+            }
+            return Err(stale_grant());
+        }
+
+        let expires_at: String = tx.query_row(
+            "SELECT expires_at FROM study_sessions WHERE id = ?1",
+            params![rating.session_id],
+            |row| row.get(0),
+        )?;
+        if expires_at.as_str() <= now_str.as_str() {
+            return Err(LibraryDbError::InvalidLearning("study session expired".into()));
+        }
+
+        if grant_state != rating.expected_state || grant_due_at != rating.expected_due_at {
+            return Err(stale_grant());
+        }
+
+        let card_row: Option<CardStateRow> = tx
+            .query_row(
+                "SELECT state, due_at, learning_step, memory_state_json, deck_id, last_review_at
+                 FROM cards
+                 WHERE id = ?1 AND deleted_at IS NULL",
+                params![rating.card_id],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<i64>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, Option<String>>(5)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let (card_state, card_due_at, learning_step, memory_state_json, deck_id, last_review_at) =
+            card_row.ok_or_else(stale_grant)?;
+
+        if card_state != rating.expected_state
+            || card_due_at != rating.expected_due_at
+            || card_due_at.as_str() > now_str.as_str()
+        {
+            return Err(stale_grant());
+        }
+
+        if admitted_as_new == 1 || card_state == "new" {
+            let effective_limit = deck_effective_new_cards_per_day(&tx, &deck_id)?;
+            let introduced: i64 = tx.query_row(
+                "SELECT COUNT(*) FROM card_introductions WHERE deck_id = ?1 AND study_day = ?2",
+                params![deck_id, rating.study_day],
+                |row| row.get(0),
+            )?;
+            if effective_limit - introduced <= 0 {
+                return Err(LibraryDbError::InvalidLearning(
+                    "new card limit reached; refresh the session".into(),
+                ));
+            }
+            tx.execute(
+                "INSERT INTO card_introductions(card_id, deck_id, study_day, introduced_at)
+                 VALUES(?1, ?2, ?3, ?4)",
+                params![rating.card_id, deck_id, rating.study_day, now_str],
+            )?;
+        }
+
+        let elapsed_days = elapsed_days(last_review_at.as_deref(), rating.now)?;
+        let input = CardScheduleInput {
+            state: parse_card_state(&card_state)?,
+            learning_step: learning_step
+                .map(|step| {
+                    u8::try_from(step)
+                        .map_err(|_| LibraryDbError::InvalidLearning("invalid learning step".into()))
+                })
+                .transpose()?,
+            memory_state_json,
+            elapsed_days,
+        };
+        let scheduled = scheduler
+            .apply(input, rating.rating, rating.now)
+            .map_err(|error| LibraryDbError::InvalidLearning(error.to_string()))?;
+
+        let review_log_id = write_review_in_tx(
+            &tx,
+            &rating,
+            &card_state,
+            &card_due_at,
+            &scheduled,
+            &now_str,
+        )?;
+
+        let card = hydrate_card_in_tx(&tx, &rating.card_id)?
+            .ok_or(LibraryDbError::DocumentNotFound)?;
+        let result = StudyRatingResult {
+            card,
+            review_log_id: review_log_id.clone(),
+        };
+        let result_json = serde_json::to_string(&result)
+            .map_err(|error| LibraryDbError::InvalidLearning(error.to_string()))?;
+
+        tx.execute(
+            "UPDATE study_session_cards
+             SET consumed_at = ?1, review_log_id = ?2, result_json = ?3
+             WHERE grant_token = ?4 AND consumed_at IS NULL",
+            params![now_str, review_log_id, result_json, rating.grant_token],
+        )?;
+
+        tx.commit()?;
+        Ok(result)
+    }
+}
+
+fn write_review_in_tx(
+    tx: &Transaction<'_>,
+    rating: &StudyRating,
+    prior_state: &str,
+    prior_due_at: &str,
+    scheduled: &ScheduledState,
+    reviewed_at: &str,
+) -> Result<String> {
+        let rating_name = match rating.rating {
+            Rating::Again => "again",
+            Rating::Hard => "hard",
+            Rating::Good => "good",
+            Rating::Easy => "easy",
+        };
+        let next_state = scheduled.state.label();
+        let learning_step = scheduled.learning_step.map(i64::from);
+        let stability = scheduled.stability.map(f64::from);
+        let difficulty = scheduled.difficulty.map(f64::from);
+
+        let changed = tx.execute(
+            "UPDATE cards SET state = ?1, learning_step = ?2, due_at = ?3, stability = ?4, difficulty = ?5, memory_state_json = ?6, reps = reps + 1, lapses = lapses + CASE WHEN ?7 THEN 1 ELSE 0 END, last_review_at = ?8, updated_at = ?8 WHERE id = ?9 AND state = ?10 AND due_at = ?11 AND deleted_at IS NULL",
+            params![
+                next_state,
+                learning_step,
+                scheduled.due_at,
+                stability,
+                difficulty,
+                scheduled.memory_state_json,
+                scheduled.increment_lapses,
+                reviewed_at,
+                rating.card_id,
+                prior_state,
+                prior_due_at,
+            ],
+        )?;
+        if changed != 1 {
+            return Err(stale_grant());
+        }
+
+        let review_log_id = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            params![
+                review_log_id,
+                rating.card_id,
+                reviewed_at,
+                rating_name,
+                prior_state,
+                next_state,
+                prior_due_at,
+                scheduled.due_at,
+                scheduled.interval_seconds,
+                rating.elapsed_ms,
+                SCHEDULER_VERSION,
+            ],
+        )?;
+        Ok(review_log_id)
+}
+
+fn stale_grant() -> LibraryDbError {
+    LibraryDbError::InvalidLearning("study card changed; refresh the session".into())
+}
+
+fn elapsed_days(last: Option<&str>, now: DateTime<Utc>) -> Result<u32> {
+    let Some(last) = last else { return Ok(0) };
+    let then = DateTime::parse_from_rfc3339(last)
+        .map(|value| value.with_timezone(&Utc))
+        .map_err(|_| LibraryDbError::InvalidLearning("invalid learning timestamp".into()))?;
+    Ok((now.signed_duration_since(then).num_seconds().max(0) as f64 / 86_400.0).floor() as u32)
+}
+
+fn deck_effective_new_cards_per_day(tx: &Transaction<'_>, deck_id: &str) -> Result<i64> {
+    let inherited: i64 = tx.query_row(
+        "SELECT new_cards_per_day FROM memora_settings WHERE id = 1",
+        [],
+        |row| row.get(0),
+    )?;
+    let custom: Option<i64> = tx
+        .query_row(
+            "SELECT new_cards_per_day FROM deck_learning_settings WHERE deck_id = ?1",
+            params![deck_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    Ok(custom.unwrap_or(inherited))
+}
+
+fn hydrate_card_in_tx(
+    tx: &Transaction<'_>,
+    card_id: &str,
+) -> Result<Option<LearningCardSummary>> {
+    tx.query_row(
+        "SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language,learning_step FROM cards WHERE id=?1 AND deleted_at IS NULL",
+        params![card_id],
+        |row| hydrate_card_row_in_tx(tx, row),
+    )
+    .optional()
+    .map_err(Into::into)
+}
+
+fn hydrate_card_row_in_tx(
+    tx: &Transaction<'_>,
+    row: &Row<'_>,
+) -> rusqlite::Result<LearningCardSummary> {
+    let id: String = row.get(0)?;
+    let deck_id: String = row.get(1)?;
+    let source = tx
+        .query_row(
+            "SELECT document_id,page,quote,rects_json FROM card_sources WHERE card_id=?1",
+            params![id],
+            |r| {
+                let raw: String = r.get(3)?;
+                let rects: Vec<SelectionRect> = serde_json::from_str(&raw).map_err(|e| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        3,
+                        rusqlite::types::Type::Text,
+                        Box::new(e),
+                    )
+                })?;
+                Ok(CardSourcePayload {
+                    document_id: r.get(0)?,
+                    page: r.get(1)?,
+                    quote: r.get(2)?,
+                    rects,
+                })
+            },
+        )
+        .optional()?;
+    let mut tags_stmt = tx.prepare(
+        "SELECT t.name FROM tags t JOIN card_tags ct ON ct.tag_id=t.id WHERE ct.card_id=?1 ORDER BY ct.rowid",
+    )?;
+    let tags = tags_stmt
+        .query_map(params![id], |r| r.get(0))?
+        .collect::<std::result::Result<Vec<String>, _>>()?;
+    Ok(LearningCardSummary {
+        id,
+        deck_id,
+        front: row.get(2)?,
+        back: row.get(3)?,
+        state: row.get(4)?,
+        due_at: row.get(5)?,
+        reps: row.get(6)?,
+        lapses: row.get(7)?,
+        stability: row.get(8)?,
+        difficulty: row.get(9)?,
+        last_review_at: row.get(10)?,
+        front_language: row.get(11)?,
+        learning_step: row.get(12)?,
+        source,
+        tags,
+    })
 }
 
 fn rfc3339(value: DateTime<Utc>) -> String {

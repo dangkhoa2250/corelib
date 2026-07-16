@@ -23,12 +23,14 @@ use crate::{
     model::DocumentSummary,
     model::{
         CardSourcePayload, DeckLearningSettingsPayload, DeckSummary, LearningCardSummary,
-        MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload, SearchResultPayload,
+        MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload, StudyCountsPayload,
+        StudyGrantPayload, StudyScopePayload, StudySessionPayload, SearchResultPayload,
         SelectionRect, UpdateDeckLearningSettingsPayload,
     },
     scheduler::{CardScheduleInput, CardState, Rating, ReviewScheduler, ScheduledState},
     study_queue::{
         DeckLearningSettings, DeckLearningSettingsUpdate, MemoraSettings, MemoraSettingsUpdate,
+        StudyGrant, StudyRating, StudyRatingResult, StudyScope, StudySession,
     },
 };
 
@@ -1252,6 +1254,126 @@ pub fn update_deck_learning_settings(
     learning_lock(&state)?
         .update_deck_learning_settings(&payload.deck_id, update)
         .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyRatingPayload {
+    pub session_id: String,
+    pub card_id: String,
+    pub grant_token: String,
+    pub expected_state: String,
+    pub expected_due_at: String,
+    pub rating: Rating,
+    pub elapsed_ms: i64,
+}
+
+pub(crate) fn scope_from_payload(payload: StudyScopePayload) -> Result<StudyScope, String> {
+    match payload.kind.as_str() {
+        "all" => Ok(StudyScope::All),
+        "deck" => {
+            let deck_id = payload
+                .deck_id
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "study scope deck id is required".to_owned())?;
+            Ok(StudyScope::Deck(deck_id))
+        }
+        _ => Err("invalid study scope".to_owned()),
+    }
+}
+
+fn scope_to_payload(scope: &StudyScope) -> StudyScopePayload {
+    match scope {
+        StudyScope::All => StudyScopePayload {
+            kind: "all".to_owned(),
+            deck_id: None,
+        },
+        StudyScope::Deck(id) => StudyScopePayload {
+            kind: "deck".to_owned(),
+            deck_id: Some(id.clone()),
+        },
+    }
+}
+
+fn grant_to_payload(grant: StudyGrant) -> StudyGrantPayload {
+    StudyGrantPayload {
+        grant_token: grant.grant_token,
+        expected_state: grant.expected_state,
+        expected_due_at: grant.expected_due_at,
+        card: grant.card,
+        preview: ReviewPreviewPayload {
+            again: preview_payload(&grant.preview.again),
+            hard: preview_payload(&grant.preview.hard),
+            good: preview_payload(&grant.preview.good),
+            easy: preview_payload(&grant.preview.easy),
+        },
+    }
+}
+
+fn session_to_payload(session: StudySession) -> StudySessionPayload {
+    StudySessionPayload {
+        session_id: session.session_id,
+        scope: scope_to_payload(&session.scope),
+        cards: session.cards.into_iter().map(grant_to_payload).collect(),
+        counts: StudyCountsPayload {
+            learning: session.counts.learning,
+            review: session.counts.review,
+            new: session.counts.new,
+        },
+        next_learning_due_at: session.next_learning_due_at,
+    }
+}
+
+#[tauri::command]
+pub fn start_study_session(
+    scope: StudyScopePayload,
+    state: State<'_, LibraryStore>,
+) -> Result<StudySessionPayload, String> {
+    let scope = scope_from_payload(scope)?;
+    let now = Utc::now();
+    let study_day = chrono::Local::now().date_naive().to_string();
+    learning_lock(&state)?
+        .start_study_session(scope, now, &study_day)
+        .map(session_to_payload)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn refresh_study_session(
+    session_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<StudySessionPayload, String> {
+    let now = Utc::now();
+    let study_day = chrono::Local::now().date_naive().to_string();
+    learning_lock(&state)?
+        .refresh_study_session(&session_id, now, &study_day)
+        .map(session_to_payload)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rate_study_card(
+    payload: StudyRatingPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<StudyRatingResult, String> {
+    if payload.elapsed_ms < 0 {
+        return Err("elapsedMs must be nonnegative".to_owned());
+    }
+    let now = Utc::now();
+    let study_day = chrono::Local::now().date_naive().to_string();
+    learning_lock(&state)?
+        .rate_study_card(StudyRating {
+            session_id: payload.session_id,
+            card_id: payload.card_id,
+            grant_token: payload.grant_token,
+            expected_state: payload.expected_state,
+            expected_due_at: payload.expected_due_at,
+            rating: payload.rating,
+            elapsed_ms: payload.elapsed_ms,
+            now,
+            study_day,
+        })
         .map_err(|e| e.to_string())
 }
 
