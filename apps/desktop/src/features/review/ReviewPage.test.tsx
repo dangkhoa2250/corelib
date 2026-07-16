@@ -71,6 +71,32 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+test("study and practice share the same two-face flip structure", async () => {
+  const user = userEvent.setup();
+  const { unmount } = render(
+    <ReviewPage
+      mode="study"
+      session={studySession}
+      onRate={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
+
+  const studyCard = screen.getByRole("button", { name: "Flashcard" });
+  expect(studyCard.querySelectorAll(".review-page__card-face--front")).toHaveLength(1);
+  expect(studyCard.querySelectorAll(".review-page__card-face--back")).toHaveLength(1);
+
+  await user.click(studyCard);
+  expect(studyCard).toHaveClass("review-page__card--flipped");
+  expect(screen.getByRole("group", { name: "Rate card" })).toBeInTheDocument();
+
+  unmount();
+  render(<ReviewPage mode="practice" cards={[card]} />);
+  const practiceCard = screen.getByRole("button", { name: "Flashcard" });
+  expect(practiceCard.querySelectorAll(".review-page__card-face--front")).toHaveLength(1);
+  expect(practiceCard.querySelectorAll(".review-page__card-face--back")).toHaveLength(1);
+});
+
 test("rates a grant and refreshes the backend queue", async () => {
   const user = userEvent.setup();
   const onRate = vi.fn().mockResolvedValue({
@@ -182,7 +208,7 @@ test("waits for the due time only when the visible queue is empty", async () => 
       onRefresh={onRefreshEmpty}
     />,
   );
-  expect(await screen.findByText(replacementGrant.card.front)).toBeInTheDocument();
+  expect(await screen.findAllByText(replacementGrant.card.front)).toHaveLength(2);
   expect(onRefreshEmpty).toHaveBeenCalledWith(studySession.sessionId);
 });
 
