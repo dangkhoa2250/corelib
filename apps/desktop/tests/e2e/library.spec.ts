@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 
-test("Library exposes Quick Open and Command Palette shortcuts", async ({ page }) => {
+test("Quick Open and Command Palette stay available in Settings", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, "__TAURI_INTERNALS__", {
       configurable: true,
@@ -27,10 +27,14 @@ test("Library exposes Quick Open and Command Palette shortcuts", async ({ page }
     });
   });
   await page.goto("http://127.0.0.1:1421");
-  await expect(page.getByRole("button", { name: "Search (Command K)" })).toBeVisible();
+  await page.getByRole("button", { name: "Settings" }).click();
+  const settingsSearch = page.getByLabel("Search settings");
+  await expect(settingsSearch).toBeVisible();
+  await settingsSearch.focus();
   await page.keyboard.press("Control+K");
   await expect(page.getByRole("dialog", { name: "Quick Open" })).toBeVisible();
   await page.keyboard.press("Escape");
+  await settingsSearch.focus();
   await page.keyboard.press("Control+Shift+K");
   await expect(page.getByRole("dialog", { name: "Command Palette" })).toBeVisible();
 });

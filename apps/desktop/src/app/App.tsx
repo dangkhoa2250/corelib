@@ -673,19 +673,22 @@ export function App({
 
   if (route.name === "settings") {
     return (
-      <SettingsPage
-        hasApiKey={aiApi.hasApiKey}
-        saveApiKey={aiApi.saveApiKey}
-        clearApiKey={aiApi.clearApiKey}
-        listModels={aiApi.listModels}
-        appleTranslationAvailable={aiApi.appleTranslationAvailable}
-        onDefaultChange={handleTranslationDefaultChange}
-        onBack={() => setRoute({ name: "library" })}
-        saveDriveCredentials={saveGoogleDriveCredentials}
-        loadDriveCredentials={loadGoogleDriveCredentials}
-        clearDriveCredentials={clearGoogleDriveCredentials}
-        initialSection={route.section}
-      />
+      <>
+        <SettingsPage
+          hasApiKey={aiApi.hasApiKey}
+          saveApiKey={aiApi.saveApiKey}
+          clearApiKey={aiApi.clearApiKey}
+          listModels={aiApi.listModels}
+          appleTranslationAvailable={aiApi.appleTranslationAvailable}
+          onDefaultChange={handleTranslationDefaultChange}
+          onBack={() => setRoute({ name: "library" })}
+          saveDriveCredentials={saveGoogleDriveCredentials}
+          loadDriveCredentials={loadGoogleDriveCredentials}
+          clearDriveCredentials={clearGoogleDriveCredentials}
+          initialSection={route.section}
+        />
+        {palette}
+      </>
     );
   }
 

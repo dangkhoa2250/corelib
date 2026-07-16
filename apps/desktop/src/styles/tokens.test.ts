@@ -75,3 +75,20 @@ test("uses the reusable ScrollArea for the reader's thumbnail and PDF panes", ()
   expect(reader).toContain('import { ScrollArea } from "../../components/ScrollArea";');
   expect(reader.match(/<ScrollArea/g)?.length).toBeGreaterThanOrEqual(2);
 });
+
+test("uses neutral palette-specific scrollbars and match highlights", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const paletteStart = css.indexOf(".command-palette__backdrop");
+  const paletteEnd = css.indexOf("@media", paletteStart);
+  const paletteCss = css.slice(paletteStart, paletteEnd);
+
+  expect(paletteCss).toContain(".command-palette__results::-webkit-scrollbar-track {\n  background: transparent;");
+  expect(paletteCss).toContain(".command-palette__results::-webkit-scrollbar-track-piece {\n  background: transparent;");
+  expect(paletteCss).toMatch(/\.command-palette__results::-webkit-scrollbar-thumb \{[\s\S]*?background: var\(--scrollbar-thumb\);/);
+  expect(paletteCss).toContain(".command-palette__match {");
+  expect(paletteCss).toContain("background: transparent;");
+  expect(paletteCss).toContain("color: var(--text-primary);");
+  expect(paletteCss).toContain("background: var(--interactive-selected);");
+  expect(paletteCss).not.toContain("#0e9df4");
+});

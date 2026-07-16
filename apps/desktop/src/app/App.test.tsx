@@ -1020,3 +1020,27 @@ test("opens the search palette from the sidebar search field", async () => {
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(screen.getByRole("searchbox", { name: "Quick Open" })).toHaveFocus();
 });
+
+test("keeps Quick Open and Command Palette available from Settings", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Settings" }));
+  await screen.findByLabelText("Search settings");
+
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+  expect(await screen.findByRole("dialog", { name: "Quick Open" })).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: "Escape" });
+
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true, shiftKey: true });
+  expect(await screen.findByRole("dialog", { name: "Command Palette" })).toBeInTheDocument();
+});
