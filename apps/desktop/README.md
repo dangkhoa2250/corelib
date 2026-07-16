@@ -4,7 +4,16 @@ Desktop application built with Tauri, React, and TypeScript.
 
 ## Native learning cards
 
-Select text in the PDF reader and choose **Create flashcard**. The selected text becomes Front; write and edit Back yourself, then choose a deck and optional tags. Review today uses FSRS 6.6 with Again, Hard, Good, and Easy ratings. Cmd/Ctrl+K searches both documents and cards, and Show source returns to the original PDF page when it is still available.
+Select text in the PDF reader and choose **Create flashcard**. The selected text becomes Front; write and edit Back yourself, then choose a deck and optional tags. Cmd/Ctrl+K searches both documents and cards, and Show source returns to the original PDF page when it is still available.
+
+Memora uses fixed 1-minute and 10-minute learning steps before FSRS takes
+over long-term scheduling. Review Today is built by the native backend,
+prioritizes due learning and review cards, and applies the configured
+new-card allowance. Practice All never changes the real schedule.
+
+The default new-card allowance and desired retention live under
+Settings → Apps → Memora. A deck can override only its new-card allowance
+from the deck row's … → Learning settings menu.
 
 The learning data is local SQLite data. Removing a source PDF keeps its card and quote, but marks the source unavailable. Sync, AI card generation, cloze cards, and advanced statistics are intentionally deferred.
 
@@ -20,7 +29,7 @@ The Trash page lists soft-deleted cards with their original deck name. Deleting 
 
 - **91 frontend** unit tests (Vitest + Testing Library)
 - **89 Rust** unit tests + **1** PDF extraction isolation test
-- **2 Playwright E2E** tests (library import + learning card lifecycle)
+- **3 Playwright E2E** tests (library import + learning card lifecycle + practical learning flow)
 
 ```bash
 npm test                                    # frontend unit tests
