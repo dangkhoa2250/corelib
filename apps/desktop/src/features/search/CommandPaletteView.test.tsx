@@ -71,6 +71,13 @@ test("renders the selected row with a valid marker and keyboard navigation foote
   expect(screen.getByText("Escape")).toBeVisible();
 });
 
+test("uses the shared overlay ScrollArea instead of a native palette scrollbar", () => {
+  const { container } = renderView();
+
+  expect(container.querySelector(".command-palette__results")?.tagName).toBe("DIV");
+  expect(screen.getByRole("list", { name: "Results" })).toHaveClass("command-palette__result-list");
+});
+
 test("marks retained rows busy and disables them while a newer search is pending", () => {
   renderView({ isSearchPending: true });
 

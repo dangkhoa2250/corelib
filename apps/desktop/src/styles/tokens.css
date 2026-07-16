@@ -2084,6 +2084,9 @@ textarea::placeholder {
   padding: 18px 20px;
   border: 0;
   outline: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: none;
   color: var(--text-primary);
   background: transparent;
   font-size: 16px;
@@ -2096,15 +2099,19 @@ textarea::placeholder {
   font-weight: 400;
 }
 
+.command-palette__input:focus,
 .command-palette__input:focus-visible {
   outline: 0;
+  box-shadow: none;
 }
 
 .command-palette__results {
   max-height: min(52vh, 440px);
+}
+
+.command-palette__result-list {
   margin: 0;
   padding: 6px;
-  overflow-y: auto;
   list-style: none;
 }
 
@@ -2218,37 +2225,6 @@ textarea::placeholder {
   font-size: 10px;
   line-height: 1.2;
   text-align: center;
-}
-
-/* WKWebView can paint its own white track over global scrollbar rules. Keep
-   this scrollable surface explicit and leave only a themed floating thumb. */
-.command-palette__results::-webkit-scrollbar {
-  width: 10px;
-  background: var(--surface-1);
-}
-
-.command-palette__results::-webkit-scrollbar-track {
-  background: var(--surface-1);
-}
-
-.command-palette__results::-webkit-scrollbar-track-piece {
-  background: var(--surface-1);
-}
-
-.command-palette__results::-webkit-scrollbar-corner {
-  background: var(--surface-1);
-}
-
-.command-palette__results::-webkit-scrollbar-thumb {
-  min-height: 36px;
-  border: 3px solid transparent;
-  border-radius: 999px;
-  background: var(--scrollbar-thumb);
-  background-clip: padding-box;
-}
-
-.command-palette__results::-webkit-scrollbar-thumb:hover {
-  background-color: var(--scrollbar-thumb-hover);
 }
 
 @media (max-width: 480px) {

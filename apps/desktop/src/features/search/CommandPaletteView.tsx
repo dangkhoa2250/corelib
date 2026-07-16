@@ -1,6 +1,7 @@
 import type { RefObject, ReactNode } from "react";
 
 import type { CommandEntry } from "../../app/commandRegistry";
+import { ScrollArea } from "../../components/ScrollArea";
 
 export interface CommandPaletteGroup {
   section: string;
@@ -121,38 +122,40 @@ export function CommandPaletteView({
           value={query}
         />
         {error ? <div className="command-palette__error" role="alert">{error}</div> : null}
-        <ul aria-busy={isSearchPending} aria-label="Results" className="command-palette__results">
-          {groups.flatMap(({ results, section }) => {
-            const entries = results.map((result) => {
-              const index = flatIndex;
-              flatIndex += 1;
-              const isSelected = index === selectedIndex;
-              return (
-                <li key={result.id}>
-                  <button
-                    aria-label={`${resultVerb} ${result.title}${isSelected ? ", selected" : ""}`}
-                    className={isSelected ? "is-selected" : undefined}
-                    data-selected={isSelected ? "true" : undefined}
-                    disabled={isSearchPending}
-                    onClick={() => {
-                      if (isSearchPending) return;
-                      onSelect(index);
-                      onExecute(result);
-                    }}
-                    type="button"
-                  >
-                    <span className="command-palette__title">{highlightMatch(result.title, query)}</span>
-                    <small>{result.breadcrumb.join(" › ")}</small>
-                  </button>
-                </li>
-              );
-            });
-            return [
-              <li aria-hidden="true" className="command-palette__section-header" key={`header-${section}`}>{section}</li>,
-              ...entries,
-            ];
-          })}
-        </ul>
+        <ScrollArea className="command-palette__results">
+          <ul aria-busy={isSearchPending} aria-label="Results" className="command-palette__result-list">
+            {groups.flatMap(({ results, section }) => {
+              const entries = results.map((result) => {
+                const index = flatIndex;
+                flatIndex += 1;
+                const isSelected = index === selectedIndex;
+                return (
+                  <li key={result.id}>
+                    <button
+                      aria-label={`${resultVerb} ${result.title}${isSelected ? ", selected" : ""}`}
+                      className={isSelected ? "is-selected" : undefined}
+                      data-selected={isSelected ? "true" : undefined}
+                      disabled={isSearchPending}
+                      onClick={() => {
+                        if (isSearchPending) return;
+                        onSelect(index);
+                        onExecute(result);
+                      }}
+                      type="button"
+                    >
+                      <span className="command-palette__title">{highlightMatch(result.title, query)}</span>
+                      <small>{result.breadcrumb.join(" › ")}</small>
+                    </button>
+                  </li>
+                );
+              });
+              return [
+                <li aria-hidden="true" className="command-palette__section-header" key={`header-${section}`}>{section}</li>,
+                ...entries,
+              ];
+            })}
+          </ul>
+        </ScrollArea>
         <footer className="command-palette__footer">
           <span><kbd>↑↓</kbd> Navigate</span>
           <span><kbd>Enter</kbd> {resultVerb}</span>
