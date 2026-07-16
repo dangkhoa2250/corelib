@@ -161,6 +161,8 @@ fn review_updates_card_and_log_atomically() {
             rating: "good".into(),
             prior_state: "new".into(),
             next_state: "review".into(),
+            learning_step: None,
+            increment_lapses: false,
             prior_due_at: created.due_at.clone(),
             next_due_at: "9999-12-31T00:00:00.000Z".into(),
             interval_seconds: 86400,
@@ -176,6 +178,60 @@ fn review_updates_card_and_log_atomically() {
 }
 
 #[test]
+fn review_again_increments_lapses_once_then_relearning_again_does_not() {
+    let (_dir, mut db) = db();
+    let created = db.create_card(card("lapse me")).expect("create");
+    db.connection
+        .execute(
+            "UPDATE cards SET state='review', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
+            params![created.id],
+        )
+        .expect("update");
+
+    let relearning = db
+        .apply_review_atomic(AppliedReview {
+            card_id: created.id.clone(),
+            rating: "again".into(),
+            prior_state: "review".into(),
+            next_state: "relearning".into(),
+            learning_step: Some(0),
+            increment_lapses: true,
+            prior_due_at: "2026-07-10T00:00:00Z".into(),
+            next_due_at: "2026-07-10T00:10:00.000Z".into(),
+            interval_seconds: 600,
+            elapsed_ms: 10,
+            stability: Some(1.0),
+            difficulty: Some(6.0),
+            memory_state_json: Some(r#"{"stability":1.0,"difficulty":6.0}"#.into()),
+            scheduler_version: "test".into(),
+        })
+        .expect("review again");
+    assert_eq!(relearning.state, "relearning");
+    assert_eq!(relearning.learning_step, Some(0));
+    assert_eq!(relearning.lapses, 1);
+
+    let still_relearning = db
+        .apply_review_atomic(AppliedReview {
+            card_id: created.id.clone(),
+            rating: "again".into(),
+            prior_state: "relearning".into(),
+            next_state: "relearning".into(),
+            learning_step: Some(0),
+            increment_lapses: false,
+            prior_due_at: "2026-07-10T00:10:00.000Z".into(),
+            next_due_at: "2026-07-10T00:20:00.000Z".into(),
+            interval_seconds: 600,
+            elapsed_ms: 10,
+            stability: Some(1.0),
+            difficulty: Some(6.0),
+            memory_state_json: Some(r#"{"stability":1.0,"difficulty":6.0}"#.into()),
+            scheduler_version: "test".into(),
+        })
+        .expect("relearning again");
+    assert_eq!(still_relearning.lapses, 1);
+}
+
+#[test]
 fn review_log_failure_rolls_back_card_update() {
     let (_dir, mut db) = db();
     let created = db.create_card(card("rollback")).expect("create");
@@ -186,6 +242,8 @@ fn review_log_failure_rolls_back_card_update() {
         rating: "good".into(),
         prior_state: "new".into(),
         next_state: "review".into(),
+        learning_step: None,
+        increment_lapses: false,
         prior_due_at: created.due_at.clone(),
         next_due_at: "9999-12-31T00:00:00.000Z".into(),
         interval_seconds: 1,
@@ -210,6 +268,8 @@ fn rejects_invalid_review_state_and_empty_timestamps() {
         rating: "good".into(),
         prior_state: "new".into(),
         next_state: "bogus".into(),
+        learning_step: None,
+        increment_lapses: false,
         prior_due_at: " ".into(),
         next_due_at: "9999-12-31T00:00:00.000Z".into(),
         interval_seconds: 1,
@@ -237,6 +297,8 @@ fn rejects_nonfinite_review_parameters_and_nonobject_memory() {
                 rating: "good".into(),
                 prior_state: "new".into(),
                 next_state: "review".into(),
+                learning_step: None,
+                increment_lapses: false,
                 prior_due_at: created.due_at.clone(),
                 next_due_at: "9999-12-31T00:00:00.000Z".into(),
                 interval_seconds: 1,
@@ -764,6 +826,8 @@ fn trash_and_isolation() {
         rating: "good".into(),
         prior_state: "new".into(),
         next_state: "review".into(),
+        learning_step: None,
+        increment_lapses: false,
         prior_due_at: "2026-07-10T00:00:00Z".into(),
         next_due_at: "2026-07-11T00:00:00Z".into(),
         interval_seconds: 86400,

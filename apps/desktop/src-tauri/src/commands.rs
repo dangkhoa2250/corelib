@@ -26,7 +26,7 @@ use crate::{
         MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload, SearchResultPayload,
         SelectionRect, UpdateDeckLearningSettingsPayload,
     },
-    scheduler::{Rating, ReviewScheduler, ScheduledState},
+    scheduler::{CardScheduleInput, CardState, Rating, ReviewScheduler, ScheduledState},
     study_queue::{
         DeckLearningSettings, DeckLearningSettingsUpdate, MemoraSettings, MemoraSettingsUpdate,
     },
@@ -871,6 +871,33 @@ fn preview_payload(state: &ScheduledState) -> ReviewIntervalPayload {
     }
 }
 
+fn parse_card_state(state: &str) -> Result<CardState, String> {
+    match state {
+        "new" => Ok(CardState::New),
+        "learning" => Ok(CardState::Learning),
+        "review" => Ok(CardState::Review),
+        "relearning" => Ok(CardState::Relearning),
+        "suspended" => Ok(CardState::Suspended),
+        _ => Err(format!("invalid card state: {state}")),
+    }
+}
+
+fn schedule_input(
+    card: &LearningCardSummary,
+    memory: Option<String>,
+    now: DateTime<Utc>,
+) -> Result<CardScheduleInput, String> {
+    Ok(CardScheduleInput {
+        state: parse_card_state(&card.state)?,
+        learning_step: card
+            .learning_step
+            .map(|step| u8::try_from(step).map_err(|_| "invalid learning step".to_owned()))
+            .transpose()?,
+        memory_state_json: memory,
+        elapsed_days: elapsed_days(card.last_review_at.as_deref(), now)?,
+    })
+}
+
 #[tauri::command]
 pub fn preview_card_review(
     id: String,
@@ -883,12 +910,9 @@ pub fn preview_card_review(
         .ok_or_else(|| "card not found".to_owned())?;
     let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
     let now = Utc::now();
+    let input = schedule_input(&card, memory, now)?;
     let preview = ReviewScheduler::default()
-        .preview(
-            memory.as_deref(),
-            elapsed_days(card.last_review_at.as_deref(), now)?,
-            now,
-        )
+        .preview(input, now)
         .map_err(|e| e.to_string())?;
     Ok(ReviewPreviewPayload {
         again: preview_payload(&preview.again),
@@ -915,13 +939,9 @@ pub fn rate_card(
         .ok_or_else(|| "card not found".to_owned())?;
     let now = Utc::now();
     let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
+    let input = schedule_input(&card, memory, now)?;
     let next = ReviewScheduler::default()
-        .apply(
-            memory.as_deref(),
-            elapsed_days(card.last_review_at.as_deref(), now)?,
-            rating,
-            now,
-        )
+        .apply(input, rating, now)
         .map_err(|e| e.to_string())?;
     let rating_name = match rating {
         Rating::Again => "again",
@@ -933,14 +953,16 @@ pub fn rate_card(
         card_id: id,
         rating: rating_name.to_owned(),
         prior_state: card.state,
-        next_state: next.state,
+        next_state: next.state.label().to_owned(),
+        learning_step: next.learning_step.map(i64::from),
+        increment_lapses: next.increment_lapses,
         prior_due_at: card.due_at,
         next_due_at: next.due_at,
         interval_seconds: next.interval_seconds,
         elapsed_ms,
         stability: next.stability.map(f64::from),
         difficulty: next.difficulty.map(f64::from),
-        memory_state_json: Some(next.memory_state_json),
+        memory_state_json: next.memory_state_json,
         scheduler_version: ReviewScheduler::default().config().version.clone(),
     })
     .map_err(|e| e.to_string())
