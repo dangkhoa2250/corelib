@@ -19,6 +19,7 @@ export interface CommandPaletteViewProps {
   onSelectPrevious: () => void;
   close: () => void;
   error: string | null;
+  isSearchPending: boolean;
   searchboxRef: RefObject<HTMLInputElement | null>;
   resultVerb: string;
 }
@@ -52,6 +53,7 @@ export function CommandPaletteView({
   close,
   error,
   groups,
+  isSearchPending,
   label,
   onExecute,
   onQueryChange,
@@ -109,7 +111,7 @@ export function CommandPaletteView({
             } else if (event.key === "Enter") {
               event.preventDefault();
               const selected = groups.flatMap((group) => group.results)[selectedIndex];
-              if (selected) onExecute(selected);
+              if (selected && !isSearchPending) onExecute(selected);
             }
           }}
           placeholder="Search…"
@@ -119,7 +121,7 @@ export function CommandPaletteView({
           value={query}
         />
         {error ? <div className="command-palette__error" role="alert">{error}</div> : null}
-        <ul aria-label="Results" className="command-palette__results">
+        <ul aria-busy={isSearchPending} aria-label="Results" className="command-palette__results">
           {groups.flatMap(({ results, section }) => {
             const entries = results.map((result) => {
               const index = flatIndex;
@@ -131,7 +133,9 @@ export function CommandPaletteView({
                     aria-label={`${resultVerb} ${result.title}${isSelected ? ", selected" : ""}`}
                     className={isSelected ? "is-selected" : undefined}
                     data-selected={isSelected ? "true" : undefined}
+                    disabled={isSearchPending}
                     onClick={() => {
+                      if (isSearchPending) return;
                       onSelect(index);
                       onExecute(result);
                     }}

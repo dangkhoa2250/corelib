@@ -44,6 +44,7 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
   const [results, setResults] = useState<CommandEntry[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [isSearchPending, setIsSearchPending] = useState(false);
   const searchboxRef = useRef<HTMLInputElement>(null);
   const instanceId = useRef(Symbol("command-palette"));
   const isOpenRef = useRef(false);
@@ -70,6 +71,7 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
     setResults([]);
     setSelectedIndex(0);
     setError(null);
+    setIsSearchPending(false);
     shouldRestoreFocus.current = restoreFocus;
     if (restoreFocus && activePalette?.source === instanceId.current) activePalette = null;
     setIsOpen(false);
@@ -137,12 +139,14 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
         if (request === sequence.current) {
           setResults(searchResults);
           setSelectedIndex(0);
+          setIsSearchPending(false);
         }
       },
       (searchError) => {
         if (request === sequence.current) {
           setResults([]);
           setError(errorMessage(searchError));
+          setIsSearchPending(false);
         }
       },
     );
@@ -162,9 +166,9 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
   const changeQuery = useCallback((nextQuery: string) => {
     sequence.current += 1;
     setQuery(nextQuery);
-    setResults([]);
     setSelectedIndex(0);
     setError(null);
+    setIsSearchPending(true);
   }, []);
 
   const selectNext = useCallback(() => {
@@ -188,6 +192,7 @@ export const CommandPalette = forwardRef<CommandPaletteHandle, CommandPalettePro
       close={close}
       error={error}
       groups={groups}
+      isSearchPending={isSearchPending}
       label={label}
       onExecute={executeEntry}
       onQueryChange={changeQuery}

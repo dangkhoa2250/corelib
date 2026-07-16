@@ -114,7 +114,7 @@ test("executes the item that was clicked", async () => {
   expect(second).toHaveBeenCalledOnce();
 });
 
-test("clears stale results while a newer query is still searching", async () => {
+test("keeps prior results visible but blocks stale execution while a newer query is searching", async () => {
   const user = userEvent.setup();
   const staleExecute = vi.fn();
   let resolveLatestSearch: ((results: CommandEntry[]) => void) | undefined;
@@ -131,12 +131,16 @@ test("clears stale results while a newer query is still searching", async () => 
   await screen.findByRole("button", { name: "Open Stale, selected" });
   await user.type(screen.getByRole("searchbox"), "new");
 
-  expect(screen.queryByRole("button", { name: /Open Stale/ })).not.toBeInTheDocument();
+  const results = screen.getByRole("list", { name: "Results" });
+  expect(screen.getByRole("button", { name: "Open Stale, selected" })).toBeVisible();
+  expect(results).toHaveAttribute("aria-busy", "true");
   await user.keyboard("{Enter}");
   expect(staleExecute).not.toHaveBeenCalled();
 
   resolveLatestSearch?.([entry({ id: "latest", title: "Latest", execute: latestExecute })]);
   await screen.findByRole("button", { name: "Open Latest, selected" });
+  expect(screen.queryByRole("button", { name: /Open Stale/ })).not.toBeInTheDocument();
+  expect(results).toHaveAttribute("aria-busy", "false");
   await user.keyboard("{Enter}");
   expect(latestExecute).toHaveBeenCalledOnce();
 });

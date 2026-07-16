@@ -30,6 +30,7 @@ function renderView(overrides: Partial<ComponentProps<typeof CommandPaletteView>
         { section: "Library", results: [first] },
         { section: "Memora", results: [second] },
       ]}
+      isSearchPending={false}
       label="Quick Open"
       onExecute={vi.fn()}
       onQueryChange={vi.fn()}
@@ -68,6 +69,13 @@ test("renders the selected row with a valid marker and keyboard navigation foote
   expect(screen.getByText("↑↓")).toBeVisible();
   expect(screen.getByText("Enter")).toBeVisible();
   expect(screen.getByText("Escape")).toBeVisible();
+});
+
+test("marks retained rows busy and disables them while a newer search is pending", () => {
+  renderView({ isSearchPending: true });
+
+  expect(screen.getByRole("list", { name: "Results" })).toHaveAttribute("aria-busy", "true");
+  expect(screen.getByRole("button", { name: "Open Linear Algebra, selected" })).toBeDisabled();
 });
 
 test("delegates query and result keyboard actions to its callbacks", async () => {
