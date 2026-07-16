@@ -22,11 +22,12 @@ interface PublicRouteDefinition {
   title: string;
   aliases: string[];
   breadcrumb: string[];
+  route: AppRoute;
 }
 
 export const PUBLIC_ROUTE_CATALOG = {
-  library: { id: "route.library", title: "Library", aliases: ["documents", "pdf"], breadcrumb: ["Library"] },
-  memora: { id: "route.memora", title: "Memora", aliases: ["flashcards", "decks"], breadcrumb: ["Memora"] },
-  trash: { id: "route.trash", title: "Trash", aliases: ["deleted cards"], breadcrumb: ["Trash"] },
-  settings: { id: "route.settings", title: "Settings", aliases: ["preferences"], breadcrumb: ["Settings"] },
+  library: { id: "route.library", title: "Library", aliases: ["documents", "pdf"], breadcrumb: ["Library"], route: { name: "library" } },
+  memora: { id: "route.memora", title: "Memora", aliases: ["flashcards", "decks"], breadcrumb: ["Memora"], route: { name: "memora" } },
+  trash: { id: "route.trash", title: "Trash", aliases: ["deleted cards"], breadcrumb: ["Trash"], route: { name: "trash" } },
+  settings: { id: "route.settings", title: "Settings", aliases: ["preferences"], breadcrumb: ["Settings"], route: { name: "settings" } },
 } satisfies Record<PublicRouteName, PublicRouteDefinition>;

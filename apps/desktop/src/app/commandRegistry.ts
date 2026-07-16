@@ -87,38 +87,14 @@ function settingsDestination(
 
 function staticDestinations(context: CommandContext): CommandEntry[] {
   return [
-    destination(
-      PUBLIC_ROUTE_CATALOG.library.id,
-      PUBLIC_ROUTE_CATALOG.library.title,
-      PUBLIC_ROUTE_CATALOG.library.aliases,
-      PUBLIC_ROUTE_CATALOG.library.breadcrumb,
+    ...Object.values(PUBLIC_ROUTE_CATALOG).map((route) => destination(
+      route.id,
+      route.title,
+      route.aliases,
+      route.breadcrumb,
       "Navigate",
-      () => context.openRoute({ name: "library" }),
-    ),
-    destination(
-      PUBLIC_ROUTE_CATALOG.memora.id,
-      PUBLIC_ROUTE_CATALOG.memora.title,
-      PUBLIC_ROUTE_CATALOG.memora.aliases,
-      PUBLIC_ROUTE_CATALOG.memora.breadcrumb,
-      "Navigate",
-      () => context.openRoute({ name: "memora" }),
-    ),
-    destination(
-      PUBLIC_ROUTE_CATALOG.trash.id,
-      PUBLIC_ROUTE_CATALOG.trash.title,
-      PUBLIC_ROUTE_CATALOG.trash.aliases,
-      PUBLIC_ROUTE_CATALOG.trash.breadcrumb,
-      "Navigate",
-      () => context.openRoute({ name: "trash" }),
-    ),
-    destination(
-      PUBLIC_ROUTE_CATALOG.settings.id,
-      PUBLIC_ROUTE_CATALOG.settings.title,
-      PUBLIC_ROUTE_CATALOG.settings.aliases,
-      PUBLIC_ROUTE_CATALOG.settings.breadcrumb,
-      "Navigate",
-      () => context.openRoute({ name: "settings" }),
-    ),
+      () => context.openRoute(route.route),
+    )),
     settingsDestination(context, "appearance", "Appearance", ["theme"], ["Settings", "General"],),
     settingsDestination(context, "drive", "Google Drive", ["cloud", "oauth"], ["Settings", "General"],),
     settingsDestination(context, "model", "Model", ["provider", "translation"], ["Settings", "Models"],),
