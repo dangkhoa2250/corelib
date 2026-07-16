@@ -101,6 +101,13 @@ export interface StudyRatingResult {
   reviewLogId: string;
 }
 
+export interface StudyReadyCounts {
+  learning: number;
+  review: number;
+  new: number;
+  total: number;
+}
+
 export interface MemoraSettings {
   newCardsPerDay: number;
   desiredRetention: number;

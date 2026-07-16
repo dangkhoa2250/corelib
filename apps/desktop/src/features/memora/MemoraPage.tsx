@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 
 import { ActionMenu } from "../../components/ActionMenu";
 import { Button } from "../../components/Button";
-import type { Deck, LearningCard, DeckStatistics, DeckLearningSettings } from "../../domain/learning";
+import type { Deck, DeckStatistics, DeckLearningSettings, StudyReadyCounts } from "../../domain/learning";
 import { DeckLearningSettingsDialog } from "./DeckLearningSettingsDialog";
 
 interface MemoraPageProps {
   listDecks: () => Promise<Deck[]>;
-  listDueCards: () => Promise<LearningCard[]>;
+  getStudyReadyCounts: () => Promise<StudyReadyCounts>;
   onReviewToday: () => void;
   createDeck: (name: string) => Promise<Deck>;
   renameDeck: (id: string, name: string) => Promise<Deck>;
@@ -242,7 +242,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
   );
 }
 
-export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, getDeckStatistics, getDeckLearningSettings, updateDeckLearningSettings, onOpenDeck, onStudyDeck, onPracticeAll }: MemoraPageProps) {
+export function MemoraPage({ listDecks, getStudyReadyCounts, onReviewToday, createDeck, renameDeck, deleteDeck, countDeckCards, getDeckStatistics, getDeckLearningSettings, updateDeckLearningSettings, onOpenDeck, onStudyDeck, onPracticeAll }: MemoraPageProps) {
   const [decks, setDecks] = useState<Deck[] | null>(null);
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -262,9 +262,9 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
         if (active) setError(errorMessage(loadError));
       });
     Promise.resolve()
-      .then(() => listDueCards())
-      .then((dueCards) => {
-        if (active) setDueCount(dueCards.length);
+      .then(() => getStudyReadyCounts())
+      .then((counts) => {
+        if (active) setDueCount(counts.total);
       })
       .catch(() => {
         if (active) setDueCount(null);
@@ -272,7 +272,7 @@ export function MemoraPage({ listDecks, listDueCards, onReviewToday, createDeck,
     return () => {
       active = false;
     };
-  }, [listDecks, listDueCards]);
+  }, [listDecks, getStudyReadyCounts]);
 
   useEffect(() => {
     if (!openMenuId) return;

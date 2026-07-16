@@ -9,7 +9,9 @@ use std::{
     thread,
 };
 
-use chrono::{DateTime, Utc};
+#[cfg(test)]
+use chrono::DateTime;
+use chrono::Utc;
 use serde::Deserialize;
 
 use tauri::State;
@@ -17,17 +19,17 @@ use uuid::Uuid;
 
 use crate::{
     indexer::index_managed_pdf,
-    learning::{AppliedReview, DeckStatistics, NewCard, NewCardSource},
+    learning::{DeckStatistics, NewCard, NewCardSource},
     library_db::{LibraryDatabase, NewLocalDocument},
     library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
     model::DocumentSummary,
     model::{
         CardSourcePayload, DeckLearningSettingsPayload, DeckSummary, LearningCardSummary,
         MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload, StudyCountsPayload,
-        StudyGrantPayload, StudyScopePayload, StudySessionPayload, SearchResultPayload,
-        SelectionRect, UpdateDeckLearningSettingsPayload,
+        StudyGrantPayload, StudyReadyCountsPayload, StudyScopePayload, StudySessionPayload,
+        SearchResultPayload, SelectionRect, UpdateDeckLearningSettingsPayload,
     },
-    scheduler::{CardScheduleInput, CardState, Rating, ReviewScheduler, ScheduledState},
+    scheduler::{Rating, ScheduledState},
     study_queue::{
         DeckLearningSettings, DeckLearningSettingsUpdate, MemoraSettings, MemoraSettingsUpdate,
         StudyGrant, StudyRating, StudyRatingResult, StudyScope, StudySession,
@@ -806,20 +808,6 @@ pub fn count_deck_cards(id: String, state: State<'_, LibraryStore>) -> Result<i6
 }
 
 #[tauri::command]
-pub fn list_due_cards(
-    limit: Option<usize>,
-    state: State<'_, LibraryStore>,
-) -> Result<Vec<LearningCardSummary>, String> {
-    let limit = limit.unwrap_or(20).min(100);
-    learning_lock(&state)?
-        .due_cards(
-            &Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            limit,
-        )
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub fn get_card(id: String, state: State<'_, LibraryStore>) -> Result<LearningCardSummary, String> {
     learning_lock(&state)?
         .card_by_id(&id)
@@ -844,12 +832,14 @@ pub fn delete_card(id: String, state: State<'_, LibraryStore>) -> Result<(), Str
         .map_err(|e| e.to_string())
 }
 
+#[cfg(test)]
 fn parse_now(value: &str) -> Result<DateTime<Utc>, String> {
     DateTime::parse_from_rfc3339(value)
         .map(|v| v.with_timezone(&Utc))
         .map_err(|_| "invalid learning timestamp".to_owned())
 }
 
+#[cfg(test)]
 fn elapsed_days(last: Option<&str>, now: DateTime<Utc>) -> Result<u32, String> {
     let Some(last) = last else { return Ok(0) };
     let then = parse_now(last)?;
@@ -871,103 +861,6 @@ fn preview_payload(state: &ScheduledState) -> ReviewIntervalPayload {
         due_at: state.due_at.clone(),
         interval_label: interval_label(state.interval_seconds),
     }
-}
-
-fn parse_card_state(state: &str) -> Result<CardState, String> {
-    match state {
-        "new" => Ok(CardState::New),
-        "learning" => Ok(CardState::Learning),
-        "review" => Ok(CardState::Review),
-        "relearning" => Ok(CardState::Relearning),
-        "suspended" => Ok(CardState::Suspended),
-        _ => Err(format!("invalid card state: {state}")),
-    }
-}
-
-fn schedule_input(
-    card: &LearningCardSummary,
-    memory: Option<String>,
-    now: DateTime<Utc>,
-) -> Result<CardScheduleInput, String> {
-    Ok(CardScheduleInput {
-        state: parse_card_state(&card.state)?,
-        learning_step: card
-            .learning_step
-            .map(|step| u8::try_from(step).map_err(|_| "invalid learning step".to_owned()))
-            .transpose()?,
-        memory_state_json: memory,
-        elapsed_days: elapsed_days(card.last_review_at.as_deref(), now)?,
-    })
-}
-
-#[tauri::command]
-pub fn preview_card_review(
-    id: String,
-    state: State<'_, LibraryStore>,
-) -> Result<ReviewPreviewPayload, String> {
-    let db = learning_lock(&state)?;
-    let card = db
-        .card_by_id(&id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "card not found".to_owned())?;
-    let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
-    let now = Utc::now();
-    let input = schedule_input(&card, memory, now)?;
-    let preview = ReviewScheduler::default()
-        .preview(input, now)
-        .map_err(|e| e.to_string())?;
-    Ok(ReviewPreviewPayload {
-        again: preview_payload(&preview.again),
-        hard: preview_payload(&preview.hard),
-        good: preview_payload(&preview.good),
-        easy: preview_payload(&preview.easy),
-    })
-}
-
-#[tauri::command]
-pub fn rate_card(
-    id: String,
-    rating: Rating,
-    elapsed_ms: i64,
-    state: State<'_, LibraryStore>,
-) -> Result<LearningCardSummary, String> {
-    if elapsed_ms < 0 {
-        return Err("elapsedMs must be nonnegative".to_owned());
-    }
-    let mut db = learning_lock(&state)?;
-    let card = db
-        .card_by_id(&id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "card not found".to_owned())?;
-    let now = Utc::now();
-    let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
-    let input = schedule_input(&card, memory, now)?;
-    let next = ReviewScheduler::default()
-        .apply(input, rating, now)
-        .map_err(|e| e.to_string())?;
-    let rating_name = match rating {
-        Rating::Again => "again",
-        Rating::Hard => "hard",
-        Rating::Good => "good",
-        Rating::Easy => "easy",
-    };
-    db.apply_review_atomic(AppliedReview {
-        card_id: id,
-        rating: rating_name.to_owned(),
-        prior_state: card.state,
-        next_state: next.state.label().to_owned(),
-        learning_step: next.learning_step.map(i64::from),
-        increment_lapses: next.increment_lapses,
-        prior_due_at: card.due_at,
-        next_due_at: next.due_at,
-        interval_seconds: next.interval_seconds,
-        elapsed_ms,
-        stability: next.stability.map(f64::from),
-        difficulty: next.difficulty.map(f64::from),
-        memory_state_json: next.memory_state_json,
-        scheduler_version: ReviewScheduler::default().config().version.clone(),
-    })
-    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1373,6 +1266,23 @@ pub fn rate_study_card(
             elapsed_ms: payload.elapsed_ms,
             now,
             study_day,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_study_ready_counts(
+    state: State<'_, LibraryStore>,
+) -> Result<StudyReadyCountsPayload, String> {
+    let now = Utc::now();
+    let study_day = chrono::Local::now().date_naive().to_string();
+    learning_lock(&state)?
+        .study_ready_counts(now, &study_day)
+        .map(|counts| StudyReadyCountsPayload {
+            learning: counts.learning,
+            review: counts.review,
+            new: counts.new,
+            total: counts.total,
         })
         .map_err(|e| e.to_string())
 }

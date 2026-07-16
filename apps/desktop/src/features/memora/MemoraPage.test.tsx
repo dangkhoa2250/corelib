@@ -41,7 +41,7 @@ function renderMemora(overrides: Partial<ComponentProps<typeof MemoraPage>> = {}
       effectiveNewCardsPerDay: 20,
     }),
     listDecks: vi.fn().mockResolvedValue([englishDeck]),
-    listDueCards: vi.fn().mockResolvedValue([{ id: "due-1" }, { id: "due-2" }]),
+    getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 2, new: 0, total: 2 }),
     onOpenDeck,
     onPracticeAll,
     onReviewToday: vi.fn(),

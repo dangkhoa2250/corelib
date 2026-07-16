@@ -406,3 +406,80 @@ fn new_card_allowance_is_checked_when_rating_not_when_granted() {
         "new card limit reached; refresh the session"
     );
 }
+
+#[test]
+fn ready_counts_apply_new_allowance_without_creating_a_session() {
+    let (_directory, mut database) = seeded_learning_database();
+    database
+        .update_memora_settings(MemoraSettingsUpdate {
+            new_cards_per_day: 2,
+            desired_retention: 0.90,
+        })
+        .unwrap();
+    database
+        .update_deck_learning_settings("deck-2", DeckLearningSettingsUpdate::Custom(1))
+        .unwrap();
+    insert_new_cards(&mut database, "deck-1", 4);
+    insert_new_cards(&mut database, "deck-2", 4);
+    insert_due_review(&mut database, "review-1", "deck-1");
+    insert_card(
+        &mut database,
+        "learning-1",
+        "deck-1",
+        "learning",
+        utc("2026-07-16T08:00:00.000Z"),
+        Some(0),
+    );
+
+    let now = utc("2026-07-16T09:00:00.000Z");
+    let counts = database.study_ready_counts(now, "2026-07-16").unwrap();
+
+    assert_eq!(counts.learning, 1);
+    assert_eq!(counts.review, 1);
+    assert_eq!(counts.new, 3);
+    assert_eq!(counts.total, 5);
+
+    let sessions: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM study_sessions", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(sessions, 0);
+}
+
+#[test]
+fn ready_counts_exclude_future_due_and_introduced_new_cards() {
+    let (_directory, mut database) = seeded_learning_database();
+    database
+        .update_memora_settings(MemoraSettingsUpdate {
+            new_cards_per_day: 5,
+            desired_retention: 0.90,
+        })
+        .unwrap();
+    insert_new_cards(&mut database, "deck-1", 3);
+    insert_card(
+        &mut database,
+        "future-review",
+        "deck-1",
+        "review",
+        utc("2026-07-20T09:00:00.000Z"),
+        None,
+    );
+
+    let now = utc("2026-07-16T09:00:00.000Z");
+    let before = database.study_ready_counts(now, "2026-07-16").unwrap();
+    assert_eq!(before.new, 3);
+    assert_eq!(before.review, 0);
+    assert_eq!(before.total, 3);
+
+    database
+        .connection
+        .execute(
+            "INSERT INTO card_introductions(card_id, deck_id, study_day, introduced_at)
+             VALUES('deck-1-new-0','deck-1','2026-07-16',?1)",
+            rusqlite::params![rfc3339(now)],
+        )
+        .unwrap();
+    let after = database.study_ready_counts(now, "2026-07-16").unwrap();
+    assert_eq!(after.new, 2);
+    assert_eq!(after.total, 2);
+}

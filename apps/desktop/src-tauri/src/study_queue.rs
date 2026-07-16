@@ -36,6 +36,14 @@ pub struct StudyCounts {
 }
 
 #[derive(Clone, Debug)]
+pub struct StudyReadyCounts {
+    pub learning: i64,
+    pub review: i64,
+    pub new: i64,
+    pub total: i64,
+}
+
+#[derive(Clone, Debug)]
 pub struct StudyGrant {
     pub grant_token: String,
     pub expected_state: String,
@@ -544,6 +552,56 @@ impl LibraryDatabase {
             |row| row.get(0),
         )?;
         Ok(due)
+    }
+
+    pub fn study_ready_counts(&self, now: DateTime<Utc>, study_day: &str) -> Result<StudyReadyCounts> {
+        NaiveDate::parse_from_str(study_day, "%Y-%m-%d")
+            .map_err(|_| LibraryDbError::InvalidLearning("invalid study day".into()))?;
+        let now_str = rfc3339(now);
+
+        let learning: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM cards WHERE state IN ('learning','relearning') AND due_at <= ?1 AND deleted_at IS NULL",
+            params![now_str],
+            |row| row.get(0),
+        )?;
+        let review: i64 = self.connection.query_row(
+            "SELECT COUNT(*) FROM cards WHERE state = 'review' AND due_at <= ?1 AND deleted_at IS NULL",
+            params![now_str],
+            |row| row.get(0),
+        )?;
+
+        let mut new_ready: i64 = 0;
+        let mut stmt = self.connection.prepare(
+            "SELECT DISTINCT deck_id FROM cards WHERE state = 'new' AND deleted_at IS NULL ORDER BY deck_id ASC",
+        )?;
+        let decks = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for deck in decks {
+            let effective_limit = self.deck_learning_settings(&deck)?.effective_new_cards_per_day;
+            let introduced: i64 = self.connection.query_row(
+                "SELECT COUNT(*) FROM card_introductions WHERE deck_id = ?1 AND study_day = ?2",
+                params![deck, study_day],
+                |row| row.get(0),
+            )?;
+            let remaining = (effective_limit - introduced).max(0);
+            if remaining == 0 {
+                continue;
+            }
+            let available: i64 = self.connection.query_row(
+                "SELECT COUNT(*) FROM cards WHERE state = 'new' AND deleted_at IS NULL AND deck_id = ?1 AND id NOT IN (SELECT card_id FROM card_introductions)",
+                params![deck],
+                |row| row.get(0),
+            )?;
+            new_ready += remaining.min(available);
+        }
+
+        Ok(StudyReadyCounts {
+            learning,
+            review,
+            new: new_ready,
+            total: learning + review + new_ready,
+        })
     }
 
     pub fn rate_study_card(&mut self, rating: StudyRating) -> Result<StudyRatingResult> {

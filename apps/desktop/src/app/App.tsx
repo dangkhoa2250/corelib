@@ -39,8 +39,8 @@ import { SettingsPage, readTranslationPreference, type SettingsSection } from ".
 import { appleTranslationAvailable, clearAiApiKey, hasAiApiKey, listAiModels, saveAiApiKey, translateText } from "../lib/ai";
 import type { AiModel, AiProviderId } from "../domain/ai";
 import type { TranslationEngineId } from "../domain/translation";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics, startStudySession as nativeStartStudySession, refreshStudySession as nativeRefreshStudySession, rateStudyCard as nativeRateStudyCard, getMemoraSettings as nativeGetMemoraSettings, updateMemoraSettings as nativeUpdateMemoraSettings, getDeckLearningSettings as nativeGetDeckLearningSettings, updateDeckLearningSettings as nativeUpdateDeckLearningSettings } from "../lib/learning";
-import { type BulkResult, type CardBrowserQuery, type CardPage, type CardSource, type Deck, type DeckStatistics, type LearningCard, type ReviewPreview, type ReviewRating, type UpdateCardInput, type UpdateAndMoveCardInput, type StudyScope, type StudySession, type StudyRatingInput, type StudyRatingResult, type StudyGrant, type MemoraSettings, type DeckLearningSettings } from "../domain/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, getStudyReadyCounts as nativeGetStudyReadyCounts, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics, startStudySession as nativeStartStudySession, refreshStudySession as nativeRefreshStudySession, rateStudyCard as nativeRateStudyCard, getMemoraSettings as nativeGetMemoraSettings, updateMemoraSettings as nativeUpdateMemoraSettings, getDeckLearningSettings as nativeGetDeckLearningSettings, updateDeckLearningSettings as nativeUpdateDeckLearningSettings } from "../lib/learning";
+import { type BulkResult, type CardBrowserQuery, type CardPage, type CardSource, type Deck, type DeckStatistics, type LearningCard, type ReviewRating, type StudyReadyCounts, type UpdateCardInput, type UpdateAndMoveCardInput, type StudyScope, type StudySession, type StudyRatingInput, type StudyRatingResult, type StudyGrant, type MemoraSettings, type DeckLearningSettings } from "../domain/learning";
 import type { CreateCardInput, SearchResult } from "../lib/learning";
 import { AccountGate, useAccount } from "../features/account/AccountGate";
 import { PocketBaseAccountApiClient } from "../lib/account";
@@ -130,9 +130,7 @@ interface LearningApi {
   countDeckCards?: (id: string) => Promise<number>;
   listDeckCards?: (deckId: string) => Promise<LearningCard[]>;
   deleteCard?: (id: string) => Promise<void>;
-  listDueCards?: (limit?: number) => Promise<LearningCard[]>;
-  previewCardReview?: (id: string) => Promise<ReviewPreview>;
-  rateCard?: (id: string, rating: ReviewRating, elapsedMs: number) => Promise<LearningCard>;
+  getStudyReadyCounts?: () => Promise<StudyReadyCounts>;
   getCard?: (id: string) => Promise<LearningCard>;
   getCardSource?: (id: string) => Promise<CardSource | null>;
   listActiveTags?: (deckId: string) => Promise<string[]>;
@@ -161,9 +159,7 @@ const nativeLearningApi: LearningApi = {
   countDeckCards: nativeCountDeckCards,
   listDeckCards: nativeListDeckCards,
   deleteCard: nativeDeleteCard,
-  listDueCards: nativeListDueCards,
-  previewCardReview: nativePreviewCardReview,
-  rateCard: nativeRateCard,
+  getStudyReadyCounts: nativeGetStudyReadyCounts,
   getCard: nativeGetCard,
   getCardSource: nativeGetCardSource,
   listActiveTags: nativeListActiveTags,
@@ -296,9 +292,7 @@ export function App({
     countDeckCards: learningApi.countDeckCards ?? nativeCountDeckCards,
     listDeckCards: learningApi.listDeckCards ?? nativeListDeckCards,
     deleteCard: learningApi.deleteCard ?? nativeDeleteCard,
-    listDueCards: learningApi.listDueCards ?? nativeListDueCards,
-    previewCardReview: learningApi.previewCardReview ?? nativePreviewCardReview,
-    rateCard: learningApi.rateCard ?? nativeRateCard,
+    getStudyReadyCounts: learningApi.getStudyReadyCounts ?? nativeGetStudyReadyCounts,
     getCard: learningApi.getCard ?? nativeGetCard,
     getCardSource: learningApi.getCardSource ?? nativeGetCardSource,
     listActiveTags: learningApi.listActiveTags ?? nativeListActiveTags,
@@ -815,7 +809,7 @@ export function App({
         {route.name === "memora" ? (
           <MemoraPage
             listDecks={learning.listDecks}
-            listDueCards={learning.listDueCards}
+            getStudyReadyCounts={learning.getStudyReadyCounts}
             onReviewToday={handleReviewToday}
             onStudyDeck={handleStudyDeck}
             onPracticeAll={handlePracticeAll}

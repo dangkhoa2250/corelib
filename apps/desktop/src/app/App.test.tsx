@@ -228,7 +228,7 @@ test("keeps Card Browser inside Memora rather than in the application sidebar", 
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([]),
         createCard: vi.fn(),
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -687,7 +687,7 @@ test("navigates between Library and Memora via the sidebar", async () => {
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
         createCard: vi.fn(),
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics,
       }}
     />,
@@ -719,7 +719,7 @@ test("creates a new deck from Memora", async () => {
         listDecks: vi.fn().mockResolvedValue([]),
         createCard: vi.fn(),
         createDeck,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -774,7 +774,7 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
         createCard,
         queryDeckCards,
         listActiveTags,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -883,7 +883,7 @@ test("deletes a card from a deck's card list", async () => {
         queryDeckCards,
         trashCards: trashCardsMock,
         listActiveTags,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -932,7 +932,7 @@ test("renames a deck from Memora", async () => {
         listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
         createCard: vi.fn(),
         renameDeck,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -971,7 +971,7 @@ test("deletes an empty deck from Memora", async () => {
         createCard: vi.fn(),
         deleteDeck,
         countDeckCards,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -1007,7 +1007,7 @@ test("warns how many cards will be deleted before confirming a cascade delete", 
         createCard: vi.fn(),
         deleteDeck,
         countDeckCards,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -1041,7 +1041,7 @@ test("surfaces an error when a deck deletion fails", async () => {
         createCard: vi.fn(),
         deleteDeck,
         countDeckCards,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -1116,7 +1116,7 @@ test("Review Today starts a backend study session", async () => {
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([englishDeck]),
         createCard: vi.fn(),
-        listDueCards: vi.fn(() => { throw new Error("legacy due query must not be used"); }),
+        getStudyReadyCounts: vi.fn(() => { throw new Error("legacy due query must not be used"); }),
         startStudySession,
         refreshStudySession: vi.fn().mockResolvedValue(studySession()),
         rateStudyCard: vi.fn(),
@@ -1141,7 +1141,7 @@ test("Study a deck starts a deck-scoped study session", async () => {
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([englishDeck]),
         createCard: vi.fn(),
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         startStudySession,
         refreshStudySession: vi.fn().mockResolvedValue(studySession()),
         rateStudyCard: vi.fn(),
@@ -1170,7 +1170,7 @@ test("an expired refresh starts a replacement session with the same scope", asyn
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([englishDeck]),
         createCard: vi.fn(),
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         startStudySession,
         refreshStudySession,
         rateStudyCard: vi.fn(),

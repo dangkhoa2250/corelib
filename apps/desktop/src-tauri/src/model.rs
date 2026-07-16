@@ -107,6 +107,15 @@ pub struct StudyCountsPayload {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct StudyReadyCountsPayload {
+    pub learning: i64,
+    pub review: i64,
+    pub new: i64,
+    pub total: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StudyGrantPayload {
     pub grant_token: String,
     pub expected_state: String,

@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createCard,
-  listDueCards,
-  rateCard,
+  getStudyReadyCounts,
   searchEverything,
   queryDeckCards,
   updateCard,
@@ -28,14 +27,12 @@ describe("learning bridge", () => {
     await createCard({ deckName: "Bio", front: "f", back: "b" }, call);
     expect(call).toHaveBeenCalledWith("create_card", { input: { deckName: "Bio", front: "f", back: "b" } });
   });
-  it("keeps review and search argument names stable", async () => {
+  it("keeps search and ready-count argument names stable", async () => {
     const call = vi.fn().mockResolvedValue([]);
-    await listDueCards(10, call);
-    await rateCard("c", "good", 12, call);
     await searchEverything("ATP", call);
-    expect(call).toHaveBeenNthCalledWith(1, "list_due_cards", { limit: 10 });
-    expect(call).toHaveBeenNthCalledWith(2, "rate_card", { id: "c", rating: "good", elapsedMs: 12 });
-    expect(call).toHaveBeenNthCalledWith(3, "search_everything", { query: "ATP" });
+    await getStudyReadyCounts(call);
+    expect(call).toHaveBeenNthCalledWith(1, "search_everything", { query: "ATP" });
+    expect(call).toHaveBeenNthCalledWith(2, "get_study_ready_counts");
   });
   it("invokes lifecycle and trash methods correctly", async () => {
     const call = vi.fn().mockResolvedValue({ affectedIds: [], affectedCount: 0 });
