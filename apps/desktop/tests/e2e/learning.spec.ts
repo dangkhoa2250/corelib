@@ -22,7 +22,21 @@ test("manages a card through Browser and Trash lifecycle", async ({ page }) => {
 
     Object.assign(window, {
       __TAURI_INTERNALS__: {
+        metadata: { currentWindow: { label: "main" } },
         invoke: async (command: string, args: Record<string, unknown> = {}) => {
+          if (command === "account_session") {
+            return {
+              profile: {
+                id: "e2e-user",
+                displayName: "E2E User",
+                email: "e2e@example.test",
+                status: "approved",
+                role: "member",
+                analyticsEnabled: true,
+              },
+              entitlements: { featureKeys: [], refreshedAt: "2026-07-16T00:00:00Z" },
+            };
+          }
           if (command === "list_documents") return [];
           if (command === "list_decks") return [deck];
           if (command === "list_due_cards") return [];
@@ -103,7 +117,8 @@ test("manages a card through Browser and Trash lifecycle", async ({ page }) => {
   });
 
   page.on("dialog", (dialog) => dialog.accept());
-  await page.goto("http://127.0.0.1:1420");
+  await page.goto("http://127.0.0.1:1421");
+  await expect(page.getByRole("button", { name: "Memora" })).toBeVisible();
 
   await page.getByRole("button", { name: "Memora" }).click();
   await page.getByRole("button", { name: "Biology", exact: true }).click();

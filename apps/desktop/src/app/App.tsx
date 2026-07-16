@@ -41,12 +41,15 @@ import type { AiModel, AiProviderId } from "../domain/ai";
 import type { TranslationEngineId } from "../domain/translation";
 import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
 import { isReadyToReview, type BulkResult, type CardBrowserQuery, type CardPage, type CardSource, type Deck, type DeckStatistics, type LearningCard, type ReviewPreview, type ReviewRating, type UpdateCardInput, type UpdateAndMoveCardInput } from "../domain/learning";
-import type { CreateCardInput, SearchResult } from "../lib/learning";
+import type { CreateCardInput } from "../lib/learning";
 import { AccountGate, useAccount } from "../features/account/AccountGate";
 import { PocketBaseAccountApiClient } from "../lib/account";
 import type { AccountApi } from "../domain/account";
 import { AdminPage } from "../features/admin/AdminPage";
 import { AnalyticsClient } from "../lib/analytics";
+import { createCommandRegistry } from "./commandRegistry";
+import type { AppRoute } from "./routes";
+import { useInputPrivacyGuard } from "../components/InputPrivacyGuard";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -99,15 +102,6 @@ const nativeLibraryApi: LibraryApi = {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function fuzzyMatch(text: string, query: string): boolean {
-  const lower = text.toLowerCase();
-  let qi = 0;
-  for (let i = 0; i < lower.length && qi < query.length; i++) {
-    if (lower[i] === query[qi]) qi++;
-  }
-  return qi === query.length;
 }
 
 function mergeDocuments(
@@ -175,17 +169,6 @@ interface AppProps {
   aiApi?: AiApi;
   accountApi?: AccountApi;
 }
-
-type AppRoute =
-  | { name: "library" }
-  | { name: "memora" }
-  | { name: "reader"; document: LibraryDocument }
-  | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview>; sourceDeck?: Deck; mode?: "study" | "practice" }
-  | { name: "cardBrowser"; deckId: string }
-  | { name: "deckDetail"; deck: Deck; searchQuery?: string }
-  | { name: "trash" }
-  | { name: "settings" }
-  | { name: "admin" };
 
 const ROUTE_FEATURE_KEYS: Partial<Record<AppRoute["name"], string>> = {
   library: "library",
@@ -257,7 +240,8 @@ export function App({
   aiApi = nativeAiApi,
   accountApi = defaultAccountApi,
 }: AppProps) {
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+  useInputPrivacyGuard();
   const analyticsClient = useMemo(() => new AnalyticsClient(accountApi, false), [accountApi]);
 
   useEffect(() => {
@@ -310,7 +294,7 @@ export function App({
   const [driveCurrentFolderId, setDriveCurrentFolderId] = useState<string | undefined>();
   const requestId = useRef(0);
   const pendingImportId = useRef(0);
-  const paletteRef = useRef<CommandPaletteHandle>(null);
+  const quickOpenRef = useRef<CommandPaletteHandle>(null);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
@@ -477,72 +461,12 @@ export function App({
     setTranslationPreference(readTranslationPreference());
   }, []);
 
-
-
-  const search = useCallback(
-    async (query: string) => {
-      const q = query.toLowerCase();
-      const navResults: SearchResult[] = [
-        { kind: "nav", id: "library", title: "Library", subtitle: null },
-        { kind: "nav", id: "memora", title: "Memora", subtitle: null },
-        { kind: "nav", id: "trash", title: "Trash", subtitle: null },
-        { kind: "nav", id: "settings", title: "Settings", subtitle: null },
-        { kind: "nav", id: "settings-model", title: "Settings \u2192 Model", subtitle: "AI providers, API keys, translate model" },
-      ];
-      const docResults: SearchResult[] = (documents ?? [])
-        .filter((d) => fuzzyMatch(d.title, q))
-        .map((d) => ({ kind: "document" as const, id: d.id, title: d.title, subtitle: d.author }));
-      const deckResults: SearchResult[] = decks
-        .filter((d) => fuzzyMatch(d.name, q))
-        .map((d) => ({ kind: "deck" as const, id: d.id, title: d.name, subtitle: null }));
-      const [backendCards, trashPage] = await Promise.all([
-        nativeSearchEverything(query).catch(() => [] as SearchResult[]),
-        nativeListTrashedCards(query, "deletedAt", null, 10).catch(() => ({ rows: [], total: 0, nextCursor: null } as CardPage)),
-      ]);
-      const cardResults = backendCards.filter((r) => r.kind === "card");
-      const trashResults: SearchResult[] = trashPage.rows.map((card) => ({
-        kind: "trash" as const,
-        id: card.id,
-        title: card.front,
-        subtitle: card.deckName,
-      }));
-      return [...navResults, ...docResults, ...deckResults, ...cardResults, ...trashResults];
-    },
-    [documents, decks],
-  );
-
-  const handleOpenSearchResult = useCallback(async (result: SearchResult) => {
-    if (result.kind === "nav") {
-      setRoute(
-        result.id === "memora" ? { name: "memora" }
-        : result.id === "trash" ? { name: "trash" }
-        : result.id === "settings" || result.id === "settings-model" ? { name: "settings" }
-        : { name: "library" },
-      );
-      return;
-    }
-    if (result.kind === "document") {
-      const doc = documents?.find((d) => d.id === result.id);
-      if (doc) handleOpen(doc);
-      return;
-    }
-    if (result.kind === "deck") {
-      const deck = decks.find((d) => d.id === result.id);
-      if (deck) setRoute({ name: "deckDetail", deck });
-      return;
-    }
-    if (result.kind === "card") {
-      try {
-        const card = await learning.getCard(result.id);
-        const deck = decks.find((d) => d.id === card.deckId);
-        if (deck) setRoute({ name: "deckDetail", deck, searchQuery: result.title });
-      } catch (e) { setError(errorMessage(e)); }
-      return;
-    }
-    if (result.kind === "trash") {
-      setRoute({ name: "trash" });
-    }
-  }, [documents, handleOpen, decks, learning]);
+  const handleOpenCard = useCallback(async (id: string, title: string) => {
+    const card = await learning.getCard(id);
+    const deck = decks.find((candidate) => candidate.id === card.deckId);
+    if (!deck) throw new Error("This card's deck is no longer available.");
+    setRoute({ name: "deckDetail", deck, searchQuery: title });
+  }, [decks, learning]);
 
   const handleReviewToday = useCallback(async () => {
     try {
@@ -669,7 +593,48 @@ export function App({
     } catch (_) {}
   }, [libraryApi]);
 
-  const palette = <CommandPalette ref={paletteRef} search={search} onOpen={(result) => void handleOpenSearchResult(result)} />;
+  const commandRegistry = useMemo(() => createCommandRegistry({
+    documents: documents ?? [],
+    decks,
+    searchCards: async (query) => {
+      try {
+        return (await nativeSearchEverything(query)) ?? [];
+      } catch (_) {
+        return [];
+      }
+    },
+    searchTrash: async (query) => {
+      let page: CardPage | null | undefined;
+      try {
+        page = await nativeListTrashedCards(query, "deletedAt", null, 10);
+      } catch (_) {
+        page = null;
+      }
+      return (page?.rows ?? []).map((card) => ({ id: card.id, title: card.front, deckName: card.deckName }));
+    },
+    openRoute: setRoute,
+    openDocument: handleOpen,
+    openDeck: handleOpenDeck,
+    openCard: handleOpenCard,
+    openTrash: () => setRoute({ name: "trash" }),
+    importPdf: handleImport,
+    reviewToday: handleReviewToday,
+    setTheme,
+  }), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, setTheme]);
+
+  const palette = (
+    <>
+      <CommandPalette
+        ref={quickOpenRef}
+        mode="quick-open"
+        search={(query) => commandRegistry.search("quick-open", query)}
+      />
+      <CommandPalette
+        mode="command-palette"
+        search={(query) => commandRegistry.search("command-palette", query)}
+      />
+    </>
+  );
 
   if (route.name === "review") {
     return <><ReviewPage cards={route.cards} previews={route.previews} mode={route.mode} onRate={handleRate} onBack={() => setRoute(route.sourceDeck ? { name: "deckDetail", deck: route.sourceDeck } : { name: "memora" })} getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl} />{palette}</>;
@@ -710,18 +675,22 @@ export function App({
 
   if (route.name === "settings") {
     return (
-      <SettingsPage
-        hasApiKey={aiApi.hasApiKey}
-        saveApiKey={aiApi.saveApiKey}
-        clearApiKey={aiApi.clearApiKey}
-        listModels={aiApi.listModels}
-        appleTranslationAvailable={aiApi.appleTranslationAvailable}
-        onDefaultChange={handleTranslationDefaultChange}
-        onBack={() => setRoute({ name: "library" })}
-        saveDriveCredentials={saveGoogleDriveCredentials}
-        loadDriveCredentials={loadGoogleDriveCredentials}
-        clearDriveCredentials={clearGoogleDriveCredentials}
-      />
+      <>
+        <SettingsPage
+          hasApiKey={aiApi.hasApiKey}
+          saveApiKey={aiApi.saveApiKey}
+          clearApiKey={aiApi.clearApiKey}
+          listModels={aiApi.listModels}
+          appleTranslationAvailable={aiApi.appleTranslationAvailable}
+          onDefaultChange={handleTranslationDefaultChange}
+          onBack={() => setRoute({ name: "library" })}
+          saveDriveCredentials={saveGoogleDriveCredentials}
+          loadDriveCredentials={loadGoogleDriveCredentials}
+          clearDriveCredentials={clearGoogleDriveCredentials}
+          initialSection={route.section}
+        />
+        {palette}
+      </>
     );
   }
 
@@ -755,7 +724,7 @@ export function App({
               : { name: "library" }
           );
         }}
-        onSearchClick={() => paletteRef.current?.open()}
+        onSearchClick={() => quickOpenRef.current?.open()}
         onSettingsClick={() => setRoute({ name: "settings" })}
         onAdminClick={() => setRoute({ name: "admin" })}
       />

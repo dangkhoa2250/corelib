@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { App } from "./App";
+import type { AccountApi } from "../domain/account";
 
 // Mock pdfjs-dist globally for App tests
 vi.mock("pdfjs-dist", () => {
@@ -119,6 +120,27 @@ const emptyDeckStatistics = {
   dueCards: 0,
 };
 
+function anonymousAccountApi(): AccountApi {
+  return {
+    register: vi.fn(),
+    signIn: vi.fn(),
+    currentSession: vi.fn().mockRejectedValue(new Error("No session")),
+    signOut: vi.fn(),
+    setAnalyticsEnabled: vi.fn(),
+    sendAnalytics: vi.fn(),
+    adminListUsers: vi.fn(),
+    adminSetStatus: vi.fn(),
+    adminSetGroups: vi.fn(),
+    adminListGroups: vi.fn(),
+    adminCreateGroup: vi.fn(),
+    adminListFeatures: vi.fn(),
+    adminCreateFeature: vi.fn(),
+    adminSetFeatureAssignment: vi.fn(),
+    adminMetrics: vi.fn(),
+    adminDeleteUser: vi.fn(),
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -211,6 +233,16 @@ test("renders the Library heading", () => {
   expect(
     screen.queryByRole("button", { name: "Clear downloaded Drive files" }),
   ).not.toBeInTheDocument();
+});
+
+test("disables native suggestions on sign-in fields before the account gate renders app routes", async () => {
+  render(<App accountApi={anonymousAccountApi()} />);
+
+  const email = await screen.findByLabelText("Email Address");
+  expect(email).toHaveAttribute("autocomplete", "off");
+  expect(email).toHaveAttribute("autocorrect", "off");
+  expect(email).toHaveAttribute("autocapitalize", "off");
+  expect(email).toHaveAttribute("spellcheck", "false");
 });
 
 test("loads documents asynchronously and preserves them after a failed import", async () => {
@@ -1018,5 +1050,29 @@ test("opens the search palette from the sidebar search field", async () => {
 
   await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
-  expect(screen.getByRole("searchbox", { name: "Search everything" })).toHaveFocus();
+  expect(screen.getByRole("searchbox", { name: "Quick Open" })).toHaveFocus();
+});
+
+test("keeps Quick Open and Command Palette available from Settings", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Settings" }));
+  await screen.findByLabelText("Search settings");
+
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+  expect(await screen.findByRole("dialog", { name: "Quick Open" })).toBeInTheDocument();
+  fireEvent.keyDown(window, { key: "Escape" });
+
+  fireEvent.keyDown(window, { key: "k", ctrlKey: true, shiftKey: true });
+  expect(await screen.findByRole("dialog", { name: "Command Palette" })).toBeInTheDocument();
 });

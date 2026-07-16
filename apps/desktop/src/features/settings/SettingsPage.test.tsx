@@ -8,6 +8,21 @@ beforeEach(() => {
   window.localStorage?.clear?.();
 });
 
+test("opens the requested settings section without mutating its values", () => {
+  render(
+    <SettingsPage
+      initialSection="appearance"
+      hasApiKey={vi.fn().mockResolvedValue(false)}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      listModels={vi.fn().mockResolvedValue([])}
+    />,
+  );
+
+  expect(screen.getByRole("heading", { name: "Appearance", level: 1 })).toBeInTheDocument();
+  expect(screen.getByLabelText("Theme selection")).toHaveTextContent("System");
+});
+
 test("defaults a new supported Mac to Apple Translation and ranks it first", async () => {
   const user = userEvent.setup();
   render(

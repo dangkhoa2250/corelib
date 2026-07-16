@@ -23,6 +23,7 @@ import { ProviderBrandIcon } from "../../components/ProviderBrandIcon";
 import { useContext } from "react";
 import { AccountContext } from "../account/AccountGate";
 import { AccountSettingsSection } from "../account/AccountSettingsSection";
+import type { SettingsSection } from "../../app/routes";
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
@@ -56,6 +57,11 @@ export interface SettingsPageProps {
   saveDriveCredentials?: (clientId: string, clientSecret: string) => Promise<void>;
   loadDriveCredentials?: () => Promise<{ clientId: string; clientSecret: string } | null>;
   clearDriveCredentials?: () => Promise<void>;
+  initialSection?: SettingsSection;
+}
+
+function sectionQuery(section: SettingsSection | undefined): string {
+  return section === "model" ? "model" : section ?? "";
 }
 
 function readProvider(): AiProviderId {
@@ -73,7 +79,7 @@ export function readTranslationPreference(): { engineId: TranslationEngineId | n
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, initialSection }: SettingsPageProps) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
@@ -95,7 +101,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
   const [targetLanguage, setTargetLanguage] = useState(initialPreference.targetLanguage);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(() => sectionQuery(initialSection));
   const [modelSearch, setModelSearch] = useState(
     initialPreference.engineId === "apple-translation"
       ? "Apple Translation"
@@ -117,6 +123,10 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, a
   const [hasSavedDriveCredentials, setHasSavedDriveCredentials] = useState(false);
   const [driveError, setDriveError] = useState<string | null>(null);
   const [driveSuccess, setDriveSuccess] = useState(false);
+
+  useEffect(() => {
+    setSearchQuery(sectionQuery(initialSection));
+  }, [initialSection]);
 
   const showAccountSettings = searchQuery.trim().toLowerCase().includes("account");
   const showAppearanceSettings = searchQuery.trim().toLowerCase().includes("appearance");

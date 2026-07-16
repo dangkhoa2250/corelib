@@ -4,6 +4,10 @@
 
 Before adding or exposing a public desktop page, route, feature entry point, navigation destination, or user action, read and follow [checking-command-registration](skills/checking-command-registration/SKILL.md). Do not treat a feature as complete until its command registry coverage tests pass.
 
+## Scrollable desktop surfaces
+
+Before adding or modifying a scrollable desktop list, pane, modal, or scrollbar, read and follow [checking-scroll-surfaces](skills/checking-scroll-surfaces/SKILL.md). Do not treat the change as complete until it has covered the native WKWebView track and custom-thumb content-inset checks.
+
 ## Desktop app verification is version-sensitive
 
 Do **not** treat an already-open `Library.app` or an existing `tauri dev`

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Check Scroll Surfaces"
+  short_description: "Prevent native scrollbar tracks and thumb overlap in desktop UI."
+  default_prompt: "Review this desktop scrollable surface for WKWebView scrollbar track and thumb-overlap issues before implementation."
