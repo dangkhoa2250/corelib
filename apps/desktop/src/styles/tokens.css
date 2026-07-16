@@ -2111,7 +2111,9 @@ textarea::placeholder {
 
 .command-palette__result-list {
   margin: 0;
-  padding: 6px;
+  /* ScrollArea renders its thumb over content. Reserve its 8px thumb, 4px
+     margin, and an 8px safety gap so rows never sit beneath it. */
+  padding: 6px 20px 6px 6px;
   list-style: none;
 }
 

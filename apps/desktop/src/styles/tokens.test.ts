@@ -84,6 +84,7 @@ test("uses neutral palette-specific scrollbars and match highlights", () => {
   const paletteCss = css.slice(paletteStart, paletteEnd);
 
   const paletteInput = paletteCss.match(/\.command-palette__input \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const resultList = paletteCss.match(/\.command-palette__result-list \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(paletteInput).toContain("border: 0;");
   expect(paletteInput).not.toContain("border-bottom");
@@ -91,6 +92,7 @@ test("uses neutral palette-specific scrollbars and match highlights", () => {
   expect(paletteInput).toContain("box-shadow: none;");
   expect(paletteCss).not.toContain(".command-palette__results button::before");
   expect(paletteCss).not.toContain(".command-palette__results::-webkit-scrollbar");
+  expect(resultList).toContain("padding: 6px 20px 6px 6px;");
   expect(paletteCss).toContain(".command-palette__match {");
   expect(paletteCss).toContain("background: transparent;");
   expect(paletteCss).toContain("color: var(--text-primary);");
