@@ -13,12 +13,10 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 (globalThis as { pdfjsLib?: unknown }).pdfjsLib = pdfjs;
 
 let pdfViewerModulePromise: Promise<typeof import("pdfjs-dist/web/pdf_viewer.mjs")> | null = null;
-const SOURCE_PAGE_FIT_SCALE = 1.18;
 const SOURCE_SEARCH_CONCURRENCY = 8;
 
 function setSourceFitScale(pdfViewer: PDFViewerType) {
   pdfViewer.currentScaleValue = "page-fit";
-  pdfViewer.currentScale = pdfViewer.currentScale * SOURCE_PAGE_FIT_SCALE;
 }
 
 function loadPdfViewerModule() {

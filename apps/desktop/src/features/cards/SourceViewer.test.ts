@@ -41,8 +41,8 @@ test("fits the complete source page within the available viewer display", () => 
 
   expect(viewer).toContain('currentScaleValue = "page-fit"');
   expect(viewer).not.toContain('currentScaleValue = "page-width"');
-  expect(viewer).toContain("SOURCE_PAGE_FIT_SCALE");
-  expect(viewer).toContain("pdfViewer.currentScale = pdfViewer.currentScale * SOURCE_PAGE_FIT_SCALE;");
+  expect(viewer).not.toContain("SOURCE_PAGE_FIT_SCALE");
+  expect(viewer).not.toContain("pdfViewer.currentScale = pdfViewer.currentScale *");
 });
 
 test("limits concurrent PDF text extraction while searching the full source", () => {
