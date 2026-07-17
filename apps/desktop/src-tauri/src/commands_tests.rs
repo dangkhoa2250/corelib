@@ -16,11 +16,12 @@ use tempfile::tempdir;
 
 use crate::commands::{
     download_drive_file_async, download_drive_file_async_guarded, get_document_file_url,
-    import_local_documents_for_test, validate_import_paths, validate_read_page, IndexTask,
-    IndexWorkerPool, LibraryStore, INDEX_QUEUE_CAPACITY,
+    import_local_documents_for_test, scope_from_payload, validate_import_paths, validate_read_page,
+    IndexTask, IndexWorkerPool, LibraryStore, StudyRatingPayload, INDEX_QUEUE_CAPACITY,
 };
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
+use crate::model::StudyScopePayload;
 
 #[test]
 fn drive_download_runs_off_command_thread_without_holding_database_lock() {
@@ -566,4 +567,166 @@ fn import_rejects_fifo_pdf_input() {
         .expect("list documents")
         .is_empty());
     assert!(!library_root.join("documents").exists());
+}
+
+fn study_review_log_count(library_root: &Path, card_id: &str) -> i64 {
+    let database = LibraryDatabase::open(library_root).expect("open database");
+    database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM review_logs WHERE card_id = ?1",
+            rusqlite::params![card_id],
+            |row| row.get(0),
+        )
+        .expect("count review logs")
+}
+
+#[test]
+fn study_scope_conversion_rejects_invalid_kind_and_missing_deck() {
+    assert!(scope_from_payload(StudyScopePayload {
+        kind: "all".into(),
+        deck_id: None,
+    })
+    .is_ok());
+    assert!(scope_from_payload(StudyScopePayload {
+        kind: "deck".into(),
+        deck_id: Some("deck-1".into()),
+    })
+    .is_ok());
+    assert!(scope_from_payload(StudyScopePayload {
+        kind: "deck".into(),
+        deck_id: None,
+    })
+    .is_err());
+    assert!(scope_from_payload(StudyScopePayload {
+        kind: "everything".into(),
+        deck_id: None,
+    })
+    .is_err());
+}
+
+#[test]
+fn rate_study_card_rejects_negative_elapsed_ms_without_writes() {
+    let directory = tempdir().expect("create temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let error = crate::commands::rate_study_card(
+        StudyRatingPayload {
+            session_id: "session".into(),
+            card_id: "card".into(),
+            grant_token: "token".into(),
+            expected_state: "review".into(),
+            expected_due_at: "2026-07-16T08:00:00.000Z".into(),
+            rating: crate::scheduler::Rating::Good,
+            elapsed_ms: -1,
+        },
+        app.state(),
+    )
+    .expect_err("negative elapsed rejected");
+    assert_eq!(error, "elapsedMs must be nonnegative");
+}
+
+#[test]
+fn rate_study_card_surfaces_stale_grant_message_without_writes() {
+    let directory = tempdir().expect("create temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    crate::commands::create_deck("Biology".to_owned(), app.state()).expect("create deck");
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "front".into(),
+            back: "back".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+        },
+        app.state(),
+    )
+    .expect("create card");
+
+    let scope = StudyScopePayload {
+        kind: "deck".into(),
+        deck_id: Some(card.deck_id.clone()),
+    };
+    let session =
+        crate::commands::start_study_session(scope, app.state()).expect("start session");
+    let grant = session.cards[0].clone();
+
+    crate::commands::set_cards_suspended(vec![card.id.clone()], true, app.state())
+        .expect("suspend card");
+
+    let error = crate::commands::rate_study_card(
+        StudyRatingPayload {
+            session_id: session.session_id.clone(),
+            card_id: grant.card.id.clone(),
+            grant_token: grant.grant_token.clone(),
+            expected_state: grant.expected_state.clone(),
+            expected_due_at: grant.expected_due_at.clone(),
+            rating: crate::scheduler::Rating::Good,
+            elapsed_ms: 1000,
+        },
+        app.state(),
+    )
+    .expect_err("stale grant rejected");
+    assert_eq!(error, "study card changed; refresh the session");
+    assert_eq!(study_review_log_count(&library_root, &card.id), 0);
+}
+
+#[test]
+fn rate_study_card_rejects_expired_session_without_writes() {
+    let directory = tempdir().expect("create temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    crate::commands::create_deck("Biology".to_owned(), app.state()).expect("create deck");
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "front".into(),
+            back: "back".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+        },
+        app.state(),
+    )
+    .expect("create card");
+
+    let scope = StudyScopePayload {
+        kind: "deck".into(),
+        deck_id: Some(card.deck_id.clone()),
+    };
+    let session =
+        crate::commands::start_study_session(scope, app.state()).expect("start session");
+    let grant = session.cards[0].clone();
+
+    {
+        let database = LibraryDatabase::open(&library_root).expect("reopen database");
+        database
+            .connection
+            .execute(
+                "UPDATE study_sessions SET expires_at = '2000-01-01T00:00:00.000Z' WHERE id = ?1",
+                rusqlite::params![session.session_id],
+            )
+            .expect("expire session");
+    }
+
+    let error = crate::commands::rate_study_card(
+        StudyRatingPayload {
+            session_id: session.session_id.clone(),
+            card_id: grant.card.id.clone(),
+            grant_token: grant.grant_token.clone(),
+            expected_state: grant.expected_state.clone(),
+            expected_due_at: grant.expected_due_at.clone(),
+            rating: crate::scheduler::Rating::Good,
+            elapsed_ms: 1000,
+        },
+        app.state(),
+    )
+    .expect_err("expired session rejected");
+    assert_eq!(error, "study session expired");
+    assert_eq!(study_review_log_count(&library_root, &card.id), 0);
 }

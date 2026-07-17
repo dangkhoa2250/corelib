@@ -74,6 +74,22 @@ test("opens a settings section from Quick Open without performing a setting acti
   expect(setTheme).not.toHaveBeenCalled();
 });
 
+test("registers Memora settings as an Apps destination in Quick Open", async () => {
+  const openRoute = vi.fn();
+  const registry = createCommandRegistry(createContext({ openRoute }));
+
+  const [entry] = await registry.search("quick-open", "apps retention");
+  await entry.execute();
+
+  expect(entry).toEqual(expect.objectContaining({
+    id: "route.settings.memora",
+    title: "Memora",
+    breadcrumb: ["Settings", "Apps"],
+    surface: "quick-open",
+  }));
+  expect(openRoute).toHaveBeenCalledWith({ name: "settings", section: "memora" });
+});
+
 test("keeps card and trash provenance in Quick Open breadcrumbs", async () => {
   const registry = createCommandRegistry(createContext({
     searchCards: vi.fn().mockResolvedValue([{ kind: "card", id: "card-1", title: "Eigenvectors", subtitle: "Linear Algebra" }]),

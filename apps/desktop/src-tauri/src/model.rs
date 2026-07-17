@@ -58,6 +58,8 @@ pub struct LearningCardSummary {
     pub front: String,
     pub back: String,
     pub state: String,
+    #[serde(rename = "learningStep")]
+    pub learning_step: Option<i64>,
     #[serde(rename = "dueAt")]
     pub due_at: String,
     pub reps: i64,
@@ -86,6 +88,50 @@ pub struct ReviewPreviewPayload {
     pub hard: ReviewIntervalPayload,
     pub good: ReviewIntervalPayload,
     pub easy: ReviewIntervalPayload,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyScopePayload {
+    pub kind: String,
+    pub deck_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyCountsPayload {
+    pub learning: usize,
+    pub review: usize,
+    pub new: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyReadyCountsPayload {
+    pub learning: i64,
+    pub review: i64,
+    pub new: i64,
+    pub total: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyGrantPayload {
+    pub grant_token: String,
+    pub expected_state: String,
+    pub expected_due_at: String,
+    pub card: LearningCardSummary,
+    pub preview: ReviewPreviewPayload,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudySessionPayload {
+    pub session_id: String,
+    pub scope: StudyScopePayload,
+    pub cards: Vec<StudyGrantPayload>,
+    pub counts: StudyCountsPayload,
+    pub next_learning_due_at: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -181,6 +227,7 @@ pub struct CardBrowserRowPayload {
     pub front: String,
     pub back: String,
     pub state: String,
+    pub learning_step: Option<i64>,
     pub due_at: String,
     pub reps: i64,
     pub lapses: i64,
@@ -202,6 +249,29 @@ pub struct CardPagePayload {
     pub rows: Vec<CardBrowserRowPayload>,
     pub total: usize,
     pub next_cursor: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoraSettingsPayload {
+    pub new_cards_per_day: i64,
+    pub desired_retention: f64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeckLearningSettingsPayload {
+    pub deck_id: String,
+    pub inherited_new_cards_per_day: i64,
+    pub new_cards_per_day: Option<i64>,
+    pub effective_new_cards_per_day: i64,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateDeckLearningSettingsPayload {
+    pub deck_id: String,
+    pub new_cards_per_day: Option<i64>,
 }
 
 #[cfg(test)]
@@ -229,6 +299,7 @@ mod tests {
             front: "What is ATP?".into(),
             back: "Adenosine triphosphate".into(),
             state: "review".into(),
+            learning_step: None,
             due_at: "2026-07-10T09:00:00Z".into(),
             reps: 4,
             lapses: 1,
@@ -278,6 +349,7 @@ mod tests {
                 "front": "What is ATP?",
                 "back": "Adenosine triphosphate",
                 "state": "review",
+                "learningStep": null,
                 "dueAt": "2026-07-10T09:00:00Z",
                 "reps": 4,
                 "lapses": 1,
@@ -354,6 +426,7 @@ mod tests {
             front: "What is ATP?".into(),
             back: "Energy storage".into(),
             state: "review".into(),
+            learning_step: None,
             due_at: "2026-07-10T09:00:00Z".into(),
             reps: 4,
             lapses: 1,

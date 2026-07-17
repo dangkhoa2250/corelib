@@ -47,6 +47,8 @@ pub struct AppliedReview {
     pub rating: String,
     pub prior_state: String,
     pub next_state: String,
+    pub learning_step: Option<i64>,
+    pub increment_lapses: bool,
     pub prior_due_at: String,
     pub next_due_at: String,
     pub interval_seconds: i64,
@@ -476,7 +478,7 @@ impl LibraryDatabase {
     }
 
     pub fn card_by_id(&self, id: &str) -> Result<Option<LearningCardSummary>> {
-        let exists = self.connection.query_row("SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language FROM cards WHERE id=?1 AND deleted_at IS NULL", params![id], |r| self.hydrate_card(r)).optional()?;
+        let exists = self.connection.query_row("SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language,learning_step FROM cards WHERE id=?1 AND deleted_at IS NULL", params![id], |r| self.hydrate_card(r)).optional()?;
         Ok(exists)
     }
 
@@ -523,6 +525,7 @@ impl LibraryDatabase {
             difficulty: row.get(9)?,
             last_review_at: row.get(10)?,
             front_language: row.get(11)?,
+            learning_step: row.get(12)?,
             source,
             tags,
         })
@@ -605,7 +608,7 @@ impl LibraryDatabase {
         }
 
         let reviewed_at = learning_timestamp();
-        let changed = tx.execute("UPDATE cards SET state=?1,due_at=?2,stability=?3,difficulty=?4,memory_state_json=?5,reps=reps+1,lapses=lapses+CASE WHEN ?6='again' THEN 1 ELSE 0 END,last_review_at=?7,updated_at=?7 WHERE id=?8 AND state=?9 AND due_at=?10 AND deleted_at IS NULL", params![next_state,next_due_at,review.stability,review.difficulty,review.memory_state_json,rating,reviewed_at,review.card_id,prior_state,prior_due_at])?;
+        let changed = tx.execute("UPDATE cards SET state = ?1, learning_step = ?2, due_at = ?3, stability = ?4, difficulty = ?5, memory_state_json = ?6, reps = reps + 1, lapses = lapses + CASE WHEN ?7 THEN 1 ELSE 0 END, last_review_at = ?8, updated_at = ?8 WHERE id = ?9 AND state = ?10 AND due_at = ?11 AND deleted_at IS NULL", params![next_state,review.learning_step,next_due_at,review.stability,review.difficulty,review.memory_state_json,review.increment_lapses,reviewed_at,review.card_id,prior_state,prior_due_at])?;
         if changed != 1 {
             return Err(invalid("card review precondition failed"));
         }
@@ -661,7 +664,7 @@ impl LibraryDatabase {
             validate_state(state)?;
         }
 
-        let mut sql = "SELECT c.id, c.deck_id, c.front, c.back, c.state, c.due_at, c.reps, c.lapses, c.stability, c.difficulty, c.last_review_at, c.created_at, c.updated_at, d.name, c.deleted_at, c.deleted_from_deck_name, c.front_language FROM cards c JOIN decks d ON c.deck_id = d.id WHERE c.deleted_at IS NULL".to_string();
+        let mut sql = "SELECT c.id, c.deck_id, c.front, c.back, c.state, c.due_at, c.reps, c.lapses, c.stability, c.difficulty, c.last_review_at, c.created_at, c.updated_at, d.name, c.deleted_at, c.deleted_from_deck_name, c.front_language, c.learning_step FROM cards c JOIN decks d ON c.deck_id = d.id WHERE c.deleted_at IS NULL".to_string();
 
         let mut count_sql = "SELECT COUNT(*) FROM cards c WHERE c.deleted_at IS NULL".to_string();
 
@@ -844,6 +847,7 @@ impl LibraryDatabase {
         let deleted_at: Option<String> = row.get(14)?;
         let deleted_from_deck_name: Option<String> = row.get(15)?;
         let front_language: Option<String> = row.get(16)?;
+        let learning_step: Option<i64> = row.get(17)?;
 
         let source = self
             .connection
@@ -881,6 +885,7 @@ impl LibraryDatabase {
             front,
             back,
             state,
+            learning_step,
             due_at,
             reps,
             lapses,
@@ -1231,7 +1236,7 @@ impl LibraryDatabase {
             return Err(invalid("limit must be between 1 and 200"));
         }
 
-        let mut sql = "SELECT c.id, c.deck_id, c.front, c.back, c.state, c.due_at, c.reps, c.lapses, c.stability, c.difficulty, c.last_review_at, c.created_at, c.updated_at, COALESCE(d.name, c.deleted_from_deck_name, ''), c.deleted_at, c.deleted_from_deck_name, c.front_language FROM cards c LEFT JOIN decks d ON c.deck_id = d.id WHERE c.deleted_at IS NOT NULL".to_string();
+        let mut sql = "SELECT c.id, c.deck_id, c.front, c.back, c.state, c.due_at, c.reps, c.lapses, c.stability, c.difficulty, c.last_review_at, c.created_at, c.updated_at, COALESCE(d.name, c.deleted_from_deck_name, ''), c.deleted_at, c.deleted_from_deck_name, c.front_language, c.learning_step FROM cards c LEFT JOIN decks d ON c.deck_id = d.id WHERE c.deleted_at IS NOT NULL".to_string();
 
         let mut count_sql =
             "SELECT COUNT(*) FROM cards c WHERE c.deleted_at IS NOT NULL".to_string();

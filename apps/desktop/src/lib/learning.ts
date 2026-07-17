@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Invoke } from "./desktop";
-import type { Deck, DeckStatistics, LearningCard, NewCardSource, ReviewPreview, ReviewRating, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult } from "../domain/learning";
+import type { Deck, DeckStatistics, LearningCard, NewCardSource, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult, MemoraSettings, DeckLearningSettings, StudyScope, StudySession, StudyRatingInput, StudyRatingResult, StudyReadyCounts } from "../domain/learning";
 import type { LibraryDocument } from "../domain/document";
 
 export type SearchResult = { kind: "nav" | "document" | "card" | "deck" | "trash"; id: string; title: string; subtitle: string | null };
@@ -14,9 +14,6 @@ export function deleteDeck(id: string, call: Invoke = invoke as Invoke): Promise
 export function countDeckCards(id: string, call: Invoke = invoke as Invoke): Promise<number> { return call("count_deck_cards", { id }); }
 export function listDeckCards(deckId: string, call: Invoke = invoke as Invoke): Promise<LearningCard[]> { return call("list_deck_cards", { deckId }); }
 export function deleteCard(id: string, call: Invoke = invoke as Invoke): Promise<void> { return call("delete_card", { id }); }
-export function listDueCards(limit?: number, call: Invoke = invoke as Invoke): Promise<LearningCard[]> { return call("list_due_cards", limit === undefined ? undefined : { limit }); }
-export function previewCardReview(id: string, call: Invoke = invoke as Invoke): Promise<ReviewPreview> { return call("preview_card_review", { id }); }
-export function rateCard(id: string, rating: ReviewRating, elapsedMs: number, call: Invoke = invoke as Invoke): Promise<LearningCard> { return call("rate_card", { id, rating, elapsedMs }); }
 export function getCard(id: string, call: Invoke = invoke as Invoke): Promise<LearningCard> { return call("get_card", { id }); }
 export function getCardSource(id: string, call: Invoke = invoke as Invoke): Promise<CardSource | null> { return call("get_card_source", { id }); }
 export function searchEverything(query: string, call: Invoke = invoke as Invoke): Promise<SearchResult[]> { return call("search_everything", { query }); }
@@ -37,3 +34,13 @@ export function listActiveTags(deckId: string, call: Invoke = invoke as Invoke):
 export function getDeckStatistics(deckId: string, call: Invoke = invoke as Invoke): Promise<DeckStatistics> {
   return call("get_deck_statistics", { deckId });
 }
+
+export function getMemoraSettings(call: Invoke = invoke as Invoke): Promise<MemoraSettings> { return call("get_memora_settings"); }
+export function updateMemoraSettings(settings: MemoraSettings, call: Invoke = invoke as Invoke): Promise<MemoraSettings> { return call("update_memora_settings", { settings }); }
+export function getDeckLearningSettings(deckId: string, call: Invoke = invoke as Invoke): Promise<DeckLearningSettings> { return call("get_deck_learning_settings", { deckId }); }
+export function updateDeckLearningSettings(deckId: string, newCardsPerDay: number | null, call: Invoke = invoke as Invoke): Promise<DeckLearningSettings> { return call("update_deck_learning_settings", { payload: { deckId, newCardsPerDay } }); }
+
+export function getStudyReadyCounts(call: Invoke = invoke as Invoke): Promise<StudyReadyCounts> { return call("get_study_ready_counts"); }
+export function startStudySession(scope: StudyScope, call: Invoke = invoke as Invoke): Promise<StudySession> { return call("start_study_session", { scope }); }
+export function refreshStudySession(sessionId: string, call: Invoke = invoke as Invoke): Promise<StudySession> { return call("refresh_study_session", { sessionId }); }
+export function rateStudyCard(payload: StudyRatingInput, call: Invoke = invoke as Invoke): Promise<StudyRatingResult> { return call("rate_study_card", { payload }); }

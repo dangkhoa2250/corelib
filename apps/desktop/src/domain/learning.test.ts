@@ -15,6 +15,7 @@ test("recognizes a complete new learning card as schedulable", () => {
     stability: 0,
     difficulty: 0,
     lastReviewAt: null,
+    learningStep: null,
     source: {
       documentId: "document-1",
       page: 12,
@@ -45,6 +46,7 @@ test.each([
     stability: 0,
     difficulty: 0,
     lastReviewAt: null,
+    learningStep: null,
     source: null,
     tags: [],
     frontLanguage: null,
@@ -68,6 +70,7 @@ test("includes new cards and already-due cards in a review queue, but excludes f
     stability: 1,
     difficulty: 1,
     lastReviewAt: null,
+    learningStep: null,
     source: null,
     tags: [],
     frontLanguage: null,

@@ -546,7 +546,8 @@ fn deleting_a_drive_document_with_null_managed_path_succeeds() {
                ('0001_library'), ('0002_index_claims'), ('0003_drive_source'),
                ('0004_learning'), ('0005_learning_source_integrity'),
                ('0006_card_lifecycle'), ('0007_youglish_clickable'),
-               ('0008_page_count'), ('0009_page_tags');
+               ('0008_page_count'), ('0009_page_tags'),
+               ('0010_memora_study');
              CREATE TABLE documents (
                id TEXT PRIMARY KEY NOT NULL,
                source TEXT NOT NULL,
@@ -891,4 +892,179 @@ fn toggle_page_tag_rejects_non_positive_pages() {
         .expect("insert document");
 
     assert!(database.toggle_page_tag("doc-x", 0).is_err());
+}
+
+#[test]
+fn memora_study_migration_preserves_existing_cards_and_adds_defaults() {
+    let directory = tempdir().expect("temporary directory");
+    let database_path = directory.path().join("library.sqlite3");
+    let connection = Connection::open(&database_path).expect("open legacy database");
+
+    connection
+        .execute_batch("CREATE TABLE schema_migrations (id TEXT PRIMARY KEY NOT NULL);")
+        .expect("create migration table");
+    for (id, sql) in [
+        ("0001_library", include_str!("../migrations/0001_library.sql")),
+        (
+            "0002_index_claims",
+            include_str!("../migrations/0002_index_claims.sql"),
+        ),
+        (
+            "0003_drive_source",
+            include_str!("../migrations/0003_drive_source.sql"),
+        ),
+        ("0004_learning", include_str!("../migrations/0004_learning.sql")),
+        (
+            "0005_learning_source_integrity",
+            include_str!("../migrations/0005_learning_source_integrity.sql"),
+        ),
+        (
+            "0006_card_lifecycle",
+            include_str!("../migrations/0006_card_lifecycle.sql"),
+        ),
+        (
+            "0007_youglish_clickable",
+            include_str!("../migrations/0007_youglish_clickable.sql"),
+        ),
+        (
+            "0008_page_count",
+            include_str!("../migrations/0008_page_count.sql"),
+        ),
+        ("0009_page_tags", include_str!("../migrations/0009_page_tags.sql")),
+    ] {
+        connection.execute_batch(sql).expect("apply legacy migration");
+        connection
+            .execute("INSERT INTO schema_migrations(id) VALUES(?1)", params![id])
+            .expect("record migration");
+    }
+
+    let now = "2026-07-16T00:00:00.000Z";
+    connection
+        .execute(
+            "INSERT INTO decks(id,name,created_at,updated_at) VALUES('deck-1','Biology',?1,?1)",
+            params![now],
+        )
+        .expect("insert deck");
+    connection
+        .execute(
+            "INSERT INTO cards(
+               id,deck_id,front,back,state,due_at,stability,difficulty,memory_state_json,
+               reps,lapses,last_review_at,created_at,updated_at
+             ) VALUES(
+               'new-1','deck-1','Q','A','new',?1,NULL,NULL,NULL,0,0,NULL,?1,?1
+             )",
+            params![now],
+        )
+        .expect("insert new card");
+    connection
+        .execute(
+            "INSERT INTO cards(
+               id,deck_id,front,back,state,due_at,stability,difficulty,memory_state_json,
+               reps,lapses,last_review_at,created_at,updated_at
+             ) VALUES(
+               'learning-1','deck-1','Q','A','learning',?1,NULL,NULL,NULL,0,0,NULL,?1,?1
+             )",
+            params![now],
+        )
+        .expect("insert learning card");
+    connection
+        .execute(
+            "INSERT INTO cards(
+               id,deck_id,front,back,state,due_at,stability,difficulty,memory_state_json,
+               reps,lapses,last_review_at,created_at,updated_at
+             ) VALUES(
+               'review-1','deck-1','Q','A','review',?1,3.5,5.0,
+               '{\"stability\":3.5,\"difficulty\":5.0}',4,1,?1,?1,?1
+             )",
+            params![now],
+        )
+        .expect("insert review card");
+    connection
+        .execute(
+            "INSERT INTO cards(
+               id,deck_id,front,back,state,due_at,stability,difficulty,memory_state_json,
+               reps,lapses,last_review_at,created_at,updated_at
+             ) VALUES(
+               'relearning-1','deck-1','Q','A','relearning',?1,2.0,6.0,NULL,3,2,?1,?1,?1
+             )",
+            params![now],
+        )
+        .expect("insert relearning card");
+    connection
+        .execute(
+            "INSERT INTO cards(
+               id,deck_id,front,back,state,due_at,stability,difficulty,memory_state_json,
+               reps,lapses,last_review_at,created_at,updated_at,suspended_from_state
+             ) VALUES(
+               'suspended-relearning-1','deck-1','Q','A','suspended',?1,2.0,6.0,NULL,3,2,?1,?1,?1,'relearning'
+             )",
+            params![now],
+        )
+        .expect("insert suspended relearning card");
+    connection
+        .execute(
+            "INSERT INTO review_logs(
+               id,card_id,reviewed_at,rating,prior_state,next_state,
+               prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version
+             ) VALUES('review-log-1','review-1',?1,'good','review','review',?1,?1,86400,2000,'fsrs-v1')",
+            params![now],
+        )
+        .expect("insert review log");
+    drop(connection);
+
+    let database = LibraryDatabase::open(directory.path()).expect("upgrade database");
+    let settings: (i64, f64) = database
+        .connection
+        .query_row(
+            "SELECT new_cards_per_day, desired_retention FROM memora_settings WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read defaults");
+    assert_eq!(settings, (20, 0.90));
+
+    let card: (String, Option<i64>, f64, i64) = database
+        .connection
+        .query_row(
+            "SELECT state, learning_step, stability, reps FROM cards WHERE id='review-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("read migrated card");
+    assert_eq!(card, ("review".into(), None, 3.5, 4));
+
+    let learning_step = |id: &str| -> Option<i64> {
+        database
+            .connection
+            .query_row(
+                "SELECT learning_step FROM cards WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .expect("read learning step")
+    };
+    assert_eq!(learning_step("new-1"), None);
+    assert!(matches!(learning_step("learning-1"), Some(0 | 1)));
+    assert_eq!(learning_step("review-1"), None);
+    assert_eq!(learning_step("relearning-1"), Some(0));
+    assert_eq!(learning_step("suspended-relearning-1"), Some(0));
+
+    let review_log_count: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM review_logs", [], |row| row.get(0))
+        .expect("count review logs");
+    assert_eq!(review_log_count, 1);
+
+    let memory_json: Option<String> = database
+        .connection
+        .query_row(
+            "SELECT memory_state_json FROM cards WHERE id='review-1'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("read memory json");
+    assert_eq!(
+        memory_json.as_deref(),
+        Some("{\"stability\":3.5,\"difficulty\":5.0}")
+    );
 }

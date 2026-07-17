@@ -9,7 +9,9 @@ use std::{
     thread,
 };
 
-use chrono::{DateTime, Utc};
+#[cfg(test)]
+use chrono::DateTime;
+use chrono::Utc;
 use serde::Deserialize;
 
 use tauri::State;
@@ -17,15 +19,21 @@ use uuid::Uuid;
 
 use crate::{
     indexer::index_managed_pdf,
-    learning::{AppliedReview, DeckStatistics, NewCard, NewCardSource},
+    learning::{DeckStatistics, NewCard, NewCardSource},
     library_db::{LibraryDatabase, NewLocalDocument},
     library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
     model::DocumentSummary,
     model::{
-        CardSourcePayload, DeckSummary, LearningCardSummary, ReviewIntervalPayload,
-        ReviewPreviewPayload, SearchResultPayload, SelectionRect,
+        CardSourcePayload, DeckLearningSettingsPayload, DeckSummary, LearningCardSummary,
+        MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload, StudyCountsPayload,
+        StudyGrantPayload, StudyReadyCountsPayload, StudyScopePayload, StudySessionPayload,
+        SearchResultPayload, SelectionRect, UpdateDeckLearningSettingsPayload,
     },
-    scheduler::{Rating, ReviewScheduler, ScheduledState},
+    scheduler::{Rating, ScheduledState},
+    study_queue::{
+        DeckLearningSettings, DeckLearningSettingsUpdate, MemoraSettings, MemoraSettingsUpdate,
+        StudyGrant, StudyRating, StudyRatingResult, StudyScope, StudySession,
+    },
 };
 
 pub type IndexTask = Box<dyn FnOnce() + Send + 'static>;
@@ -800,20 +808,6 @@ pub fn count_deck_cards(id: String, state: State<'_, LibraryStore>) -> Result<i6
 }
 
 #[tauri::command]
-pub fn list_due_cards(
-    limit: Option<usize>,
-    state: State<'_, LibraryStore>,
-) -> Result<Vec<LearningCardSummary>, String> {
-    let limit = limit.unwrap_or(20).min(100);
-    learning_lock(&state)?
-        .due_cards(
-            &Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-            limit,
-        )
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
 pub fn get_card(id: String, state: State<'_, LibraryStore>) -> Result<LearningCardSummary, String> {
     learning_lock(&state)?
         .card_by_id(&id)
@@ -838,12 +832,14 @@ pub fn delete_card(id: String, state: State<'_, LibraryStore>) -> Result<(), Str
         .map_err(|e| e.to_string())
 }
 
+#[cfg(test)]
 fn parse_now(value: &str) -> Result<DateTime<Utc>, String> {
     DateTime::parse_from_rfc3339(value)
         .map(|v| v.with_timezone(&Utc))
         .map_err(|_| "invalid learning timestamp".to_owned())
 }
 
+#[cfg(test)]
 fn elapsed_days(last: Option<&str>, now: DateTime<Utc>) -> Result<u32, String> {
     let Some(last) = last else { return Ok(0) };
     let then = parse_now(last)?;
@@ -865,81 +861,6 @@ fn preview_payload(state: &ScheduledState) -> ReviewIntervalPayload {
         due_at: state.due_at.clone(),
         interval_label: interval_label(state.interval_seconds),
     }
-}
-
-#[tauri::command]
-pub fn preview_card_review(
-    id: String,
-    state: State<'_, LibraryStore>,
-) -> Result<ReviewPreviewPayload, String> {
-    let db = learning_lock(&state)?;
-    let card = db
-        .card_by_id(&id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "card not found".to_owned())?;
-    let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
-    let now = Utc::now();
-    let preview = ReviewScheduler::default()
-        .preview(
-            memory.as_deref(),
-            elapsed_days(card.last_review_at.as_deref(), now)?,
-            now,
-        )
-        .map_err(|e| e.to_string())?;
-    Ok(ReviewPreviewPayload {
-        again: preview_payload(&preview.again),
-        hard: preview_payload(&preview.hard),
-        good: preview_payload(&preview.good),
-        easy: preview_payload(&preview.easy),
-    })
-}
-
-#[tauri::command]
-pub fn rate_card(
-    id: String,
-    rating: Rating,
-    elapsed_ms: i64,
-    state: State<'_, LibraryStore>,
-) -> Result<LearningCardSummary, String> {
-    if elapsed_ms < 0 {
-        return Err("elapsedMs must be nonnegative".to_owned());
-    }
-    let mut db = learning_lock(&state)?;
-    let card = db
-        .card_by_id(&id)
-        .map_err(|e| e.to_string())?
-        .ok_or_else(|| "card not found".to_owned())?;
-    let now = Utc::now();
-    let memory = db.card_memory_state(&id).map_err(|e| e.to_string())?;
-    let next = ReviewScheduler::default()
-        .apply(
-            memory.as_deref(),
-            elapsed_days(card.last_review_at.as_deref(), now)?,
-            rating,
-            now,
-        )
-        .map_err(|e| e.to_string())?;
-    let rating_name = match rating {
-        Rating::Again => "again",
-        Rating::Hard => "hard",
-        Rating::Good => "good",
-        Rating::Easy => "easy",
-    };
-    db.apply_review_atomic(AppliedReview {
-        card_id: id,
-        rating: rating_name.to_owned(),
-        prior_state: card.state,
-        next_state: next.state,
-        prior_due_at: card.due_at,
-        next_due_at: next.due_at,
-        interval_seconds: next.interval_seconds,
-        elapsed_ms,
-        stability: next.stability.map(f64::from),
-        difficulty: next.difficulty.map(f64::from),
-        memory_state_json: Some(next.memory_state_json),
-        scheduler_version: ReviewScheduler::default().config().version.clone(),
-    })
-    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1157,6 +1078,213 @@ pub fn empty_trash(
         affected_ids: res.affected_ids,
         affected_count: res.affected_count,
     })
+}
+
+impl From<MemoraSettings> for MemoraSettingsPayload {
+    fn from(settings: MemoraSettings) -> Self {
+        Self {
+            new_cards_per_day: settings.new_cards_per_day,
+            desired_retention: settings.desired_retention,
+        }
+    }
+}
+
+impl From<DeckLearningSettings> for DeckLearningSettingsPayload {
+    fn from(settings: DeckLearningSettings) -> Self {
+        Self {
+            deck_id: settings.deck_id,
+            inherited_new_cards_per_day: settings.inherited_new_cards_per_day,
+            new_cards_per_day: settings.new_cards_per_day,
+            effective_new_cards_per_day: settings.effective_new_cards_per_day,
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_memora_settings(
+    state: State<'_, LibraryStore>,
+) -> Result<MemoraSettingsPayload, String> {
+    learning_lock(&state)?
+        .memora_settings()
+        .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_memora_settings(
+    settings: MemoraSettingsPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<MemoraSettingsPayload, String> {
+    learning_lock(&state)?
+        .update_memora_settings(MemoraSettingsUpdate {
+            new_cards_per_day: settings.new_cards_per_day,
+            desired_retention: settings.desired_retention,
+        })
+        .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_deck_learning_settings(
+    deck_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<DeckLearningSettingsPayload, String> {
+    learning_lock(&state)?
+        .deck_learning_settings(&deck_id)
+        .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn update_deck_learning_settings(
+    payload: UpdateDeckLearningSettingsPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<DeckLearningSettingsPayload, String> {
+    let update = match payload.new_cards_per_day {
+        Some(value) => DeckLearningSettingsUpdate::Custom(value),
+        None => DeckLearningSettingsUpdate::Inherit,
+    };
+    learning_lock(&state)?
+        .update_deck_learning_settings(&payload.deck_id, update)
+        .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StudyRatingPayload {
+    pub session_id: String,
+    pub card_id: String,
+    pub grant_token: String,
+    pub expected_state: String,
+    pub expected_due_at: String,
+    pub rating: Rating,
+    pub elapsed_ms: i64,
+}
+
+pub(crate) fn scope_from_payload(payload: StudyScopePayload) -> Result<StudyScope, String> {
+    match payload.kind.as_str() {
+        "all" => Ok(StudyScope::All),
+        "deck" => {
+            let deck_id = payload
+                .deck_id
+                .filter(|id| !id.trim().is_empty())
+                .ok_or_else(|| "study scope deck id is required".to_owned())?;
+            Ok(StudyScope::Deck(deck_id))
+        }
+        _ => Err("invalid study scope".to_owned()),
+    }
+}
+
+fn scope_to_payload(scope: &StudyScope) -> StudyScopePayload {
+    match scope {
+        StudyScope::All => StudyScopePayload {
+            kind: "all".to_owned(),
+            deck_id: None,
+        },
+        StudyScope::Deck(id) => StudyScopePayload {
+            kind: "deck".to_owned(),
+            deck_id: Some(id.clone()),
+        },
+    }
+}
+
+fn grant_to_payload(grant: StudyGrant) -> StudyGrantPayload {
+    StudyGrantPayload {
+        grant_token: grant.grant_token,
+        expected_state: grant.expected_state,
+        expected_due_at: grant.expected_due_at,
+        card: grant.card,
+        preview: ReviewPreviewPayload {
+            again: preview_payload(&grant.preview.again),
+            hard: preview_payload(&grant.preview.hard),
+            good: preview_payload(&grant.preview.good),
+            easy: preview_payload(&grant.preview.easy),
+        },
+    }
+}
+
+fn session_to_payload(session: StudySession) -> StudySessionPayload {
+    StudySessionPayload {
+        session_id: session.session_id,
+        scope: scope_to_payload(&session.scope),
+        cards: session.cards.into_iter().map(grant_to_payload).collect(),
+        counts: StudyCountsPayload {
+            learning: session.counts.learning,
+            review: session.counts.review,
+            new: session.counts.new,
+        },
+        next_learning_due_at: session.next_learning_due_at,
+    }
+}
+
+#[tauri::command]
+pub fn start_study_session(
+    scope: StudyScopePayload,
+    state: State<'_, LibraryStore>,
+) -> Result<StudySessionPayload, String> {
+    let scope = scope_from_payload(scope)?;
+    let now = Utc::now();
+    let study_day = chrono::Local::now().date_naive().to_string();
+    learning_lock(&state)?
+        .start_study_session(scope, now, &study_day)
+        .map(session_to_payload)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn refresh_study_session(
+    session_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<StudySessionPayload, String> {
+    let now = Utc::now();
+    let study_day = chrono::Local::now().date_naive().to_string();
+    learning_lock(&state)?
+        .refresh_study_session(&session_id, now, &study_day)
+        .map(session_to_payload)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rate_study_card(
+    payload: StudyRatingPayload,
+    state: State<'_, LibraryStore>,
+) -> Result<StudyRatingResult, String> {
+    if payload.elapsed_ms < 0 {
+        return Err("elapsedMs must be nonnegative".to_owned());
+    }
+    let now = Utc::now();
+    let study_day = chrono::Local::now().date_naive().to_string();
+    learning_lock(&state)?
+        .rate_study_card(StudyRating {
+            session_id: payload.session_id,
+            card_id: payload.card_id,
+            grant_token: payload.grant_token,
+            expected_state: payload.expected_state,
+            expected_due_at: payload.expected_due_at,
+            rating: payload.rating,
+            elapsed_ms: payload.elapsed_ms,
+            now,
+            study_day,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_study_ready_counts(
+    state: State<'_, LibraryStore>,
+) -> Result<StudyReadyCountsPayload, String> {
+    let now = Utc::now();
+    let study_day = chrono::Local::now().date_naive().to_string();
+    learning_lock(&state)?
+        .study_ready_counts(now, &study_day)
+        .map(|counts| StudyReadyCountsPayload {
+            learning: counts.learning,
+            review: counts.review,
+            new: counts.new,
+            total: counts.total,
+        })
+        .map_err(|e| e.to_string())
 }
 
 pub struct AccountServiceState {

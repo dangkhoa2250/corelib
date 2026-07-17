@@ -28,6 +28,7 @@ const mockRows = [
     stability: 2.5,
     difficulty: 3.1,
     lastReviewAt: "2026-07-09T12:00:00Z",
+    learningStep: null,
     source: null,
     tags: ["energy"],
     frontLanguage: null,

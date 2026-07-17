@@ -10,6 +10,14 @@ test("does not apply global color transitions to every element", () => {
   expect(css).not.toContain("transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;");
 });
 
+test("moves lowered review states down responsively", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const lowered = css.match(/\.review-page--lowered \.review-page__done-content \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(lowered).toContain("transform: translateY(clamp(32px, 6vh, 64px));");
+});
+
 test("uses a dark-theme-safe compact surface for the import trigger", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
@@ -112,8 +120,12 @@ test("shrinks the flashcard by viewport height while a video is open", () => {
   expect(videoCard).toContain("flex: 0 0 clamp(240px, 28vh, 360px);");
   expect(videoCard).toContain("height: clamp(240px, 28vh, 360px);");
   expect(videoCard).not.toContain("overflow-y");
-  const videoBody = css.match(/\.review-page__body--with-video \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  expect(videoBody).toContain("padding-right: 16px;");
+  const reviewBody = css.match(/\.review-page__body \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  expect(reviewBody).toContain("padding-right: 20px;");
+
+  const cardFace = css.match(/\.review-page__card-face-scroll \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  expect(cardFace).toContain("padding-right: 20px;");
+  expect(cardFace).not.toContain("overflow-y: auto;");
 });
 
 test("uses the reusable ScrollArea for the reader's thumbnail and PDF panes", () => {

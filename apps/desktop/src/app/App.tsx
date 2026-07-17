@@ -39,8 +39,8 @@ import { SettingsPage, readTranslationPreference } from "../features/settings/Se
 import { appleTranslationAvailable, clearAiApiKey, hasAiApiKey, listAiModels, saveAiApiKey, translateText } from "../lib/ai";
 import type { AiModel, AiProviderId } from "../domain/ai";
 import type { TranslationEngineId } from "../domain/translation";
-import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, listDueCards as nativeListDueCards, previewCardReview as nativePreviewCardReview, rateCard as nativeRateCard, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics } from "../lib/learning";
-import { isReadyToReview, type BulkResult, type CardBrowserQuery, type CardPage, type CardSource, type Deck, type DeckStatistics, type LearningCard, type ReviewPreview, type ReviewRating, type UpdateCardInput, type UpdateAndMoveCardInput } from "../domain/learning";
+import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, getStudyReadyCounts as nativeGetStudyReadyCounts, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics, startStudySession as nativeStartStudySession, refreshStudySession as nativeRefreshStudySession, rateStudyCard as nativeRateStudyCard, getMemoraSettings as nativeGetMemoraSettings, updateMemoraSettings as nativeUpdateMemoraSettings, getDeckLearningSettings as nativeGetDeckLearningSettings, updateDeckLearningSettings as nativeUpdateDeckLearningSettings } from "../lib/learning";
+import { type BulkResult, type CardBrowserQuery, type CardPage, type CardSource, type Deck, type DeckStatistics, type LearningCard, type ReviewRating, type StudyReadyCounts, type UpdateCardInput, type UpdateAndMoveCardInput, type StudyScope, type StudySession, type StudyRatingInput, type StudyRatingResult, type StudyGrant, type MemoraSettings, type DeckLearningSettings } from "../domain/learning";
 import type { CreateCardInput } from "../lib/learning";
 import { AccountGate, useAccount } from "../features/account/AccountGate";
 import { PocketBaseAccountApiClient } from "../lib/account";
@@ -124,9 +124,7 @@ interface LearningApi {
   countDeckCards?: (id: string) => Promise<number>;
   listDeckCards?: (deckId: string) => Promise<LearningCard[]>;
   deleteCard?: (id: string) => Promise<void>;
-  listDueCards?: (limit?: number) => Promise<LearningCard[]>;
-  previewCardReview?: (id: string) => Promise<ReviewPreview>;
-  rateCard?: (id: string, rating: ReviewRating, elapsedMs: number) => Promise<LearningCard>;
+  getStudyReadyCounts?: () => Promise<StudyReadyCounts>;
   getCard?: (id: string) => Promise<LearningCard>;
   getCardSource?: (id: string) => Promise<CardSource | null>;
   listActiveTags?: (deckId: string) => Promise<string[]>;
@@ -137,6 +135,13 @@ interface LearningApi {
   setCardsSuspended?: (cardIds: string[], suspended: boolean) => Promise<BulkResult>;
   trashCards?: (cardIds: string[]) => Promise<BulkResult>;
   getDeckStatistics?: (deckId: string) => Promise<DeckStatistics>;
+  startStudySession?: (scope: StudyScope) => Promise<StudySession>;
+  refreshStudySession?: (sessionId: string) => Promise<StudySession>;
+  rateStudyCard?: (payload: StudyRatingInput) => Promise<StudyRatingResult>;
+  getMemoraSettings?: () => Promise<MemoraSettings>;
+  updateMemoraSettings?: (settings: MemoraSettings) => Promise<MemoraSettings>;
+  getDeckLearningSettings?: (deckId: string) => Promise<DeckLearningSettings>;
+  updateDeckLearningSettings?: (deckId: string, newCardsPerDay: number | null) => Promise<DeckLearningSettings>;
 }
 
 const nativeLearningApi: LearningApi = {
@@ -148,9 +153,7 @@ const nativeLearningApi: LearningApi = {
   countDeckCards: nativeCountDeckCards,
   listDeckCards: nativeListDeckCards,
   deleteCard: nativeDeleteCard,
-  listDueCards: nativeListDueCards,
-  previewCardReview: nativePreviewCardReview,
-  rateCard: nativeRateCard,
+  getStudyReadyCounts: nativeGetStudyReadyCounts,
   getCard: nativeGetCard,
   getCardSource: nativeGetCardSource,
   listActiveTags: nativeListActiveTags,
@@ -161,6 +164,13 @@ const nativeLearningApi: LearningApi = {
   setCardsSuspended: nativeSetCardsSuspended,
   trashCards: nativeTrashCards,
   getDeckStatistics: nativeGetDeckStatistics,
+  startStudySession: nativeStartStudySession,
+  refreshStudySession: nativeRefreshStudySession,
+  rateStudyCard: nativeRateStudyCard,
+  getMemoraSettings: nativeGetMemoraSettings,
+  updateMemoraSettings: nativeUpdateMemoraSettings,
+  getDeckLearningSettings: nativeGetDeckLearningSettings,
+  updateDeckLearningSettings: nativeUpdateDeckLearningSettings,
 };
 
 interface AppProps {
@@ -265,9 +275,7 @@ export function App({
     countDeckCards: learningApi.countDeckCards ?? nativeCountDeckCards,
     listDeckCards: learningApi.listDeckCards ?? nativeListDeckCards,
     deleteCard: learningApi.deleteCard ?? nativeDeleteCard,
-    listDueCards: learningApi.listDueCards ?? nativeListDueCards,
-    previewCardReview: learningApi.previewCardReview ?? nativePreviewCardReview,
-    rateCard: learningApi.rateCard ?? nativeRateCard,
+    getStudyReadyCounts: learningApi.getStudyReadyCounts ?? nativeGetStudyReadyCounts,
     getCard: learningApi.getCard ?? nativeGetCard,
     getCardSource: learningApi.getCardSource ?? nativeGetCardSource,
     listActiveTags: learningApi.listActiveTags ?? nativeListActiveTags,
@@ -278,6 +286,13 @@ export function App({
     setCardsSuspended: learningApi.setCardsSuspended ?? nativeSetCardsSuspended,
     trashCards: learningApi.trashCards ?? nativeTrashCards,
     getDeckStatistics: learningApi.getDeckStatistics ?? nativeGetDeckStatistics,
+    startStudySession: learningApi.startStudySession ?? nativeStartStudySession,
+    refreshStudySession: learningApi.refreshStudySession ?? nativeRefreshStudySession,
+    rateStudyCard: learningApi.rateStudyCard ?? nativeRateStudyCard,
+    getMemoraSettings: learningApi.getMemoraSettings ?? nativeGetMemoraSettings,
+    updateMemoraSettings: learningApi.updateMemoraSettings ?? nativeUpdateMemoraSettings,
+    getDeckLearningSettings: learningApi.getDeckLearningSettings ?? nativeGetDeckLearningSettings,
+    updateDeckLearningSettings: learningApi.updateDeckLearningSettings ?? nativeUpdateDeckLearningSettings,
   }), [learningApi]);
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
   const [route, setRoute] = useState<AppRoute>({ name: "library" });
@@ -341,22 +356,19 @@ export function App({
 
   const handleStudyDeck = useCallback(async (deckId: string) => {
     try {
-      const deck = decks.find(d => d.id === deckId);
+      const deck = decks.find((candidate) => candidate.id === deckId);
       if (!deck) return;
-      const deckCards = await learning.listDeckCards(deckId);
-      const toStudy = deckCards.filter((card) => isReadyToReview(card, new Date().toISOString()));
-      const pairs = await Promise.all(toStudy.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
-      setRoute({ name: "review", cards: toStudy, previews: Object.fromEntries(pairs), sourceDeck: deck, mode: "study" });
+      const session = await learning.startStudySession({ kind: "deck", deckId });
+      setRoute({ name: "review", session, sourceDeck: deck, mode: "study" });
     } catch (reviewError) { setError(errorMessage(reviewError)); }
   }, [learning, decks]);
 
   const handlePracticeAll = useCallback(async (deckId: string) => {
     try {
-      const deck = decks.find(d => d.id === deckId);
+      const deck = decks.find((candidate) => candidate.id === deckId);
       if (!deck) return;
-      const deckCards = await learning.listDeckCards(deckId);
-      const pairs = await Promise.all(deckCards.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
-      setRoute({ name: "review", cards: deckCards, previews: Object.fromEntries(pairs), sourceDeck: deck, mode: "practice" });
+      const cards = (await learning.listDeckCards(deckId)).filter((card) => card.state !== "suspended");
+      setRoute({ name: "review", cards, sourceDeck: deck, mode: "practice" });
     } catch (reviewError) { setError(errorMessage(reviewError)); }
   }, [learning, decks]);
   const load = useCallback(async () => {
@@ -470,14 +482,9 @@ export function App({
 
   const handleReviewToday = useCallback(async () => {
     try {
-      const cards = await learning.listDueCards();
-      const pairs = await Promise.all(cards.map(async (card) => [card.id, await learning.previewCardReview(card.id)] as const));
-      setRoute({ name: "review", cards, previews: Object.fromEntries(pairs) });
+      const session = await learning.startStudySession({ kind: "all" });
+      setRoute({ name: "review", session, mode: "study" });
     } catch (reviewError) { setError(errorMessage(reviewError)); }
-  }, [learning]);
-
-  const handleRate = useCallback(async (card: LearningCard, rating: ReviewRating, elapsedMs: number) => {
-    await learning.rateCard(card.id, rating, elapsedMs);
   }, [learning]);
 
   const loadDriveFolder = useCallback(async (folderId?: string) => {
@@ -637,7 +644,45 @@ export function App({
   );
 
   if (route.name === "review") {
-    return <><ReviewPage cards={route.cards} previews={route.previews} mode={route.mode} onRate={handleRate} onBack={() => setRoute(route.sourceDeck ? { name: "deckDetail", deck: route.sourceDeck } : { name: "memora" })} getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl} />{palette}</>;
+    const onBack = () => setRoute(route.sourceDeck ? { name: "deckDetail", deck: route.sourceDeck } : { name: "memora" });
+    if (route.mode === "practice") {
+      return <><ReviewPage mode="practice" cards={route.cards} onBack={onBack} getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl} />{palette}</>;
+    }
+    const session = route.session;
+    return (
+      <>
+        <ReviewPage
+          mode="study"
+          session={session}
+          onBack={onBack}
+          getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
+          onRate={(activeSessionId: string, grant: StudyGrant, rating: ReviewRating, elapsedMs: number) =>
+            learning.rateStudyCard({
+              sessionId: activeSessionId,
+              cardId: grant.card.id,
+              grantToken: grant.grantToken,
+              expectedState: grant.expectedState,
+              expectedDueAt: grant.expectedDueAt,
+              rating,
+              elapsedMs,
+            })
+          }
+          onRefresh={async (activeSessionId: string) => {
+            try {
+              return await learning.refreshStudySession(activeSessionId);
+            } catch (refreshError) {
+              if (errorMessage(refreshError) !== "study session expired") throw refreshError;
+              const replacement = await learning.startStudySession(session.scope);
+              setRoute((current) => current.name === "review" && current.mode === "study"
+                ? { ...current, session: replacement }
+                : current);
+              return replacement;
+            }
+          }}
+        />
+        {palette}
+      </>
+    );
   }
 
   if (route.name === "reader") {
@@ -681,6 +726,8 @@ export function App({
           saveApiKey={aiApi.saveApiKey}
           clearApiKey={aiApi.clearApiKey}
           listModels={aiApi.listModels}
+          getMemoraSettings={learning.getMemoraSettings}
+          updateMemoraSettings={learning.updateMemoraSettings}
           appleTranslationAvailable={aiApi.appleTranslationAvailable}
           onDefaultChange={handleTranslationDefaultChange}
           onBack={() => setRoute({ name: "library" })}
@@ -732,7 +779,7 @@ export function App({
         {route.name === "memora" ? (
           <MemoraPage
             listDecks={learning.listDecks}
-            listDueCards={learning.listDueCards}
+            getStudyReadyCounts={learning.getStudyReadyCounts}
             onReviewToday={handleReviewToday}
             onStudyDeck={handleStudyDeck}
             onPracticeAll={handlePracticeAll}
@@ -741,6 +788,8 @@ export function App({
             deleteDeck={handleDeleteDeck}
             countDeckCards={learning.countDeckCards}
             getDeckStatistics={learning.getDeckStatistics}
+            getDeckLearningSettings={learning.getDeckLearningSettings}
+            updateDeckLearningSettings={learning.updateDeckLearningSettings}
             onOpenDeck={handleOpenDeck}
           />
         ) : route.name === "deckDetail" ? (

@@ -141,6 +141,62 @@ function anonymousAccountApi(): AccountApi {
   };
 }
 
+const englishDeck = {
+  id: "deck-1",
+  name: "English",
+  description: null,
+  color: "#ff9500",
+  archived: false,
+};
+
+function studyCard(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "card-1",
+    deckId: "deck-1",
+    front: "Question",
+    back: "Answer",
+    state: "review" as const,
+    dueAt: "2026-07-16T09:00:00.000Z",
+    reps: 1,
+    lapses: 0,
+    stability: 1,
+    difficulty: 1,
+    lastReviewAt: null,
+    learningStep: null,
+    source: null,
+    tags: [],
+    frontLanguage: null,
+    ...overrides,
+  };
+}
+
+function studyGrant(overrides: Record<string, unknown> = {}) {
+  return {
+    grantToken: "grant-1",
+    expectedState: "review" as const,
+    expectedDueAt: "2026-07-16T09:00:00.000Z",
+    card: studyCard(),
+    preview: {
+      again: { dueAt: "2026-07-16T09:10:00.000Z", intervalLabel: "10m" },
+      hard: { dueAt: "2026-07-17T09:00:00.000Z", intervalLabel: "1d" },
+      good: { dueAt: "2026-07-19T09:00:00.000Z", intervalLabel: "3d" },
+      easy: { dueAt: "2026-07-23T09:00:00.000Z", intervalLabel: "7d" },
+    },
+    ...overrides,
+  };
+}
+
+function studySession(overrides: Record<string, unknown> = {}) {
+  return {
+    sessionId: "session-1",
+    scope: { kind: "all" as const },
+    cards: [studyGrant()],
+    counts: { learning: 0, review: 1, new: 0 },
+    nextLearningDueAt: null,
+    ...overrides,
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -194,7 +250,7 @@ test("keeps Card Browser inside Memora rather than in the application sidebar", 
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([]),
         createCard: vi.fn(),
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -663,7 +719,7 @@ test("navigates between Library and Memora via the sidebar", async () => {
       learningApi={{
         listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
         createCard: vi.fn(),
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics,
       }}
     />,
@@ -695,7 +751,7 @@ test("creates a new deck from Memora", async () => {
         listDecks: vi.fn().mockResolvedValue([]),
         createCard: vi.fn(),
         createDeck,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -750,7 +806,7 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
         createCard,
         queryDeckCards,
         listActiveTags,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -859,7 +915,7 @@ test("deletes a card from a deck's card list", async () => {
         queryDeckCards,
         trashCards: trashCardsMock,
         listActiveTags,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -908,7 +964,7 @@ test("renames a deck from Memora", async () => {
         listDecks: vi.fn().mockResolvedValue([{ id: "deck-1", name: "English", description: null, color: "#ff9500", archived: false }]),
         createCard: vi.fn(),
         renameDeck,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -947,7 +1003,7 @@ test("deletes an empty deck from Memora", async () => {
         createCard: vi.fn(),
         deleteDeck,
         countDeckCards,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -983,7 +1039,7 @@ test("warns how many cards will be deleted before confirming a cascade delete", 
         createCard: vi.fn(),
         deleteDeck,
         countDeckCards,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -1017,7 +1073,7 @@ test("surfaces an error when a deck deletion fails", async () => {
         createCard: vi.fn(),
         deleteDeck,
         countDeckCards,
-        listDueCards: vi.fn().mockResolvedValue([]),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
         getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
       }}
     />,
@@ -1075,4 +1131,119 @@ test("keeps Quick Open and Command Palette available from Settings", async () =>
 
   fireEvent.keyDown(window, { key: "k", ctrlKey: true, shiftKey: true });
   expect(await screen.findByRole("dialog", { name: "Command Palette" })).toBeInTheDocument();
+});
+
+test("Quick Open surfaces Settings → Memora and deep-links its section", async () => {
+  const user = userEvent.setup();
+  vi.mocked(invoke).mockImplementation(async (cmd) => {
+    if (cmd === "search_everything") return [] as any;
+    if (cmd === "list_trashed_cards") return { rows: [], total: 0, nextCursor: null } as any;
+    return undefined as any;
+  });
+  const getMemoraSettings = vi.fn().mockResolvedValue({ newCardsPerDay: 20, desiredRetention: 0.9 });
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([]),
+        createCard: vi.fn(),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
+        getMemoraSettings,
+        updateMemoraSettings: vi.fn().mockResolvedValue({ newCardsPerDay: 20, desiredRetention: 0.9 }),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
+  await user.type(await screen.findByRole("searchbox", { name: "Quick Open" }), "Settings Memora");
+  await user.click(await screen.findByRole("button", { name: /Open Memora/ }));
+
+  expect(await screen.findByRole("heading", { name: "Memora" })).toBeInTheDocument();
+  expect(await screen.findByLabelText("New cards per day")).toBeInTheDocument();
+  expect(getMemoraSettings).toHaveBeenCalled();
+});
+
+test("Review Today starts a backend study session", async () => {
+  const user = userEvent.setup();
+  const startStudySession = vi.fn().mockResolvedValue(studySession());
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([englishDeck]),
+        createCard: vi.fn(),
+        getStudyReadyCounts: vi.fn(() => { throw new Error("legacy due query must not be used"); }),
+        startStudySession,
+        refreshStudySession: vi.fn().mockResolvedValue(studySession()),
+        rateStudyCard: vi.fn(),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await user.click(await screen.findByRole("button", { name: /Review/ }));
+
+  expect(startStudySession).toHaveBeenCalledWith({ kind: "all" });
+  expect(await screen.findAllByText("Question")).toHaveLength(2);
+});
+
+test("Study a deck starts a deck-scoped study session", async () => {
+  const user = userEvent.setup();
+  const startStudySession = vi.fn().mockResolvedValue(studySession({ scope: { kind: "deck", deckId: "deck-1" } }));
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([englishDeck]),
+        createCard: vi.fn(),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
+        startStudySession,
+        refreshStudySession: vi.fn().mockResolvedValue(studySession()),
+        rateStudyCard: vi.fn(),
+        getDeckStatistics: vi.fn().mockResolvedValue({ ...emptyDeckStatistics, newCards: 1 }),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await user.click(await screen.findByRole("button", { name: "Study English" }));
+  await user.click(await screen.findByRole("menuitem", { name: "Review Due" }));
+
+  expect(startStudySession).toHaveBeenCalledWith({ kind: "deck", deckId: "deck-1" });
+  expect(await screen.findAllByText("Question")).toHaveLength(2);
+});
+
+test("an expired refresh starts a replacement session with the same scope", async () => {
+  const user = userEvent.setup();
+  const expired = studySession({
+    cards: [],
+    nextLearningDueAt: new Date(Date.now() - 1).toISOString(),
+  });
+  const replacement = { ...studySession(), sessionId: "session-2" };
+  const refreshStudySession = vi.fn()
+    .mockRejectedValueOnce(new Error("study session expired"))
+    .mockResolvedValue({ ...replacement, cards: [] });
+  const startStudySession = vi.fn().mockResolvedValueOnce(expired).mockResolvedValueOnce(replacement);
+  const rateStudyCard = vi.fn().mockResolvedValue({ card: replacement.cards[0].card, reviewLogId: "log-2" });
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([englishDeck]),
+        createCard: vi.fn(),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
+        startStudySession,
+        refreshStudySession,
+        rateStudyCard,
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
+      }}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  await user.click(await screen.findByRole("button", { name: /Review/ }));
+  await user.click(await screen.findByRole("button", { name: /Flashcard/i }));
+  await user.click(screen.getByRole("button", { name: "Good" }));
+  expect(startStudySession).toHaveBeenLastCalledWith({ kind: "all" });
+  expect(rateStudyCard).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session-2" }));
 });

@@ -2,22 +2,30 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
-import { SettingsPage } from "./SettingsPage";
+import { SettingsPage, type SettingsPageProps } from "./SettingsPage";
 
 beforeEach(() => {
   window.localStorage?.clear?.();
 });
 
-test("opens the requested settings section without mutating its values", () => {
-  render(
+const defaultMemoraSettings = { newCardsPerDay: 20, desiredRetention: 0.9 };
+
+function renderSettings(overrides: Partial<SettingsPageProps> = {}) {
+  return render(
     <SettingsPage
-      initialSection="appearance"
       hasApiKey={vi.fn().mockResolvedValue(false)}
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      {...overrides}
     />,
   );
+}
+
+test("opens the requested settings section without mutating its values", () => {
+  renderSettings({ initialSection: "appearance" });
 
   expect(screen.getByRole("heading", { name: "Appearance", level: 1 })).toBeInTheDocument();
   expect(screen.getByLabelText("Theme selection")).toHaveTextContent("System");
@@ -32,6 +40,8 @@ test("defaults a new supported Mac to Apple Translation and ranks it first", asy
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -54,6 +64,8 @@ test("offers Google Cloud Translation after its dedicated key is connected", asy
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([{ id: "nmt", name: "Google Cloud Translation — NMT" }])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
       onDefaultChange={onDefaultChange}
     />,
   );
@@ -82,6 +94,8 @@ test("connects a provider and loads models using only an API key", async () => {
       saveApiKey={saveApiKey}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={listModels}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
       onDefaultChange={onDefaultChange}
     />,
   );
@@ -114,6 +128,8 @@ test("shows provider errors without losing the settings form", async () => {
       saveApiKey={vi.fn().mockRejectedValue(new Error("Invalid API key"))}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn()}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -133,6 +149,8 @@ test("masks the API key by default and toggles visibility with the eye button", 
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn()}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -157,6 +175,8 @@ test("shows a masked saved-key state after the key is stored", async () => {
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn()}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -176,6 +196,8 @@ test("keeps the saved key available to reveal during the current settings sessio
       saveApiKey={saveApiKey}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -202,6 +224,8 @@ test("renders connected providers as a list", async () => {
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn()}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -220,6 +244,8 @@ test("shows a colored creator icon before compact model results", async () => {
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([{ id: "01-ai/yi-large", name: "01-ai/yi-large" }])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -241,6 +267,8 @@ test("uses a decorative neutral fallback for an unknown model", async () => {
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([{ id: "unknown/vendor-model", name: "unknown/vendor-model" }])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -259,6 +287,8 @@ test("shows colored provider brands in connected rows and provider options", asy
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -286,6 +316,8 @@ test("loads models for the connected provider when settings opens", async () => 
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={listModels}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -308,6 +340,8 @@ test("searches models across connected providers without a translate provider se
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={listModels}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -334,6 +368,8 @@ test("selects a searched model with arrow keys and Enter", async () => {
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={listModels}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
       onDefaultChange={onDefaultChange}
     />,
   );
@@ -360,6 +396,8 @@ test("defers model search until the user pauses typing", async () => {
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={listModels}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -399,6 +437,8 @@ test("restores the selected model in the search field when settings reopens", as
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={listModels}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -415,6 +455,8 @@ test("opens the provider editor only from Add provider or Manage", async () => {
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -433,6 +475,8 @@ test("opens and closes the provider editor in a popup", async () => {
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       listModels={vi.fn().mockResolvedValue([])}
+      getMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
+      updateMemoraSettings={vi.fn().mockResolvedValue(defaultMemoraSettings)}
     />,
   );
 
@@ -440,4 +484,43 @@ test("opens and closes the provider editor in a popup", async () => {
   expect(screen.getByRole("dialog", { name: "Provider settings" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Close provider settings" }));
   expect(screen.queryByRole("dialog", { name: "Provider settings" })).not.toBeInTheDocument();
+});
+
+test("shows Memora under Apps and opens its settings", async () => {
+  const user = userEvent.setup();
+  renderSettings({
+    getMemoraSettings: vi.fn().mockResolvedValue({
+      newCardsPerDay: 20,
+      desiredRetention: 0.90,
+    }),
+    updateMemoraSettings: vi.fn(),
+  });
+
+  expect(screen.getByText("Apps")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Memora" }));
+  expect(screen.getByRole("heading", { name: "Memora" })).toBeInTheDocument();
+  expect(await screen.findByLabelText("New cards per day")).toBeInTheDocument();
+});
+
+test("settings search finds Memora by learning and FSRS terms", async () => {
+  const user = userEvent.setup();
+  render(
+    <SettingsPage
+      appleTranslationAvailable={vi.fn().mockResolvedValue(true)}
+      clearApiKey={vi.fn().mockResolvedValue(undefined)}
+      getMemoraSettings={vi.fn().mockResolvedValue({
+        newCardsPerDay: 20,
+        desiredRetention: 0.90,
+      })}
+      hasApiKey={vi.fn().mockResolvedValue(false)}
+      listModels={vi.fn().mockResolvedValue([])}
+      saveApiKey={vi.fn().mockResolvedValue(undefined)}
+      updateMemoraSettings={vi.fn().mockResolvedValue({
+        newCardsPerDay: 20,
+        desiredRetention: 0.90,
+      })}
+    />,
+  );
+  await user.type(screen.getByLabelText("Search settings"), "fsrs");
+  expect(screen.getByRole("button", { name: "Memora" })).toBeInTheDocument();
 });

@@ -37,6 +37,7 @@ pub mod library_db;
 pub mod library_store;
 pub mod model;
 pub mod scheduler;
+pub mod study_queue;
 pub mod translation;
 pub mod account;
 
@@ -63,6 +64,9 @@ mod learning_tests;
 
 #[cfg(test)]
 mod scheduler_tests;
+
+#[cfg(test)]
+mod study_queue_tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -130,10 +134,7 @@ pub fn run() {
             commands::count_deck_cards,
             commands::list_deck_cards,
             commands::delete_card,
-            commands::list_due_cards,
             commands::get_card,
-            commands::preview_card_review,
-            commands::rate_card,
             commands::get_card_source,
             commands::search_everything,
             commands::get_document,
@@ -150,6 +151,14 @@ pub fn run() {
             commands::restore_cards,
             commands::delete_cards_permanently,
             commands::empty_trash,
+            commands::get_memora_settings,
+            commands::update_memora_settings,
+            commands::get_deck_learning_settings,
+            commands::update_deck_learning_settings,
+            commands::start_study_session,
+            commands::refresh_study_session,
+            commands::rate_study_card,
+            commands::get_study_ready_counts,
             ai::save_ai_api_key,
             ai::clear_ai_api_key,
             ai::has_ai_api_key,

@@ -245,7 +245,7 @@ Practice All is explicitly separate from real study:
 - It never changes state, due time, reps, lapses, stability, difficulty, memory state, or daily new-card counts.
 - The four buttons are self-assessment labels used only for the in-memory practice summary.
 
-The UI should label the mode as Practice and state that answers do not affect the schedule.
+The UI should label the mode simply as Practice. It does not need a persistent schedule disclaimer.
 
 ## Suspend behavior
 
@@ -278,7 +278,8 @@ An `Advanced` disclosure contains:
   - Default `90%`.
 - Read-only learning-step text: `1 minute → 10 minutes`.
 - Read-only relearning-step text: `10 minutes`.
-- `Restore defaults`, which restores `20` and `90%` after confirmation.
+
+There is no `Restore defaults` action; changes are saved explicitly to avoid an input-only reset that looks persisted.
 
 Settings search should match terms such as Memora, learning, cards, review, retention, and FSRS.
 
@@ -434,11 +435,11 @@ Use fixed timestamps and deterministic configuration to cover every transition:
 - Settings sidebar shows `Apps → Memora`.
 - New-card limit validates `0–999`.
 - Advanced disclosure contains retention and read-only steps.
-- Restore defaults restores `20` and `90%`.
+- Memora settings do not expose a misleading input-only Restore defaults action.
 - Deck menu opens Learning settings and supports inherit/custom modes.
 - Real study uses session commands rather than local card filtering.
 - Practice All never invokes a persistence/rating command.
-- Stale-session errors refresh the queue without advancing incorrectly.
+- Stale-session errors stop the rating and ask the user to leave and start a fresh session.
 - A temporarily empty learning queue communicates the next due time.
 
 ### End-to-end tests
@@ -464,3 +465,16 @@ Desktop UI verification must follow the repository's version-sensitive Tauri ins
 - Ratings are session-validated, atomic, and safe against duplicate or stale submission.
 - Existing cards and review history migrate without loss.
 - No nested decks, burying, sibling behavior, or advanced Anki configuration is added.
+
+## Approved follow-up: review fixes and UI simplification
+
+The July 17 implementation review approved these corrections:
+
+- Queue previews and persisted ratings use the same elapsed-day input.
+- Every persisted learning and relearning rating updates FSRS memory state, while fixed short steps continue to own the immediate due time.
+- Relearning Hard uses the FSRS Hard memory result, not Again.
+- An expired study session is replaced in application route state so later ratings and refreshes use the replacement session ID.
+- Automatic refresh runs only when the visible queue is empty and waits until the next learning due time. There is no manual Refresh now action.
+- Stale-rating handling no longer performs a special UI refresh. The normal error is shown and the user can leave the session.
+- Practice uses a compact Practice heading without a persistent schedule disclaimer.
+- Restore defaults is removed from Memora settings.

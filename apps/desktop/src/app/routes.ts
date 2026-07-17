@@ -1,13 +1,14 @@
 import type { LibraryDocument } from "../domain/document";
-import type { Deck, LearningCard, ReviewPreview } from "../domain/learning";
+import type { Deck, LearningCard, StudySession } from "../domain/learning";
 
-export type SettingsSection = "account" | "appearance" | "drive" | "model";
+export type SettingsSection = "account" | "appearance" | "drive" | "model" | "memora";
 
 export type AppRoute =
   | { name: "library" }
   | { name: "memora" }
   | { name: "reader"; document: LibraryDocument }
-  | { name: "review"; cards: LearningCard[]; previews: Record<string, ReviewPreview>; sourceDeck?: Deck; mode?: "study" | "practice" }
+  | { name: "review"; session: StudySession; sourceDeck?: Deck; mode: "study" }
+  | { name: "review"; cards: LearningCard[]; sourceDeck: Deck; mode: "practice" }
   | { name: "cardBrowser"; deckId: string }
   | { name: "deckDetail"; deck: Deck; searchQuery?: string }
   | { name: "trash" }
