@@ -86,6 +86,7 @@ test("anchors the review route and source split to the viewport height", () => {
   expect(root).toMatch(/^  height: 100%;$/m);
   expect(reviewPage).toContain("height: 100vh;");
   expect(reviewPage).toContain("overflow: hidden;");
+  expect(reviewPage).toContain("padding: 24px 24px 0 24px;");
   expect(reviewSplit).toContain("height: 100%;");
 });
 
