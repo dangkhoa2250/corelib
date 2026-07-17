@@ -1,16 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import type { CardSource, LearningCard, ReviewRating, StudyGrant, StudyRatingResult, StudySession } from "../../domain/learning";
-import { ClickableFrontText } from "./ClickableFrontText";
-import { YouGlishPanel } from "./YouGlishPanel";
-import { LanguagePicker } from "../cards/LanguagePicker";
-import { SourceViewer } from "../cards/SourceViewer";
-import { detectLanguage } from "../../lib/languageDetector";
-import { detectLanguage as detectSpeechLanguage } from "../../lib/language";
-import { updateCard } from "../../lib/learning";
-import { PronunciationButton } from "../../components/PronunciationButton";
-import { ScrollArea } from "../../components/ScrollArea";
-import { IconEye } from "../../app/icons";
-import { ReviewFlashcard } from "./ReviewFlashcard";
+import type { LearningCard, ReviewRating, StudyGrant, StudyRatingResult, StudySession } from "../../domain/learning";
+import { ReviewSessionSurface } from "./ReviewSessionSurface";
 import { useElapsedTime } from "./useElapsedTime";
 
 export interface StudyReviewPageProps {
@@ -58,26 +48,6 @@ function formatTime(seconds: number): string {
 
 type RatingCounts = Record<ReviewRating, number>;
 
-function SourceButton({ source, onOpen }: { source?: CardSource | null; onOpen: (source: CardSource) => void }) {
-  const isAvailable = Boolean(source?.documentId);
-
-  return (
-    <button
-      type="button"
-      className="review-page__source-btn"
-      aria-label={isAvailable ? "View source" : "Source unavailable"}
-      title={isAvailable ? "View source" : "The PDF source is no longer available"}
-      disabled={!isAvailable}
-      onClick={(event) => {
-        event.stopPropagation();
-        if (source?.documentId) onOpen(source);
-      }}
-    >
-      <IconEye size={14} />
-    </button>
-  );
-}
-
 export function ReviewPage(props: ReviewPageProps) {
   if (props.mode === "study") {
     return <StudyReviewPage {...props} />;
@@ -85,7 +55,7 @@ export function ReviewPage(props: ReviewPageProps) {
   return <PracticeReviewPage {...props} />;
 }
 
-function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPageProps) {
+function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUrl }: StudyReviewPageProps) {
   const [current, setCurrent] = useState(session);
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
@@ -185,60 +155,57 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack }: StudyReviewPage
   };
 
   return (
-    <main className="review-page" aria-labelledby="review-title">
-      <header className="review-page__header">
-        <div className="review-page__header-left">
-          {onBack ? (
-            <button type="button" onClick={onBack} className="review-page__back-btn">
-              &larr; Back
-            </button>
+    <ReviewSessionSurface
+      ariaLabel="Review due"
+      card={card}
+      revealed={revealed}
+      onReveal={() => setRevealed(true)}
+      getDocumentFileUrl={getDocumentFileUrl}
+      onError={setError}
+      header={(
+        <header className="review-page__header">
+          <div className="review-page__header-left">
+            {onBack ? (
+              <button type="button" onClick={onBack} className="review-page__back-btn">
+                &larr; Back
+              </button>
+            ) : null}
+          </div>
+        </header>
+      )}
+      footer={(
+        <footer className="review-page__footer">
+          <p className="review-page__elapsed" aria-live="polite">
+            {formatTime(Math.floor(elapsed / 1000))}
+          </p>
+          {revealed ? (
+            <div className="review-page__ratings" role="group" aria-label="Rate card">
+              {ratings.map((rating) => {
+                const interval = preview?.[rating]?.intervalLabel ?? "";
+                return (
+                  <button
+                    key={rating}
+                    aria-label={ratingLabel(rating)}
+                    className="review-page__rating-btn"
+                    disabled={saving}
+                    style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void handleRateCard(rating);
+                    }}
+                  >
+                    <span className="review-page__rating-label">{ratingLabel(rating)}</span>
+                    {interval ? <span className="review-page__rating-interval">{interval}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
           ) : null}
-        </div>
-      </header>
-
-      <ReviewFlashcard
-        revealed={revealed}
-        onReveal={() => setRevealed(true)}
-        front={<div className="review-page__content">{card.front}</div>}
-        backFront={(
-          <div className="review-page__content review-page__content--small">
-            {card.front}
-          </div>
-        )}
-        back={<div className="review-page__content">{card.back}</div>}
-      />
-
-      <footer className="review-page__footer">
-        <p className="review-page__elapsed" aria-live="polite">
-          {formatTime(Math.floor(elapsed / 1000))}
-        </p>
-        {revealed ? (
-          <div className="review-page__ratings" role="group" aria-label="Rate card">
-            {ratings.map((rating) => {
-              const interval = preview?.[rating]?.intervalLabel ?? "";
-              return (
-                <button
-                  key={rating}
-                  aria-label={ratingLabel(rating)}
-                  className="review-page__rating-btn"
-                  disabled={saving}
-                  style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void handleRateCard(rating);
-                  }}
-                >
-                  <span className="review-page__rating-label">{ratingLabel(rating)}</span>
-                  {interval ? <span className="review-page__rating-interval">{interval}</span> : null}
-                </button>
-              );
-            })}
-          </div>
-        ) : null}
-        {error ? <p className="review-page__error" role="alert">{error}</p> : null}
-      </footer>
-    </main>
+          {error ? <p className="review-page__error" role="alert">{error}</p> : null}
+        </footer>
+      )}
+    />
   );
 }
 
@@ -249,35 +216,9 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeRevie
   const [practiceStartedAt] = useState(() => Date.now());
   const [cardStartedAt, setCardStartedAt] = useState(() => Date.now());
   const [ratingCounts, setRatingCounts] = useState<RatingCounts>({ again: 0, hard: 0, good: 0, easy: 0 });
-  const [selectedWord, setSelectedWord] = useState<string | null>(null);
-  const [showYouGlish, setShowYouGlish] = useState(false);
-  const [refreshCounter, setRefreshCounter] = useState(0);
-  const [sourceView, setSourceView] = useState<CardSource | null>(null);
 
   const card = cards[index];
   const elapsed = useElapsedTime(cardStartedAt, Boolean(card));
-
-  const handleSelectLanguage = async (lang: string | null) => {
-    if (!lang || !card) return;
-    try {
-      await updateCard({
-        cardId: card.id,
-        front: card.front,
-        back: card.back,
-        tags: card.tags,
-        frontLanguage: lang,
-      });
-      card.frontLanguage = lang;
-      setRefreshCounter((prev) => prev + 1);
-    } catch (err) {
-      setError("Failed to update card language.");
-    }
-  };
-
-  useEffect(() => {
-    setSelectedWord(null);
-    setShowYouGlish(false);
-  }, [card?.id, refreshCounter]);
 
   useEffect(() => {
     if (!card) return;
@@ -330,160 +271,76 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeRevie
   };
 
   return (
-    <main className="review-page" aria-labelledby="review-title">
-      <div className={`review-page__split${sourceView ? " review-page__split--with-source" : ""}`}>
-      <ScrollArea
-        className={`review-page__body${showYouGlish && selectedWord ? " review-page__body--with-video" : ""}`}
-        data-testid="review-page-scroll-area"
-      >
-      <header className="review-page__header">
-        <div className="review-page__header-left">
-          {onBack ? (
-            <button type="button" onClick={onBack} className="review-page__back-btn">
-              &larr; Back
-            </button>
-          ) : null}
-        </div>
-        <h1 className="review-page__mode-title" id="review-title">Practice</h1>
-        <div className="review-page__progress">
-          <div
-            className="review-page__progress-bar"
-            style={{ width: `${((index + 1) / cards.length) * 100}%` }}
-          />
-        </div>
-        <p className="review-page__count">{index + 1} / {cards.length}</p>
-        <div className="review-page__nav">
-          <button
-            type="button"
-            className="review-page__nav-btn"
-            onClick={goToPrev}
-            disabled={index === 0}
-            aria-label="Previous card"
-          >
-            ◀
-          </button>
-          <button
-            type="button"
-            className="review-page__nav-btn"
-            onClick={goToNext}
-            disabled={index >= cards.length - 1}
-            aria-label="Next card"
-          >
-            ▶
-          </button>
-        </div>
-      </header>
-
-      <ReviewFlashcard
-        revealed={revealed}
-        onReveal={() => setRevealed(true)}
-        front={(
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-            <div className="review-page__content">
-              <ClickableFrontText
-                text={card.front}
-                frontLanguage={card.frontLanguage}
-                selectedWord={selectedWord}
-                onWordSelect={(word) => {
-                  setSelectedWord(word);
-                  setShowYouGlish(true);
-                }}
-              />
-            </div>
-            <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
-            <SourceButton source={card.source} onOpen={setSourceView} />
+    <ReviewSessionSurface
+      ariaLabel="Practice"
+      card={card}
+      revealed={revealed}
+      onReveal={() => setRevealed(true)}
+      getDocumentFileUrl={getDocumentFileUrl}
+      onError={setError}
+      header={(
+        <header className="review-page__header">
+          <div className="review-page__header-left">
+            {onBack ? (
+              <button type="button" onClick={onBack} className="review-page__back-btn">
+                &larr; Back
+              </button>
+            ) : null}
           </div>
-        )}
-        backFront={(
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-            <div className="review-page__content review-page__content--small">
-              <ClickableFrontText
-                text={card.front}
-                frontLanguage={card.frontLanguage}
-                selectedWord={selectedWord}
-                onWordSelect={(word) => {
-                  setSelectedWord(word);
-                  setShowYouGlish(true);
-                }}
-              />
-            </div>
-            <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
-            <SourceButton source={card.source} onOpen={setSourceView} />
-          </div>
-        )}
-        back={<div className="review-page__content">{card.back}</div>}
-      />
-
-      {card && !card.frontLanguage && (
-        <div
-          style={{
-            marginTop: "16px",
-            padding: "16px",
-            borderRadius: "12px",
-            background: "var(--surface-2)",
-            border: "1px solid var(--border-subtle)",
-            color: "var(--text-secondary)",
-            fontSize: "13px",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: "10px",
-          }}
-        >
-          <span style={{ fontWeight: 600 }}>
-            No confirmed front language. Select a language to enable YouGlish:
-          </span>
-          <div style={{ width: "260px" }}>
-            <LanguagePicker
-              value={card.frontLanguage}
-              onChange={handleSelectLanguage}
-              detectedLanguage={detectLanguage(card.front)}
+          <h1 className="review-page__mode-title" id="review-title">Practice</h1>
+          <div className="review-page__progress">
+            <div
+              className="review-page__progress-bar"
+              style={{ width: `${((index + 1) / cards.length) * 100}%` }}
             />
           </div>
-        </div>
-      )}
-
-      <footer className="review-page__footer">
-        <p className="review-page__elapsed" aria-live="polite">{formatTime(Math.floor(elapsed / 1000))}</p>
-        {revealed ? (
-          <div className="review-page__ratings" role="group" aria-label="Rate card">
-            {ratings.map((rating) => (
-              <button
-                key={rating}
-                className="review-page__rating-btn"
-                style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRateCard(rating);
-                }}
-              >
-                <span className="review-page__rating-label">{ratingLabel(rating)}</span>
-              </button>
-            ))}
+          <p className="review-page__count">{index + 1} / {cards.length}</p>
+          <div className="review-page__nav">
+            <button
+              type="button"
+              className="review-page__nav-btn"
+              onClick={goToPrev}
+              disabled={index === 0}
+              aria-label="Previous card"
+            >
+              ◀
+            </button>
+            <button
+              type="button"
+              className="review-page__nav-btn"
+              onClick={goToNext}
+              disabled={index >= cards.length - 1}
+              aria-label="Next card"
+            >
+              ▶
+            </button>
           </div>
-        ) : null}
-        {error ? <p className="review-page__error" role="alert">{error}</p> : null}
-      </footer>
-      {showYouGlish && selectedWord && (
-        <YouGlishPanel
-          word={selectedWord}
-          frontLanguage={card.frontLanguage}
-          onClose={() => {
-            setSelectedWord(null);
-            setShowYouGlish(false);
-          }}
-        />
+        </header>
       )}
-      </ScrollArea>
-      {sourceView && getDocumentFileUrl ? (
-        <SourceViewer
-          source={sourceView}
-          getDocumentFileUrl={getDocumentFileUrl}
-          onClose={() => setSourceView(null)}
-        />
-      ) : null}
-      </div>
-    </main>
+      footer={(
+        <footer className="review-page__footer">
+          <p className="review-page__elapsed" aria-live="polite">{formatTime(Math.floor(elapsed / 1000))}</p>
+          {revealed ? (
+            <div className="review-page__ratings" role="group" aria-label="Rate card">
+              {ratings.map((rating) => (
+                <button
+                  key={rating}
+                  className="review-page__rating-btn"
+                  style={{ "--rating-color": ratingColors[rating] } as React.CSSProperties}
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleRateCard(rating);
+                  }}
+                >
+                  <span className="review-page__rating-label">{ratingLabel(rating)}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {error ? <p className="review-page__error" role="alert">{error}</p> : null}
+        </footer>
+      )}
+    />
   );
 }

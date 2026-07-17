@@ -139,6 +139,32 @@ test("study and practice share the same two-face flip structure", async () => {
   expect(practiceCard.querySelectorAll(".review-page__card-face--back")).toHaveLength(1);
 });
 
+test("study and practice use the same active review surface", () => {
+  const { unmount } = render(
+    <ReviewPage
+      mode="study"
+      session={studySession}
+      onRate={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
+
+  const studySurface = screen.getByTestId("review-session-surface");
+  expect(studySurface).toHaveClass("review-page__body");
+  expect(studySurface.closest(".review-page__split")).not.toBeNull();
+  expect(screen.getAllByRole("button", { name: "Play pronunciation" })).toHaveLength(2);
+  expect(screen.getAllByRole("button", { name: "Source unavailable" })).toHaveLength(2);
+
+  unmount();
+  render(<ReviewPage mode="practice" cards={[card]} />);
+
+  const practiceSurface = screen.getByTestId("review-session-surface");
+  expect(practiceSurface).toHaveClass("review-page__body");
+  expect(practiceSurface.closest(".review-page__split")).not.toBeNull();
+  expect(screen.getAllByRole("button", { name: "Play pronunciation" })).toHaveLength(2);
+  expect(screen.getAllByRole("button", { name: "Source unavailable" })).toHaveLength(2);
+});
+
 test("lowers the waiting review state without moving the nothing-due state", () => {
   const onRate = vi.fn();
   const onRefresh = vi.fn();
@@ -351,7 +377,7 @@ test("uses the app scroll area for review content while a YouGlish video is open
 
   await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
 
-  expect(screen.getByTestId("review-page-scroll-area")).toHaveStyle({ overflow: "hidden" });
+  expect(screen.getByTestId("review-session-surface")).toHaveStyle({ overflow: "hidden" });
 });
 
 test("places rating controls before an open YouGlish video", async () => {
