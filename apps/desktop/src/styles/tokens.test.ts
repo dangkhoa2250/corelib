@@ -112,20 +112,30 @@ test("splits the review and source panes evenly", () => {
   expect(sourcePane).toContain("flex: 1 1 0;");
 });
 
-test("shrinks the flashcard by viewport height while a video is open", () => {
+test("keeps the flashcard geometry stable while a video is open", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
   const videoCard = css.match(/\.review-page__body--with-video \.review-page__card \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
-  expect(videoCard).toContain("flex: 0 0 clamp(240px, 28vh, 360px);");
-  expect(videoCard).toContain("height: clamp(240px, 28vh, 360px);");
-  expect(videoCard).not.toContain("overflow-y");
+  expect(videoCard).toBe("");
   const reviewBody = css.match(/\.review-page__body \{([\s\S]*?)\n\}/)?.[1] ?? "";
   expect(reviewBody).toContain("padding-right: 20px;");
 
   const cardFace = css.match(/\.review-page__card-face-scroll \{([\s\S]*?)\n\}/)?.[1] ?? "";
   expect(cardFace).toContain("padding-right: 20px;");
   expect(cardFace).not.toContain("overflow-y: auto;");
+});
+
+test("uses compact review rating controls", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const ratings = css.match(/\.review-page__ratings \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const ratingButton = css.match(/\.review-page__rating-btn \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(ratings).toContain("gap: 8px;");
+  expect(ratingButton).toContain("gap: 2px;");
+  expect(ratingButton).toContain("padding: 8px 6px;");
+  expect(ratingButton).toContain("border-radius: 10px;");
 });
 
 test("uses the reusable ScrollArea for the reader's thumbnail and PDF panes", () => {

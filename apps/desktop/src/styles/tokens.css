@@ -3826,11 +3826,6 @@ textarea::placeholder {
   padding-bottom: 16px;
 }
 
-.review-page__body--with-video .review-page__card {
-  flex: 0 0 clamp(240px, 28vh, 360px);
-  height: clamp(240px, 28vh, 360px);
-}
-
 .review-page__language-prompt {
   display: flex;
   flex-direction: column;
@@ -3955,7 +3950,7 @@ textarea::placeholder {
 
 .review-page__ratings {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
 }
 
@@ -3964,10 +3959,10 @@ textarea::placeholder {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 12px 8px;
+  gap: 2px;
+  padding: 8px 6px;
   border: 2px solid var(--rating-color);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface-1);
   color: var(--rating-color);
   font: inherit;
