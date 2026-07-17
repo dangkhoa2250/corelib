@@ -3814,7 +3814,7 @@ textarea::placeholder {
 }
 
 .review-page__card {
-  flex: 0 1 440px;
+  flex: 0 0 min(440px, calc(100vh - 180px));
   height: min(440px, calc(100vh - 180px));
   perspective: 1200px;
   cursor: pointer;

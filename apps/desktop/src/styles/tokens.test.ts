@@ -95,7 +95,7 @@ test("keeps the flashcard compact while the source panel can fill the viewport",
   const card = css.match(/\.review-page__card \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const sourcePanel = css.match(/\.review-page__split > \.source-viewer \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
-  expect(card).toContain("flex: 0 1 440px;");
+  expect(card).toContain("flex: 0 0 min(440px, calc(100vh - 180px));");
   expect(card).toContain("height: min(440px, calc(100vh - 180px));");
   expect(sourcePanel).toContain("align-self: stretch;");
   expect(sourcePanel).not.toContain("margin-bottom");
