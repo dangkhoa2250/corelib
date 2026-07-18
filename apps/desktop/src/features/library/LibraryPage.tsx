@@ -10,6 +10,7 @@ interface LibraryPageProps {
   onOpenDrive?: () => void;
   onDelete?: (id: string) => void;
   onRename?: (id: string, newTitle: string) => void;
+  onViewStatistics?: (documentId: string) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
   pendingImports?: PendingImport[];
 }
@@ -21,6 +22,7 @@ export function LibraryPage({
   onOpenDrive,
   onDelete,
   onRename,
+  onViewStatistics,
   getDocumentFileUrl,
   pendingImports,
 }: LibraryPageProps) {
@@ -36,6 +38,7 @@ export function LibraryPage({
           onOpen={onOpen}
           onDelete={onDelete}
           onRename={onRename}
+          onViewStatistics={onViewStatistics}
           getDocumentFileUrl={getDocumentFileUrl}
           pendingImports={pendingImports}
         />

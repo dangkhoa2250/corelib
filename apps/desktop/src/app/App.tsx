@@ -46,6 +46,7 @@ import { AccountGate, useAccount } from "../features/account/AccountGate";
 import { PocketBaseAccountApiClient } from "../lib/account";
 import type { AccountApi } from "../domain/account";
 import { AdminPage } from "../features/admin/AdminPage";
+import { StatisticsPage } from "../features/statistics/StatisticsPage";
 import { AnalyticsClient } from "../lib/analytics";
 import { createCommandRegistry } from "./commandRegistry";
 import type { AppRoute } from "./routes";
@@ -741,6 +742,20 @@ export function App({
     );
   }
 
+  if (route.name === "statistics") {
+    return (
+      <StatisticsPage
+        target={route.target}
+        origin={route.origin}
+        onBack={() => {
+          if (route.origin === "library") setRoute({ name: "library" });
+          else if (route.origin === "memora") setRoute({ name: "memora" });
+          else setRoute({ name: "library" });
+        }}
+      />
+    );
+  }
+
   const activeSection: AppSection =
     route.name === "memora" || route.name === "deckDetail"
       ? "memora"
@@ -750,6 +765,8 @@ export function App({
       ? "trash"
       : route.name === "admin"
       ? "admin"
+      : route.name === "statistics"
+      ? "statistics"
       : "library";
 
   return (
@@ -768,6 +785,8 @@ export function App({
               ? { name: "memora" }
               : section === "trash"
               ? { name: "trash" }
+              : section === "statistics"
+              ? { name: "statistics" }
               : { name: "library" }
           );
         }}
@@ -808,6 +827,7 @@ export function App({
             }}
             onStudyDeck={handleStudyDeck}
             onPracticeAll={handlePracticeAll}
+            onViewStatistics={(id) => setRoute({ name: "statistics", target: { kind: "deck", deckId: id }, origin: "memora" })}
             onDirtyStateChange={setIsBrowserDirty}
             getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
             getDeckStatistics={learning.getDeckStatistics}
@@ -871,6 +891,7 @@ export function App({
               onOpenDrive={() => void handleOpenDrive()}
               onDelete={(id) => void handleDelete(id)}
               onRename={(id, title) => void handleRename(id, title)}
+              onViewStatistics={(id) => setRoute({ name: "statistics", target: { kind: "document", documentId: id }, origin: "library" })}
               getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
               pendingImports={pendingImports}
             />

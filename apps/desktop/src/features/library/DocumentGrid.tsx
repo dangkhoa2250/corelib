@@ -8,11 +8,12 @@ interface DocumentGridProps {
   onOpen: (id: string) => void;
   onDelete?: (id: string) => void;
   onRename?: (id: string, newTitle: string) => void;
+  onViewStatistics?: (documentId: string) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
   pendingImports?: PendingImport[];
 }
 
-export function DocumentGrid({ documents, onOpen, onDelete, onRename, getDocumentFileUrl, pendingImports }: DocumentGridProps) {
+export function DocumentGrid({ documents, onOpen, onDelete, onRename, onViewStatistics, getDocumentFileUrl, pendingImports }: DocumentGridProps) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -35,6 +36,7 @@ export function DocumentGrid({ documents, onOpen, onDelete, onRename, getDocumen
           onOpen={() => onOpen(document.id)}
           onDelete={onDelete ? () => onDelete(document.id) : undefined}
           onRename={onRename ? (newTitle) => onRename(document.id, newTitle) : undefined}
+          onViewStatistics={onViewStatistics ? () => onViewStatistics(document.id) : undefined}
           menuOpen={openMenuId === document.id}
           onMenuToggle={(open) => setOpenMenuId(open ? document.id : null)}
           getDocumentFileUrl={getDocumentFileUrl}

@@ -21,6 +21,7 @@ interface DocumentCardProps {
   onOpen: () => void;
   onDelete?: () => void;
   onRename?: (newTitle: string) => void;
+  onViewStatistics?: (documentId: string) => void;
   menuOpen?: boolean;
   onMenuToggle?: (open: boolean) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
@@ -170,6 +171,7 @@ export function DocumentCard({
   onOpen,
   onDelete,
   onRename,
+  onViewStatistics,
   menuOpen = false,
   onMenuToggle,
   getDocumentFileUrl,
@@ -203,7 +205,7 @@ export function DocumentCard({
       <div className="document-card__details">
         <div className="document-card__title-row">
           <span className="document-card__title">{document.title}</span>
-          {(onDelete || onRename) && (
+          {(onDelete || onRename || onViewStatistics) && (
             <div className="document-card__actions">
               <button
                 className="document-card__menu-trigger"
@@ -223,6 +225,18 @@ export function DocumentCard({
               </button>
               {menuOpen && (
                 <div className="document-card__menu-popover">
+                  {onViewStatistics && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onMenuToggle?.(false);
+                        onViewStatistics(document.id);
+                      }}
+                    >
+                      View statistics
+                    </button>
+                  )}
                   {onRename && (
                     <button
                       type="button"
