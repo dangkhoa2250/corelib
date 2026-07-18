@@ -1,0 +1,16 @@
+.statistics-shell { height: 100%; background: var(--main-bg); color: var(--text-primary); }
+.statistics-shell__content { min-height: 100%; padding: 28px 20px 40px 28px; }
+.statistics-card { background: var(--surface-1); border: 1px solid var(--border-subtle); box-shadow: var(--shadow-card); }
+.statistics-card__label { color: var(--text-secondary); font-size: 13px; }
+.statistics-card__value { color: var(--text-primary); font-size: 28px; font-weight: 650; letter-spacing: -0.02em; }
+.statistics-muted { color: var(--text-secondary); }
+.statistics-control[aria-pressed="true"] { background: var(--interactive-selected); }
+.statistics-range-picker { display: flex; gap: 8px; }
+.statistics-control { padding: 7px 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.statistics-section + .statistics-section { margin-top: 28px; }
+.statistics-section__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.statistics-section__title { margin: 0; font-size: 18px; font-weight: 600; }
+.statistics-empty-state { padding: 32px 24px; text-align: center; color: var(--text-secondary); }
+.statistics-error-state { padding: 24px; text-align: center; color: var(--error); }
+.statistics-error-state button { margin-top: 12px; padding: 8px 16px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
+.statistics-skeleton { padding: 24px; text-align: center; color: var(--text-disabled); }

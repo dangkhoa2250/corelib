@@ -64,6 +64,16 @@ test("uses one transparent-track scrollbar primitive across the app", () => {
   expect(css).not.toContain("scrollbar-color: var(--border-subtle) transparent;");
 });
 
+test("uses semantic tokens in Statistics CSS with proper scroll-surface padding", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+
+  const shellContent = statCss.match(/\.statistics-shell__content\s*\{([^}]*)\}/)?.[1] ?? "";
+  expect(shellContent).toContain("padding: 28px 20px 40px 28px;");
+  expect(statCss).not.toContain("overflow: auto;");
+  expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,6};/);
+});
+
 test("uses only public macOS view APIs to enable overlay scrollers", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const nativeApp = readFileSync(join(currentDir, "../../src-tauri/src/lib.rs"), "utf8");
