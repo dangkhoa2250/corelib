@@ -765,8 +765,6 @@ export function App({
       ? "trash"
       : route.name === "admin"
       ? "admin"
-      : route.name === "statistics"
-      ? "statistics"
       : "library";
 
   return (

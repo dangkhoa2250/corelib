@@ -14,7 +14,7 @@ const defaultProps = {
   onPracticeAll: vi.fn(),
   onStudyDeck: vi.fn(),
   queryDeckCards: vi.fn().mockResolvedValue({ rows: [], total: 2, nextCursor: null }),
-  selectedIds: new Set(),
+  selectedIds: new Set<string>(),
   setCardsSuspended: vi.fn(),
   setSelectedIds: vi.fn(),
   trashCards: vi.fn(),

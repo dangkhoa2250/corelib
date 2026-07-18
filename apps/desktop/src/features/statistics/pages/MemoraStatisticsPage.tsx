@@ -32,7 +32,6 @@ export interface MemoraStatisticsPageProps {
 
 export function MemoraStatisticsPage({
   range,
-  onRangeChange,
   getMemoraStats = getMemoraStatistics,
   onBack,
 }: MemoraStatisticsPageProps) {

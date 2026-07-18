@@ -5,7 +5,6 @@ import {
   saveStatisticsPreferences,
 } from "./preferences";
 
-const STORAGE_KEY = "library.statistics.preferences.v1";
 const store: Record<string, string> = {};
 
 const mockStorage = {

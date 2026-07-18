@@ -34,7 +34,6 @@ export interface DeckStatisticsPageProps {
 export function DeckStatisticsPage({
   deckId,
   range,
-  onRangeChange,
   getDeckStats = getDeckStatisticsDetail,
   onBack,
 }: DeckStatisticsPageProps) {

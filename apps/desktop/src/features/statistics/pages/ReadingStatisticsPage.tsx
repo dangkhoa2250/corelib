@@ -26,7 +26,6 @@ export interface ReadingStatisticsPageProps {
 
 export function ReadingStatisticsPage({
   range,
-  onRangeChange,
   getReadingStats = getReadingStatistics,
   onBack,
 }: ReadingStatisticsPageProps) {

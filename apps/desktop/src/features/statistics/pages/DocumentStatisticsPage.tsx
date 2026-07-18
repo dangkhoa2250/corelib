@@ -33,7 +33,6 @@ export interface DocumentStatisticsPageProps {
 export function DocumentStatisticsPage({
   documentId,
   range,
-  onRangeChange,
   getDocStats = getDocumentStatistics,
   onBack,
 }: DocumentStatisticsPageProps) {

@@ -22,7 +22,6 @@ type StatisticsView =
 
 export function StatisticsPage({
   target,
-  origin,
   onBack,
 }: StatisticsPageProps) {
   const [range, setRange] = useState<StatisticsRange>("30d");

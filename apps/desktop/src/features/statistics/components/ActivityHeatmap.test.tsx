@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { ActivityHeatmap } from "./ActivityHeatmap";
 
 const MOCK_NOW = new Date("2025-07-19T12:00:00Z");

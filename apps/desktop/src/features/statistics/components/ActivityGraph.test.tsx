@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { ActivityGraph, aggregateWeekly, cumulativeSum, type ActivityBucket } from "./ActivityGraph";
 
 const dailyBuckets: ActivityBucket[] = Array.from({ length: 30 }, (_, i) => ({
