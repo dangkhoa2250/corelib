@@ -142,8 +142,8 @@ Library document actions and deck detail actions may link directly to the same c
 
 | Metric | Definition |
 | --- | --- |
-| Active time | Sum of capped active time for the selected range |
-| Current streak | Consecutive local active days under the local-day rule |
+| Active time | Sum of effective active time for the selected range: Reading and Practice use recorded idle-aware time; each real Memora rating contributes at most five minutes |
+| Current streak | Consecutive local active days under the local-day rule, ending today or yesterday; this lifetime value is not clipped by the selected chart range |
 | Active days | Count of local active days in the selected range |
 | Activity series | Daily active time split by app |
 | App allocation | Active time and primary app metric per registered app |
@@ -168,6 +168,8 @@ Lifetime document coverage remains visible even when a time range is selected. T
 
 Due forecast buckets are Today, next 7 local days, and next 30 local days. Suspended, deleted, and practice-only cards are excluded.
 
+Memora active time and session count include real study plus Practice All so app allocation reflects actual app usage. `practiceActiveMs` remains a visible subset, while review count, recall, ratings, lapse, and answer time use real study only. Card-state distribution and due forecast are current snapshots and must be labeled separately from time-range metrics.
+
 ### Admin overview
 
 | Area | Metrics |
@@ -178,6 +180,8 @@ Due forecast buckets are Today, next 7 local days, and next 30 local days. Suspe
 | Memora | Active users, average active time, average real reviews, aggregate recall rate, aggregate rating distribution, weekly learning frequency |
 
 Every admin chart must show its contributing-user count or make insufficient sample size explicit.
+
+Admin averages use distinct contributing users in the selected range as the denominator, not every approved account. Reading returning-user rate is the share of Reading contributors active on at least two local days in the range. Memora weekly learning frequency is the mean number of distinct real-review days per contributing Memora user per ISO week intersecting the selected range. Coverage metrics remain beside these averages so the partial opt-in population is explicit.
 
 ## Activity visualization
 
@@ -342,6 +346,8 @@ Index `(document_id, page, last_visited_at)` supports document coverage and revi
 
 Document deletion removes page-level rows. In the same deletion transaction, matching polymorphic `activity_sessions.context_id` values are set to null so aggregate Reading totals remain valid without leaving a drill-down target.
 
+Deck deletion likewise nulls matching Practice-session `context_id` values before deleting the deck. Aggregate Memora/Practice totals remain, while the deleted deck no longer has a drill-down target.
+
 No migration backfill is required.
 
 ## Local recording services
@@ -447,7 +453,7 @@ Prohibited fields include document ID, deck ID, card ID, title, path, query, pro
 - Checkpoint writes are batched and transactional.
 - Statistics queries aggregate in SQLite and return chart-ready buckets.
 - Add indexes before relying on full-year or all-time queries.
-- The backend chooses sensible bucket defaults: daily for 7/30 days, weekly for one year, monthly for very long all-time graphs.
+- Local and admin query boundaries return canonical daily buckets. Shared pure graph utilities derive Weekly and Cumulative series from those daily values so Heatmap and Graph cannot disagree.
 - Heatmap rendering is bounded to the requested calendar window. All-time year sections are virtualized after the newest three years.
 - Avoid importing a large chart framework for two charts. Implement reusable CSS-grid heatmap and SVG graph primitives unless profiling proves a library is necessary.
 - App summary requests may run in parallel, but the registry must limit or batch future app queries if the number of apps grows substantially.
