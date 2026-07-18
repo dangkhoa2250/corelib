@@ -190,9 +190,10 @@ impl LibraryDatabase {
     pub fn finish_activity_session(&mut self, session_id: &str, occurred_at: &str) -> Result<()> {
         validate_occurred_at(occurred_at)?;
         let transaction = self.connection.transaction()?;
-        // Idempotent: unknown sessions and already-finished sessions are no-ops so
-        // crash-recovery callers can safely retry the finish without surfacing
-        // a "missing row" error.
+        // Unknown session ids and retries with the same timestamp are no-ops
+        // (UPDATE affects 0 rows or writes the same value). A different timestamp
+        // will overwrite ended_at/updated_at; crash-recovery callers should replay
+        // the original close timestamp to keep the session idempotent.
         transaction.execute(
             "UPDATE activity_sessions
              SET ended_at = ?1, updated_at = ?1

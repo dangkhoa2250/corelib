@@ -327,6 +327,49 @@ fn checkpoint_activity_session_rejects_page_zero_without_writes() {
 }
 
 #[test]
+fn checkpoint_activity_session_rolls_back_session_update_when_page_upsert_fails() {
+    // Drives a real in-transaction failure AFTER the session-UPDATE has
+    // succeeded: the page upsert references a non-existent document_id, so
+    // the FOREIGN KEY constraint on reading_session_pages.document_id fires
+    // inside the transaction. The test would fail if checkpoint_activity_session
+    // used autocommit instead of wrapping both writes in one transaction.
+    let (_directory, mut database) = db();
+    // Note: no seed_document — "missing-doc" intentionally does not exist.
+    database
+        .start_activity_session(NewActivitySession {
+            id: "session-fk-rollback".into(),
+            app_key: "reading".into(),
+            activity_kind: "reading".into(),
+            context_kind: Some("document".into()),
+            context_id: Some("missing-doc".into()),
+            occurred_at: "2026-07-18T01:00:00.000Z".into(),
+            local_day: "2026-07-18".into(),
+            timezone_offset_minutes: 0,
+        })
+        .expect("start");
+
+    let result = database.checkpoint_activity_session(ActivityCheckpoint {
+        session_id: "session-fk-rollback".into(),
+        occurred_at: "2026-07-18T01:00:15.000Z".into(),
+        active_ms: 15_000,
+        document_id: Some("missing-doc".into()),
+        page: Some(1),
+        page_visit_increment: 1,
+    });
+    assert!(result.is_err(), "FK violation should surface as an error");
+    assert_eq!(
+        session_active_ms(&database, "session-fk-rollback"),
+        0,
+        "session-UPDATE must roll back when the page upsert fails"
+    );
+    assert_eq!(
+        page_count_for_session(&database, "session-fk-rollback"),
+        0,
+        "no page row should remain after rollback"
+    );
+}
+
+#[test]
 fn checkpoint_activity_session_rejects_invalid_rfc3339_timestamp_without_writes() {
     let (_directory, mut database) = db();
     seed_document(&mut database, "doc-1");
