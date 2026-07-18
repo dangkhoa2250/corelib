@@ -7,8 +7,10 @@ import type {
   AdminMetrics,
   AccountStatus,
 } from "../../domain/account";
+import { AdminAnalyticsPage } from "./AdminAnalyticsPage";
 
 export function AdminPage({ api }: { api: AccountApi }) {
+  const [view, setView] = useState<"management" | "analytics">("management");
   const [users, setUsers] = useState<AccountProfile[]>([]);
   const [groups, setGroups] = useState<AccountGroup[]>([]);
   const [features, setFeatures] = useState<FeatureDefinition[]>([]);
@@ -229,6 +231,29 @@ export function AdminPage({ api }: { api: AccountApi }) {
           margin: 0;
         }
 
+        .admin-nav {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 24px;
+        }
+
+        .admin-nav button {
+          padding: 8px 16px;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 8px;
+          background: rgba(255, 255, 255, 0.03);
+          color: #f3f4f6;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .admin-nav button[aria-pressed="true"] {
+          background: rgba(124, 58, 237, 0.2);
+          border-color: rgba(124, 58, 237, 0.4);
+          color: #c084fc;
+        }
+
         .metrics-grid {
           display: grid;
           grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -409,251 +434,274 @@ export function AdminPage({ api }: { api: AccountApi }) {
         <p>Manage user approvals, group roles, feature gates, and metrics.</p>
       </div>
 
-      {error && <div className="account-gate-error" style={{ marginBottom: "30px" }}>{error}</div>}
+      <nav className="admin-nav">
+        <button
+          type="button"
+          aria-pressed={view === "management"}
+          onClick={() => setView("management")}
+        >
+          Management
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === "analytics"}
+          onClick={() => setView("analytics")}
+        >
+          Analytics
+        </button>
+      </nav>
 
-      {metrics && (
-        <div className="metrics-grid">
-          <div className="metric-card">
-            <h3>Approved Users</h3>
-            <div className="metric-value">{metrics.approvedUsers}</div>
-          </div>
-          <div className="metric-card">
-            <h3>Pending Users</h3>
-            <div className="metric-value">{metrics.pendingUsers}</div>
-          </div>
-          <div className="metric-card">
-            <h3>30-Day Active Users</h3>
-            <div className="metric-value">{metrics.activeUsersLast30Days}</div>
-          </div>
-          <div className="metric-card">
-            <h3>Total Events</h3>
-            <div className="metric-value">
-              {metrics.eventsByName.reduce((acc, curr) => acc + curr.count, 0)}
-            </div>
-          </div>
-        </div>
-      )}
+      {view === "analytics" ? (
+        <AdminAnalyticsPage adminStatistics={(range, appKey) => api.adminStatistics(range, appKey)} />
+      ) : (
+        <>
+          {error && <div className="account-gate-error" style={{ marginBottom: "30px" }}>{error}</div>}
 
-      {/* Section 1: Pending Accounts */}
-      <section className="admin-section">
-        <h2>Pending Accounts</h2>
-        {pendingUsers.length === 0 ? (
-          <p style={{ color: "#9ca3af", fontSize: "14px" }}>No pending account approvals.</p>
-        ) : (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingUsers.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.displayName}</td>
-                  <td>{user.email}</td>
-                  <td>
-                    <button className="btn-approve" type="button" onClick={() => handleApprove(user.id)}>Approve</button>
-                    <button className="btn-reject" type="button" onClick={() => handleReject(user.id)}>Reject</button>
-                    <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
-                    {rowStatus[user.id]?.success && (
-                      <span className="row-status success">{rowStatus[user.id].success}</span>
-                    )}
-                    {rowStatus[user.id]?.error && (
-                      <span className="row-status error">{rowStatus[user.id].error}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+          {metrics && (
+            <div className="metrics-grid">
+              <div className="metric-card">
+                <h3>Approved Users</h3>
+                <div className="metric-value">{metrics.approvedUsers}</div>
+              </div>
+              <div className="metric-card">
+                <h3>Pending Users</h3>
+                <div className="metric-value">{metrics.pendingUsers}</div>
+              </div>
+              <div className="metric-card">
+                <h3>30-Day Active Users</h3>
+                <div className="metric-value">{metrics.activeUsersLast30Days}</div>
+              </div>
+              <div className="metric-card">
+                <h3>Total Events</h3>
+                <div className="metric-value">
+                  {metrics.eventsByName.reduce((acc, curr) => acc + curr.count, 0)}
+                </div>
+              </div>
+            </div>
+          )}
 
-      {/* Section 2: Approved/Rejected Accounts */}
-      <section className="admin-section">
-        <h2>Approved / Rejected Accounts</h2>
-        <table className="admin-table">
-          <thead>
-               <tr>
-                 <th>Name</th>
-                 <th>Email</th>
-                 <th>Status</th>
-                 <th>Groups (comma separated)</th>
-                 <th>Actions</th>
-               </tr>
-          </thead>
-          <tbody>
-            {processedUsers.map((user) => (
-              <tr key={user.id}>
-                <td>{user.displayName}</td>
-                <td>{user.email}</td>
-                <td>
-                  <select
-                    className="status-select"
-                    value={user.status}
-                    onChange={(e) => handleStatusChange(user.id, e.target.value as AccountStatus)}
-                  >
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="pending">Pending</option>
-                  </select>
-                </td>
-                <td>
-                  <input
-                    className="group-input"
-                    type="text"
-                    placeholder="Group IDs (comma separated)"
-                    onBlur={(e) => handleSetGroups(user.id, e.target.value)}
-                  />
-                  {rowStatus[user.id]?.success && (
-                    <span className="row-status success">{rowStatus[user.id].success}</span>
-                  )}
-                  {rowStatus[user.id]?.error && (
-                    <span className="row-status error">{rowStatus[user.id].error}</span>
-                  )}
-                </td>
-                <td>
-                  <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {/* Section 3: Feature & Group Access Configurations */}
-      <div className="admin-forms-row">
-        <section className="admin-section">
-          <h2>Create Group</h2>
-          <form className="admin-form" onSubmit={handleCreateGroup}>
-            <div className="form-group">
-              <label htmlFor="group-name">Group Name</label>
-              <input
-                id="group-name"
-                type="text"
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="e.g. beta_testers"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="group-desc">Description</label>
-              <input
-                id="group-desc"
-                type="text"
-                value={newGroupDesc}
-                onChange={(e) => setNewGroupDesc(e.target.value)}
-                placeholder="Beta testing users group"
-              />
-            </div>
-            <button className="btn-submit" type="submit">Create Group</button>
-          </form>
-        </section>
-
-        <section className="admin-section">
-          <h2>Create Feature</h2>
-          <form className="admin-form" onSubmit={handleCreateFeature}>
-            <div className="form-group">
-              <label htmlFor="feat-key">Feature Key</label>
-              <input
-                id="feat-key"
-                type="text"
-                value={newFeatureKey}
-                onChange={(e) => setNewFeatureKey(e.target.value)}
-                placeholder="e.g. advanced_search"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="feat-desc">Description</label>
-              <input
-                id="feat-desc"
-                type="text"
-                value={newFeatureDesc}
-                onChange={(e) => setNewFeatureDesc(e.target.value)}
-                placeholder="Allows users to use FTS search fields"
-              />
-            </div>
-            <button className="btn-submit" type="submit">Create Feature</button>
-          </form>
-        </section>
-
-        <section className="admin-section">
-          <h2>Assign Feature Access Rule</h2>
-          <form className="admin-form" onSubmit={handleAssignFeature}>
-            <div className="form-group">
-              <label htmlFor="rule-feat">Feature</label>
-              <select
-                id="rule-feat"
-                value={assignFeatureKey}
-                onChange={(e) => setAssignFeatureKey(e.target.value)}
-                required
-              >
-                <option value="">Select Feature</option>
-                {features.map((f) => (
-                  <option key={f.id} value={f.key}>{f.key}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="rule-subject-type">Subject Type</label>
-              <select
-                id="rule-subject-type"
-                value={assignSubjectType}
-                onChange={(e) => {
-                  setAssignSubjectType(e.target.value as "user" | "group");
-                  setAssignSubjectId("");
-                }}
-                required
-              >
-                <option value="user">User ID</option>
-                <option value="group">Group ID</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="rule-subject-id">Subject ID (User or Group ID)</label>
-              {assignSubjectType === "user" ? (
-                <input
-                  id="rule-subject-id"
-                  type="text"
-                  value={assignSubjectId}
-                  onChange={(e) => setAssignSubjectId(e.target.value)}
-                  placeholder="Paste User ID here"
-                  required
-                />
-              ) : (
-                <select
-                  id="rule-subject-id"
-                  value={assignSubjectId}
-                  onChange={(e) => setAssignSubjectId(e.target.value)}
-                  required
-                >
-                  <option value="">Select Group</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name} ({g.id})</option>
+          {/* Section 1: Pending Accounts */}
+          <section className="admin-section">
+            <h2>Pending Accounts</h2>
+            {pendingUsers.length === 0 ? (
+              <p style={{ color: "#9ca3af", fontSize: "14px" }}>No pending account approvals.</p>
+            ) : (
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingUsers.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.displayName}</td>
+                      <td>{user.email}</td>
+                      <td>
+                        <button className="btn-approve" type="button" onClick={() => handleApprove(user.id)}>Approve</button>
+                        <button className="btn-reject" type="button" onClick={() => handleReject(user.id)}>Reject</button>
+                        <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
+                        {rowStatus[user.id]?.success && (
+                          <span className="row-status success">{rowStatus[user.id].success}</span>
+                        )}
+                        {rowStatus[user.id]?.error && (
+                          <span className="row-status error">{rowStatus[user.id].error}</span>
+                        )}
+                      </td>
+                    </tr>
                   ))}
-                </select>
-              )}
-            </div>
-            <div className="form-group">
-              <label htmlFor="rule-enabled">Assignment State</label>
-              <select
-                id="rule-enabled"
-                value={assignEnabled ? "true" : "false"}
-                onChange={(e) => setAssignEnabled(e.target.value === "true")}
-                required
-              >
-                <option value="true">Enable Access</option>
-                <option value="false">Disable Access</option>
-              </select>
-            </div>
-            <button className="btn-submit" type="submit">Assign Rule</button>
-          </form>
-        </section >
-      </div>
+                </tbody>
+              </table>
+            )}
+          </section>
+
+          {/* Section 2: Approved/Rejected Accounts */}
+          <section className="admin-section">
+            <h2>Approved / Rejected Accounts</h2>
+            <table className="admin-table">
+              <thead>
+                   <tr>
+                     <th>Name</th>
+                     <th>Email</th>
+                     <th>Status</th>
+                     <th>Groups (comma separated)</th>
+                     <th>Actions</th>
+                   </tr>
+              </thead>
+              <tbody>
+                {processedUsers.map((user) => (
+                  <tr key={user.id}>
+                    <td>{user.displayName}</td>
+                    <td>{user.email}</td>
+                    <td>
+                      <select
+                        className="status-select"
+                        value={user.status}
+                        onChange={(e) => handleStatusChange(user.id, e.target.value as AccountStatus)}
+                      >
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        className="group-input"
+                        type="text"
+                        placeholder="Group IDs (comma separated)"
+                        onBlur={(e) => handleSetGroups(user.id, e.target.value)}
+                      />
+                      {rowStatus[user.id]?.success && (
+                        <span className="row-status success">{rowStatus[user.id].success}</span>
+                      )}
+                      {rowStatus[user.id]?.error && (
+                        <span className="row-status error">{rowStatus[user.id].error}</span>
+                      )}
+                    </td>
+                    <td>
+                      <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          {/* Section 3: Feature & Group Access Configurations */}
+          <div className="admin-forms-row">
+            <section className="admin-section">
+              <h2>Create Group</h2>
+              <form className="admin-form" onSubmit={handleCreateGroup}>
+                <div className="form-group">
+                  <label htmlFor="group-name">Group Name</label>
+                  <input
+                    id="group-name"
+                    type="text"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="e.g. beta_testers"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="group-desc">Description</label>
+                  <input
+                    id="group-desc"
+                    type="text"
+                    value={newGroupDesc}
+                    onChange={(e) => setNewGroupDesc(e.target.value)}
+                    placeholder="Beta testing users group"
+                  />
+                </div>
+                <button className="btn-submit" type="submit">Create Group</button>
+              </form>
+            </section>
+
+            <section className="admin-section">
+              <h2>Create Feature</h2>
+              <form className="admin-form" onSubmit={handleCreateFeature}>
+                <div className="form-group">
+                  <label htmlFor="feat-key">Feature Key</label>
+                  <input
+                    id="feat-key"
+                    type="text"
+                    value={newFeatureKey}
+                    onChange={(e) => setNewFeatureKey(e.target.value)}
+                    placeholder="e.g. advanced_search"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="feat-desc">Description</label>
+                  <input
+                    id="feat-desc"
+                    type="text"
+                    value={newFeatureDesc}
+                    onChange={(e) => setNewFeatureDesc(e.target.value)}
+                    placeholder="Allows users to use FTS search fields"
+                  />
+                </div>
+                <button className="btn-submit" type="submit">Create Feature</button>
+              </form>
+            </section>
+
+            <section className="admin-section">
+              <h2>Assign Feature Access Rule</h2>
+              <form className="admin-form" onSubmit={handleAssignFeature}>
+                <div className="form-group">
+                  <label htmlFor="rule-feat">Feature</label>
+                  <select
+                    id="rule-feat"
+                    value={assignFeatureKey}
+                    onChange={(e) => setAssignFeatureKey(e.target.value)}
+                    required
+                  >
+                    <option value="">Select Feature</option>
+                    {features.map((f) => (
+                      <option key={f.id} value={f.key}>{f.key}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="rule-subject-type">Subject Type</label>
+                  <select
+                    id="rule-subject-type"
+                    value={assignSubjectType}
+                    onChange={(e) => {
+                      setAssignSubjectType(e.target.value as "user" | "group");
+                      setAssignSubjectId("");
+                    }}
+                    required
+                  >
+                    <option value="user">User ID</option>
+                    <option value="group">Group ID</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="rule-subject-id">Subject ID (User or Group ID)</label>
+                  {assignSubjectType === "user" ? (
+                    <input
+                      id="rule-subject-id"
+                      type="text"
+                      value={assignSubjectId}
+                      onChange={(e) => setAssignSubjectId(e.target.value)}
+                      placeholder="Paste User ID here"
+                      required
+                    />
+                  ) : (
+                    <select
+                      id="rule-subject-id"
+                      value={assignSubjectId}
+                      onChange={(e) => setAssignSubjectId(e.target.value)}
+                      required
+                    >
+                      <option value="">Select Group</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name} ({g.id})</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="rule-enabled">Assignment State</label>
+                  <select
+                    id="rule-enabled"
+                    value={assignEnabled ? "true" : "false"}
+                    onChange={(e) => setAssignEnabled(e.target.value === "true")}
+                    required
+                  >
+                    <option value="true">Enable Access</option>
+                    <option value="false">Disable Access</option>
+                  </select>
+                </div>
+                <button className="btn-submit" type="submit">Assign Rule</button>
+              </form>
+            </section >
+          </div>
+        </>
+      )}
     </div>
   );
 }

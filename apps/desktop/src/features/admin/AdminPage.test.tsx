@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { AdminPage } from "./AdminPage";
-import type { AccountApi, AdminMetrics, AccountProfile } from "../../domain/account";
+import type { AccountApi, AdminMetrics, AccountProfile, AdminStatistics } from "../../domain/account";
 
 const mockMetrics: AdminMetrics = {
   approvedUsers: 12,
@@ -60,7 +60,39 @@ const mockApi = (overrides: Partial<AccountApi> = {}): AccountApi => ({
   ...overrides,
 });
 
+const mockAdminStats: AdminStatistics = {
+  approvedUsers: 8,
+  analyticsEnabledUsers: 5,
+  optInPercentage: 62.5,
+  contributingUsers: 5,
+  insufficientSample: false,
+  dau: 12.4,
+  wau: 45.2,
+  mau: 120.0,
+  activeMs: 36000000,
+  activeDays: 145,
+  averageActiveMs: 7200000,
+  averageActiveDays: 29.0,
+  appAllocation: { reading: 60.0, memora: 40.0 },
+  reading: { activeUsers: 5, activeMs: 21600000, sessionCount: 30, pageVisitCount: 200, returningUserRate: 0.8 },
+  memora: { activeUsers: 4, activeMs: 14400000, sessionCount: 20, realReviewCount: 500, againCount: 50, hardCount: 80, goodCount: 300, easyCount: 70, lapseCount: 30, recallRate: 0.9, weeklyLearningFrequency: 3.5 },
+  buckets: [{ localDay: "2026-07-18", contributingUsers: 5, insufficientSample: false, activeMs: 3600000 }],
+};
+
 describe("AdminPage Dashboard", () => {
+  it("renders Management and Analytics navigation buttons", async () => {
+    const api = mockApi();
+    render(<AdminPage api={api} />);
+    expect(await screen.findByRole("button", { name: "Management" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Analytics" })).toBeInTheDocument();
+  });
+
+  it("switches to Analytics view when Analytics button clicked", async () => {
+    const api = mockApi({ adminStatistics: vi.fn().mockResolvedValue(mockAdminStats) });
+    render(<AdminPage api={api} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Analytics" }));
+    expect(await screen.findByText("Analytics coverage")).toBeInTheDocument();
+  });
   it("renders pending and approved users, overview metrics, and triggers approval/rejection", async () => {
     const api = mockApi();
     const windowConfirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
