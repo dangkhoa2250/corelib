@@ -68,6 +68,9 @@ mod scheduler_tests;
 #[cfg(test)]
 mod study_queue_tests;
 
+#[cfg(test)]
+mod statistics_tests;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
