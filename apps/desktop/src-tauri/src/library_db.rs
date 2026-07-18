@@ -398,6 +398,11 @@ impl LibraryDatabase {
             "DELETE FROM document_text WHERE document_id = ?1",
             params![id],
         )?;
+        transaction.execute(
+            "UPDATE activity_sessions SET context_id=NULL,updated_at=?1
+             WHERE context_kind='document' AND context_id=?2",
+            params![portable_timestamp(), id],
+        )?;
         transaction.execute("DELETE FROM documents WHERE id = ?1", params![id])?;
         transaction.commit()?;
 

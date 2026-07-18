@@ -294,6 +294,12 @@ impl LibraryDatabase {
             params![deck_name, now, id],
         )?;
 
+        tx.execute(
+            "UPDATE activity_sessions SET context_id=NULL,updated_at=?1
+             WHERE context_kind='deck' AND context_id=?2",
+            params![now, id],
+        )?;
+
         let deleted = tx.execute("DELETE FROM decks WHERE id=?1", params![id])?;
         if deleted == 0 {
             return Err(invalid("deck not found"));

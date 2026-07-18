@@ -544,3 +544,105 @@ fn finish_activity_session_rejects_invalid_timestamp() {
     let result = database.finish_activity_session("any", "not-a-timestamp");
     assert!(result.is_err());
 }
+
+#[test]
+fn deleting_document_preserves_aggregate_reading_activity() {
+    let (_directory, mut database) = db();
+    seed_document(&mut database, "doc-1");
+
+    database
+        .start_activity_session(NewActivitySession {
+            id: "session-1".into(),
+            app_key: "reading".into(),
+            activity_kind: "reading".into(),
+            context_kind: Some("document".into()),
+            context_id: Some("doc-1".into()),
+            occurred_at: "2026-07-18T01:00:00.000Z".into(),
+            local_day: "2026-07-18".into(),
+            timezone_offset_minutes: 0,
+        })
+        .expect("start");
+    database
+        .checkpoint_activity_session(ActivityCheckpoint {
+            session_id: "session-1".into(),
+            occurred_at: "2026-07-18T01:00:15.000Z".into(),
+            active_ms: 15_000,
+            document_id: Some("doc-1".into()),
+            page: Some(8),
+            page_visit_increment: 1,
+        })
+        .expect("checkpoint");
+
+    database
+        .delete_document("doc-1")
+        .expect("delete document");
+
+    let remaining: (i64, Option<String>) = database
+        .connection
+        .query_row(
+            "SELECT raw_active_ms,context_id FROM activity_sessions WHERE id='session-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("aggregate remains");
+    let pages: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM reading_session_pages",
+            [],
+            |row| row.get(0),
+        )
+        .expect("page count");
+    assert_eq!(remaining, (15_000, None));
+    assert_eq!(pages, 0);
+}
+
+#[test]
+fn deleting_deck_preserves_aggregate_practice_activity() {
+    let (_directory, mut database) = db();
+    let deck = database.create_deck("Spanish").expect("create deck");
+
+    database
+        .start_activity_session(NewActivitySession {
+            id: "session-deck".into(),
+            app_key: "memora".into(),
+            activity_kind: "practice".into(),
+            context_kind: Some("deck".into()),
+            context_id: Some(deck.id.clone()),
+            occurred_at: "2026-07-18T01:00:00.000Z".into(),
+            local_day: "2026-07-18".into(),
+            timezone_offset_minutes: 0,
+        })
+        .expect("start");
+    database
+        .checkpoint_activity_session(ActivityCheckpoint {
+            session_id: "session-deck".into(),
+            occurred_at: "2026-07-18T01:00:15.000Z".into(),
+            active_ms: 15_000,
+            document_id: None,
+            page: None,
+            page_visit_increment: 0,
+        })
+        .expect("checkpoint");
+
+    database.delete_deck(&deck.id).expect("delete deck");
+
+    let remaining: (i64, Option<String>) = database
+        .connection
+        .query_row(
+            "SELECT raw_active_ms,context_id FROM activity_sessions WHERE id='session-deck'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("aggregate remains");
+    assert_eq!(remaining, (15_000, None));
+    let decks: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM decks WHERE id = ?1",
+            params![deck.id],
+            |row| row.get(0),
+        )
+        .expect("deck count");
+    assert_eq!(decks, 0);
+}
