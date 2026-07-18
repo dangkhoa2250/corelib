@@ -1,9 +1,9 @@
 import { useContext, useCallback, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 
-import { IconLibrary, IconMemora, IconSearch, IconSettings, IconTrash } from "./icons";
+import { IconLibrary, IconMemora, IconSearch, IconSettings, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
 
-export type AppSection = "library" | "memora" | "trash" | "settings" | "admin";
+export type AppSection = "library" | "memora" | "trash" | "settings" | "admin" | "statistics";
 
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 360;
@@ -20,6 +20,7 @@ interface AppSidebarProps {
 const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] = [
   { section: "library", label: "Library", icon: IconLibrary },
   { section: "memora", label: "Memora", icon: IconMemora },
+  { section: "statistics", label: "Statistics", icon: IconStatistics },
   { section: "trash", label: "Trash", icon: IconTrash },
 ];
 

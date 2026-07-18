@@ -7,6 +7,7 @@
 .statistics-control[aria-pressed="true"] { background: var(--interactive-selected); }
 .statistics-range-picker { display: flex; gap: 8px; }
 .statistics-control { padding: 7px 14px; border: 1px solid var(--border-subtle); border-radius: 8px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.statistics-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
 .statistics-section + .statistics-section { margin-top: 28px; }
 .statistics-section__header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .statistics-section__title { margin: 0; font-size: 18px; font-weight: 600; }

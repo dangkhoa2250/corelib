@@ -96,6 +96,16 @@ export function IconEyeOff({ size = 16 }: IconProps) {
   );
 }
 
+export function IconStatistics({ size = 16 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <path d="M18 20V10" />
+      <path d="M12 20V4" />
+      <path d="M6 20v-6" />
+    </svg>
+  );
+}
+
 export function IconAppearance({ size = 16 }: IconProps) {
   return (
     <svg {...baseProps} height={size} width={size}>
