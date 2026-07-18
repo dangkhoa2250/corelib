@@ -1540,3 +1540,48 @@ fn zero_filled_buckets_cover_every_local_day_in_range() {
         .expect("day 16");
     assert_eq!(day_16.active_ms, 60_000);
 }
+
+#[test]
+fn deck_scope_excludes_other_decks_practice_and_review_activity() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+
+    let deck_a = database.create_deck("DeckA").expect("deck_a");
+    let deck_b = database.create_deck("DeckB").expect("deck_b");
+
+    let card_a1 = create_card_for_document(&mut database, "DeckA", "doc-1", 1, "card-a1");
+    let card_a2 = create_card_for_document(&mut database, "DeckA", "doc-1", 1, "card-a2");
+    let card_b1 = create_card_for_document(&mut database, "DeckB", "doc-1", 1, "card-b1");
+
+    insert_review_log(&database, "log-a1", &card_a1, "2026-07-18T02:00:00.000Z", "good", "review", "review", 30_000);
+    insert_review_log(&database, "log-a2", &card_a2, "2026-07-18T02:01:00.000Z", "good", "review", "review", 30_000);
+    insert_review_log(&database, "log-b1", &card_b1, "2026-07-18T02:02:00.000Z", "hard", "review", "review", 30_000);
+
+    start_session(&mut database, "practice-a", "memora", "practice", "2026-07-18T03:00:00.000Z", "2026-07-18", Some("deck"), Some(&deck_a.id));
+    checkpoint(&mut database, "practice-a", "2026-07-18T03:01:00.000Z", 60_000, None, None, 0);
+
+    start_session(&mut database, "practice-b", "memora", "practice", "2026-07-18T04:00:00.000Z", "2026-07-18", Some("deck"), Some(&deck_b.id));
+    checkpoint(&mut database, "practice-b", "2026-07-18T04:00:30.000Z", 30_000, None, None, 0);
+
+    let detail_a = database
+        .deck_statistics_detail(&deck_a.id, StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("deck_a");
+
+    assert_eq!(detail_a.active_ms, 120_000);
+    assert_eq!(detail_a.session_count, 1);
+    assert_eq!(detail_a.real_reviews, 2);
+    let nonzero: Vec<&i64> = detail_a.buckets.iter().filter(|b| b.active_ms > 0).map(|b| &b.active_ms).collect();
+    assert_eq!(nonzero.len(), 1, "expected exactly one non-zero bucket");
+    assert_eq!(*nonzero[0], 120_000);
+
+    let detail_b = database
+        .deck_statistics_detail(&deck_b.id, StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("deck_b");
+
+    assert_eq!(detail_b.active_ms, 60_000);
+    assert_eq!(detail_b.session_count, 1);
+    assert_eq!(detail_b.real_reviews, 1);
+    let nonzero_b: Vec<&i64> = detail_b.buckets.iter().filter(|b| b.active_ms > 0).map(|b| &b.active_ms).collect();
+    assert_eq!(nonzero_b.len(), 1, "expected exactly one non-zero bucket for deck_b");
+    assert_eq!(*nonzero_b[0], 60_000);
+}

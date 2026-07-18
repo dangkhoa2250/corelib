@@ -370,9 +370,9 @@ impl LibraryDatabase {
     ) -> Result<StatisticsOverview> {
         let window = RangeWindow::compute(range, today_local_day)?;
         let reading_active =
-            query_activity_active_ms(&self.connection, Some("reading"), window.start())?;
+            query_activity_active_ms(&self.connection, Some("reading"), window.start(), None)?;
         let practice_active =
-            query_activity_active_ms(&self.connection, Some("practice"), window.start())?;
+            query_activity_active_ms(&self.connection, Some("practice"), window.start(), None)?;
         let real_ms =
             query_capped_review_ms(&self.connection, &window, now_utc, ReviewScope::All)?;
         let memora_active = real_ms + practice_active;
@@ -404,7 +404,7 @@ impl LibraryDatabase {
     ) -> Result<ReadingStatistics> {
         let window = RangeWindow::compute(range, today_local_day)?;
         let active_ms =
-            query_activity_active_ms(&self.connection, Some("reading"), window.start())?;
+            query_activity_active_ms(&self.connection, Some("reading"), window.start(), None)?;
         let session_count =
             query_activity_session_count(&self.connection, Some("reading"), window.start())?;
         let average_session_ms = average(active_ms, session_count);
@@ -638,12 +638,12 @@ fn build_memora_body(
         None => ReviewScope::All,
     };
 
-    let practice_active_ms = query_activity_active_ms(connection, Some("practice"), window.start())?;
+    let practice_active_ms = query_activity_active_ms(connection, Some("practice"), window.start(), deck_scope)?;
     let real_ms = query_capped_review_ms(connection, window, now_utc, scope)?;
     let active_ms = real_ms + practice_active_ms;
 
     let real_session_count = query_real_study_session_count(connection, window, deck_scope)?;
-    let practice_session_count = query_practice_session_count(connection, window.start())?;
+    let practice_session_count = query_practice_session_count(connection, window.start(), deck_scope)?;
     let session_count = real_session_count + practice_session_count;
 
     let real_reviews = query_count_real_reviews(connection, window, now_utc, scope)?;
@@ -762,34 +762,50 @@ fn query_activity_active_ms(
     connection: &rusqlite::Connection,
     activity_kind: Option<&str>,
     start: Option<&str>,
+    deck_scope: Option<&str>,
 ) -> Result<i64> {
     let kind_clause = match activity_kind {
         Some(_) => "activity_kind = ? AND",
         None => "",
     };
+    let deck_clause = match (activity_kind, deck_scope) {
+        (Some("practice"), Some(_)) => "context_kind = 'deck' AND context_id = ? AND",
+        _ => "",
+    };
     let sql = format!(
         "SELECT COALESCE(SUM(raw_active_ms), 0) FROM activity_sessions
-         WHERE {kind_clause} {window}",
+         WHERE {kind_clause} {deck_clause} {window}",
         kind_clause = kind_clause,
+        deck_clause = deck_clause,
         window = activity_window_clause(start),
     );
-    Ok(match (activity_kind, start) {
-        (Some(kind), Some(start_str)) => connection.query_row(
+    Ok(match (activity_kind, deck_scope, start) {
+        (Some(kind), Some(deck), Some(start_str)) => connection.query_row(
+            &sql,
+            params![kind, deck, today_upper_bound(), start_str],
+            |row| row.get(0),
+        )?,
+        (Some(kind), Some(deck), None) => connection.query_row(
+            &sql,
+            params![kind, deck, today_upper_bound()],
+            |row| row.get(0),
+        )?,
+        (Some(kind), None, Some(start_str)) => connection.query_row(
             &sql,
             params![kind, today_upper_bound(), start_str],
             |row| row.get(0),
         )?,
-        (Some(kind), None) => connection.query_row(
+        (Some(kind), None, None) => connection.query_row(
             &sql,
             params![kind, today_upper_bound()],
             |row| row.get(0),
         )?,
-        (None, Some(start_str)) => connection.query_row(
+        (None, _, Some(start_str)) => connection.query_row(
             &sql,
             params![today_upper_bound(), start_str],
             |row| row.get(0),
         )?,
-        (None, None) => connection.query_row(
+        (None, _, None) => connection.query_row(
             &sql,
             params![today_upper_bound()],
             |row| row.get(0),
@@ -837,20 +853,42 @@ fn query_activity_session_count(
 fn query_practice_session_count(
     connection: &rusqlite::Connection,
     start: Option<&str>,
+    deck_scope: Option<&str>,
 ) -> Result<i64> {
+    let deck_clause = match deck_scope {
+        Some(_) => "AND context_kind = 'deck' AND context_id = ?",
+        None => "",
+    };
     let sql = format!(
         "SELECT COUNT(*) FROM activity_sessions
          WHERE activity_kind = 'practice'
            AND raw_active_ms > 0
+           {deck_clause}
            AND {window}",
+        deck_clause = deck_clause,
         window = activity_window_clause(start),
     );
-    Ok(if let Some(start_str) = start {
-        connection.query_row(&sql, params![today_upper_bound(), start_str], |row| {
-            row.get(0)
-        })?
-    } else {
-        connection.query_row(&sql, params![today_upper_bound()], |row| row.get(0))?
+    Ok(match (deck_scope, start) {
+        (Some(deck), Some(start_str)) => connection.query_row(
+            &sql,
+            params![deck, today_upper_bound(), start_str],
+            |row| row.get(0),
+        )?,
+        (Some(deck), None) => connection.query_row(
+            &sql,
+            params![deck, today_upper_bound()],
+            |row| row.get(0),
+        )?,
+        (None, Some(start_str)) => connection.query_row(
+            &sql,
+            params![today_upper_bound(), start_str],
+            |row| row.get(0),
+        )?,
+        (None, None) => connection.query_row(
+            &sql,
+            params![today_upper_bound()],
+            |row| row.get(0),
+        )?,
     })
 }
 
@@ -1444,7 +1482,7 @@ fn build_total_buckets(
          GROUP BY local_day",
         window = activity_window_clause(window.start()),
     );
-    for (day, value) in query_daily_activity_sums(connection, &activity_sql, window.start())? {
+    for (day, value) in query_daily_activity_sums(connection, &activity_sql, window.start(), None)? {
         *daily.entry(day).or_insert(0) += value;
     }
 
@@ -1455,7 +1493,7 @@ fn build_total_buckets(
          WHERE {review_window}",
         review_window = review_window_clause(window.start()),
     );
-    for (day, value) in query_daily_review_sums(connection, &review_sql, window, now_utc)? {
+    for (day, value) in query_daily_review_sums(connection, &review_sql, window, now_utc, None)? {
         *daily.entry(day).or_insert(0) += value;
     }
 
@@ -1505,7 +1543,7 @@ fn build_reading_buckets(
                  GROUP BY local_day",
                 window = activity_window_clause(window.start()),
             );
-            query_daily_activity_sums(connection, &sql, window.start())?
+            query_daily_activity_sums(connection, &sql, window.start(), None)?
         }
     };
     for (day, value) in rows {
@@ -1519,32 +1557,45 @@ fn build_memora_buckets(
     bucket_days: &[String],
     window: &RangeWindow,
     now_utc: &str,
-    _deck_scope: Option<&str>,
+    deck_scope: Option<&str>,
 ) -> Result<Vec<ActivityBucket>> {
     let mut daily: HashMap<String, i64> = HashMap::new();
 
-    // Practice activity per day. Deck scope would require a context filter,
-    // but the current schema records memora practice at the app level only;
-    // the deck-scoped memora query therefore falls back to all practice time.
+    // Practice activity per day. Deck-scoped: filter by context_kind/context_id.
+    let deck_filter_practice = match deck_scope {
+        Some(_) => "AND context_kind = 'deck' AND context_id = ?",
+        None => "",
+    };
     let practice_sql = format!(
         "SELECT local_day, COALESCE(SUM(raw_active_ms), 0)
          FROM activity_sessions
-         WHERE activity_kind = 'practice' AND {window}
+         WHERE activity_kind = 'practice' {deck_filter_practice} AND {window}
          GROUP BY local_day",
+        deck_filter_practice = deck_filter_practice,
         window = activity_window_clause(window.start()),
     );
-    for (day, value) in query_daily_activity_sums(connection, &practice_sql, window.start())? {
+    for (day, value) in query_daily_activity_sums(connection, &practice_sql, window.start(), deck_scope)? {
         *daily.entry(day).or_insert(0) += value;
     }
 
-    // Capped real-study time per day.
+    // Capped real-study time per day, scoped to deck if applicable.
+    let (review_join, review_extra) = match deck_scope {
+        Some(_) => (
+            "JOIN cards ON cards.id = review_logs.card_id",
+            "AND cards.deleted_at IS NULL AND cards.deck_id = ?",
+        ),
+        None => ("", ""),
+    };
     let review_sql = format!(
         "SELECT reviewed_at, MIN(elapsed_ms, ?)
          FROM review_logs
-         WHERE {review_window}",
+         {review_join}
+         WHERE {review_window} {review_extra}",
+        review_join = review_join,
         review_window = review_window_clause(window.start()),
+        review_extra = review_extra,
     );
-    for (day, value) in query_daily_review_sums(connection, &review_sql, window, now_utc)? {
+    for (day, value) in query_daily_review_sums(connection, &review_sql, window, now_utc, deck_scope)? {
         *daily.entry(day).or_insert(0) += value;
     }
 
@@ -1568,20 +1619,30 @@ fn query_daily_activity_sums(
     connection: &rusqlite::Connection,
     sql: &str,
     start: Option<&str>,
+    deck_scope: Option<&str>,
 ) -> Result<Vec<(String, i64)>> {
     let mut stmt = connection.prepare(sql)?;
-    let rows: Vec<(String, i64)> = if let Some(start_str) = start {
-        stmt
+    let rows: Vec<(String, i64)> = match (start, deck_scope) {
+        (Some(start_str), Some(deck_id)) => stmt
+            .query_map(params![deck_id, today_upper_bound(), start_str], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?,
+        (Some(start_str), None) => stmt
             .query_map(params![today_upper_bound(), start_str], |row| {
                 Ok((row.get(0)?, row.get(1)?))
             })?
-            .collect::<std::result::Result<Vec<_>, _>>()?
-    } else {
-        stmt
+            .collect::<std::result::Result<Vec<_>, _>>()?,
+        (None, Some(deck_id)) => stmt
+            .query_map(params![deck_id, today_upper_bound()], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?,
+        (None, None) => stmt
             .query_map(params![today_upper_bound()], |row| {
                 Ok((row.get(0)?, row.get(1)?))
             })?
-            .collect::<std::result::Result<Vec<_>, _>>()?
+            .collect::<std::result::Result<Vec<_>, _>>()?,
     };
     Ok(rows)
 }
@@ -1591,6 +1652,7 @@ fn query_daily_review_sums(
     sql: &str,
     window: &RangeWindow,
     now_utc: &str,
+    deck_scope: Option<&str>,
 ) -> Result<Vec<(String, i64)>> {
     let start_utc = window.start_utc()?;
     let mut stmt = connection.prepare(sql)?;
@@ -1600,11 +1662,17 @@ fn query_daily_review_sums(
         let day = utc_timestamp_to_local_day(&reviewed_at).unwrap_or_else(|| reviewed_at.clone());
         Ok((day, total))
     };
-    let rows: Vec<(String, i64)> = match start_utc.as_deref() {
-        Some(start) => stmt
+    let rows: Vec<(String, i64)> = match (start_utc.as_deref(), deck_scope) {
+        (Some(start), Some(deck)) => stmt
+            .query_map(params![REVIEW_TIME_CAP_MS, now_utc, start, deck], extract)?
+            .collect::<std::result::Result<Vec<_>, _>>()?,
+        (Some(start), None) => stmt
             .query_map(params![REVIEW_TIME_CAP_MS, now_utc, start], extract)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
-        None => stmt
+        (None, Some(deck)) => stmt
+            .query_map(params![REVIEW_TIME_CAP_MS, now_utc, deck], extract)?
+            .collect::<std::result::Result<Vec<_>, _>>()?,
+        (None, None) => stmt
             .query_map(params![REVIEW_TIME_CAP_MS, now_utc], extract)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
     };
