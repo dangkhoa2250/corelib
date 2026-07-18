@@ -38,6 +38,7 @@ pub mod library_store;
 pub mod model;
 pub mod scheduler;
 pub mod study_queue;
+pub mod statistics;
 pub mod translation;
 pub mod account;
 
