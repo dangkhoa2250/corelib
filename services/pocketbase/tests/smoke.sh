@@ -6,7 +6,7 @@ data_dir="${2:-services/pocketbase/pb_data}"
 database_path="${data_dir%/}/data.db"
 
 # Clear database tables to make the test idempotent
-sqlite3 "${database_path}" "DELETE FROM users; DELETE FROM groups; DELETE FROM group_members; DELETE FROM features; DELETE FROM feature_assignments; DELETE FROM admin_audit_logs; DELETE FROM analytics_events;"
+sqlite3 "${database_path}" "DELETE FROM users; DELETE FROM groups; DELETE FROM group_members; DELETE FROM features; DELETE FROM feature_assignments; DELETE FROM admin_audit_logs; DELETE FROM analytics_events; DELETE FROM daily_statistics;"
 
 status="$(curl --silent --output /tmp/corelib-register.json --write-out '%{http_code}' \
   --request POST "${base_url}/api/corelib/register" \
@@ -358,3 +358,36 @@ status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
   --header 'content-type: application/json' \
   --data '{"schemaVersion":1,"localDay":"2026-07-18","appKey":"memora","activeMs":30000,"activeDay":true,"sessionCount":1,"realReviewCount":10,"againCount":1,"hardCount":2,"goodCount":5,"easyCount":2,"lapseCount":1}')"
 test "${status}" = "204"
+
+# --- Admin aggregate statistics ---
+
+# 1. Non-admin gets 403
+status="$(curl --silent --output /tmp/corelib-admin-stats-fail.json --write-out '%{http_code}' \
+  --request GET "${base_url}/api/corelib/admin/statistics" \
+  --header "Authorization: Bearer ${token}")"
+test "${status}" = "403"
+grep -q '"admin_required"' /tmp/corelib-admin-stats-fail.json
+
+# 2. Admin gets 200 with aggregates
+status="$(curl --silent --output /tmp/corelib-admin-stats.json --write-out '%{http_code}' \
+  --request GET "${base_url}/api/corelib/admin/statistics" \
+  --header "Authorization: Bearer ${admin_token}")"
+test "${status}" = "200"
+
+# 3. Verify aggregate shape — no user IDs or emails
+if grep -q '"email"' /tmp/corelib-admin-stats.json; then
+  echo "Error: Admin stats response should not contain email fields"
+  exit 1
+fi
+grep -q '"approvedUsers"' /tmp/corelib-admin-stats.json
+grep -q '"contributingUsers"' /tmp/corelib-admin-stats.json
+grep -q '"buckets"' /tmp/corelib-admin-stats.json
+
+# 4. Verify insufficient sample when < 5 contributors
+grep -q '"insufficientSample":true' /tmp/corelib-admin-stats.json
+
+# 5. Range and appKey filtering
+status="$(curl --silent --output /tmp/corelib-admin-stats-reading.json --write-out '%{http_code}' \
+  --request GET "${base_url}/api/corelib/admin/statistics?range=7d&appKey=reading" \
+  --header "Authorization: Bearer ${admin_token}")"
+test "${status}" = "200"

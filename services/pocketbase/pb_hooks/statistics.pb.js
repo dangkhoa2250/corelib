@@ -103,3 +103,240 @@ routerAdd("POST", "/api/corelib/analytics/daily-statistics", (e) => {
     return e.json(400, { message: err.toString() });
   }
 });
+
+function getISOWeek(date) {
+  const dayNum = date.getUTCDay() || 7;
+  const thursday = new Date(date);
+  thursday.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+  const weekNum = Math.ceil((((thursday - yearStart) / 86400000) + 1) / 7);
+  return thursday.getUTCFullYear() + "-W" + String(weekNum).padStart(2, "0");
+}
+
+routerAdd("GET", "/api/corelib/admin/statistics", (e) => {
+  if (!e.auth) return e.json(401, { message: "invalid_session" });
+  if (e.auth.getString("status") !== "approved") return e.json(403, { message: "account_not_approved" });
+  if (e.auth.getString("role") !== "admin") return e.json(403, { message: "admin_required" });
+
+  const q = e.requestInfo().query || {};
+  const range = q.range || "30d";
+  const appKey = q.appKey || "all";
+
+  if (!["7d", "30d", "1y", "all"].includes(range)) return e.json(400, { message: "invalid_range" });
+  if (!["all", "reading", "memora"].includes(appKey)) return e.json(400, { message: "invalid_appKey" });
+
+  const now = new Date();
+  let filter = "";
+  const filterParams = {};
+  if (range !== "all") {
+    const days = range === "7d" ? 7 : range === "30d" ? 30 : 365;
+    const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    filter = "localDay >= {:cutoff}";
+    filterParams.cutoff = cutoff;
+  }
+  if (appKey !== "all") {
+    filter = filter ? filter + " && appKey = {:appKey}" : "appKey = {:appKey}";
+    filterParams.appKey = appKey;
+  }
+
+  try {
+    const approvedUsers = e.app.findRecordsByFilter("users", "status = 'approved'", "", 0, 0).length;
+    const analyticsEnabledUsers = e.app.findRecordsByFilter("users", "status = 'approved' && analyticsEnabled = true", "", 0, 0).length;
+    const optInPercentage = approvedUsers > 0 ? parseFloat(((analyticsEnabledUsers / approvedUsers) * 100).toFixed(1)) : null;
+
+    const records = filter
+      ? e.app.findRecordsByFilter("daily_statistics", filter, "", 0, 0, filterParams)
+      : e.app.findRecordsByFilter("daily_statistics", "", "", 0, 0);
+
+    const contributingUserIds = new Set();
+    const dayUsers = {};
+    const weekUsers = {};
+    const monthUsers = {};
+    const appMs = { reading: 0, memora: 0 };
+    const dayBuckets = {};
+    let totalActiveMs = 0;
+    let totalActiveDays = 0;
+    let totalSessionCount = 0;
+    let readingActiveMs = 0;
+    let readingSessionCount = 0;
+    let readingPageVisits = 0;
+    const readingUserDays = {};
+    let memoraActiveMs = 0;
+    let memoraSessionCount = 0;
+    let memoraRealReviewCount = 0;
+    let memoraAgainCount = 0;
+    let memoraHardCount = 0;
+    let memoraGoodCount = 0;
+    let memoraEasyCount = 0;
+    let memoraLapseCount = 0;
+    const memoraUserDays = {};
+    const memoraReviewWeeks = {};
+
+    for (const r of records) {
+      const userId = r.getString("user");
+      const localDay = r.getString("localDay");
+      const app = r.getString("appKey");
+      const activeMs = r.getInt("activeMs");
+      const activeDay = r.getBool("activeDay");
+      const sessionCount = r.getInt("sessionCount");
+
+      contributingUserIds.add(userId);
+
+      if (!dayBuckets[localDay]) dayBuckets[localDay] = { users: new Set(), activeMs: 0 };
+      dayBuckets[localDay].users.add(userId);
+      dayBuckets[localDay].activeMs += activeMs;
+
+      if (!dayUsers[localDay]) dayUsers[localDay] = new Set();
+      dayUsers[localDay].add(userId);
+
+      const date = new Date(localDay + "T00:00:00Z");
+      const isoWeek = getISOWeek(date);
+      if (!weekUsers[isoWeek]) weekUsers[isoWeek] = new Set();
+      weekUsers[isoWeek].add(userId);
+
+      const month = localDay.substring(0, 7);
+      if (!monthUsers[month]) monthUsers[month] = new Set();
+      monthUsers[month].add(userId);
+
+      totalActiveMs += activeMs;
+      if (activeDay) totalActiveDays++;
+      totalSessionCount += sessionCount;
+
+      if (app === "reading") {
+        appMs.reading += activeMs;
+        readingActiveMs += activeMs;
+        readingSessionCount += sessionCount;
+        readingPageVisits += r.getInt("pageVisitCount");
+        readingUserDays[userId] = readingUserDays[userId] || new Set();
+        readingUserDays[userId].add(localDay);
+      } else if (app === "memora") {
+        appMs.memora += activeMs;
+        memoraActiveMs += activeMs;
+        memoraSessionCount += sessionCount;
+        memoraRealReviewCount += r.getInt("realReviewCount");
+        memoraAgainCount += r.getInt("againCount");
+        memoraHardCount += r.getInt("hardCount");
+        memoraGoodCount += r.getInt("goodCount");
+        memoraEasyCount += r.getInt("easyCount");
+        memoraLapseCount += r.getInt("lapseCount");
+        memoraUserDays[userId] = memoraUserDays[userId] || new Set();
+        memoraUserDays[userId].add(localDay);
+        if (r.getInt("realReviewCount") > 0) {
+          if (!memoraReviewWeeks[userId]) memoraReviewWeeks[userId] = {};
+          if (!memoraReviewWeeks[userId][isoWeek]) memoraReviewWeeks[userId][isoWeek] = new Set();
+          memoraReviewWeeks[userId][isoWeek].add(localDay);
+        }
+      }
+    }
+
+    const contributingUsers = contributingUserIds.size;
+
+    const sortedDays = Object.keys(dayBuckets).sort();
+    const bucketList = [];
+    for (const day of sortedDays) {
+      const b = dayBuckets[day];
+      const dayContributing = b.users.size;
+      const entry = { localDay: day, contributingUsers: dayContributing, insufficientSample: dayContributing < 5 };
+      if (dayContributing >= 5) entry.activeMs = b.activeMs;
+      bucketList.push(entry);
+    }
+
+    const response = {
+      approvedUsers,
+      analyticsEnabledUsers,
+      optInPercentage,
+      contributingUsers,
+      insufficientSample: contributingUsers < 5,
+      buckets: bucketList,
+    };
+
+    if (contributingUsers >= 5) {
+      const dayValues = Object.values(dayUsers);
+      if (dayValues.length > 0) {
+        let sum = 0;
+        for (const s of dayValues) sum += s.size;
+        response.dau = parseFloat((sum / dayValues.length).toFixed(1));
+      }
+
+      const weekValues = Object.values(weekUsers);
+      if (weekValues.length > 0) {
+        let sum = 0;
+        for (const s of weekValues) sum += s.size;
+        response.wau = parseFloat((sum / weekValues.length).toFixed(1));
+      }
+
+      const monthValues = Object.values(monthUsers);
+      if (monthValues.length > 0) {
+        let sum = 0;
+        for (const s of monthValues) sum += s.size;
+        response.mau = parseFloat((sum / monthValues.length).toFixed(1));
+      }
+
+      response.activeMs = totalActiveMs;
+      response.activeDays = totalActiveDays;
+      response.averageActiveMs = totalActiveMs / contributingUsers;
+      response.averageActiveDays = parseFloat((totalActiveDays / contributingUsers).toFixed(1));
+
+      const totalAppMs = appMs.reading + appMs.memora;
+      response.appAllocation = {};
+      if (totalAppMs > 0) {
+        response.appAllocation.reading = parseFloat(((appMs.reading / totalAppMs) * 100).toFixed(1));
+        response.appAllocation.memora = parseFloat(((appMs.memora / totalAppMs) * 100).toFixed(1));
+      } else {
+        response.appAllocation.reading = 0;
+        response.appAllocation.memora = 0;
+      }
+
+      const readingUserIds = Object.keys(readingUserDays);
+      if (readingUserIds.length > 0) {
+        let returningCount = 0;
+        for (const uid of readingUserIds) {
+          if (readingUserDays[uid].size >= 2) returningCount++;
+        }
+        response.reading = {
+          activeUsers: readingUserIds.length,
+          activeMs: readingActiveMs,
+          sessionCount: readingSessionCount,
+          pageVisitCount: readingPageVisits,
+          returningUserRate: parseFloat((returningCount / readingUserIds.length).toFixed(1)),
+        };
+      }
+
+      const memoraUserIds = Object.keys(memoraUserDays);
+      if (memoraUserIds.length > 0) {
+        const recallSum = memoraHardCount + memoraGoodCount + memoraEasyCount;
+        const totalReviews = memoraAgainCount + recallSum;
+
+        let wlfTotalDays = 0;
+        let wlfTotalWeeks = 0;
+        for (const uid of memoraUserIds) {
+          const weeks = memoraReviewWeeks[uid];
+          if (weeks) {
+            for (const wk in weeks) {
+              wlfTotalDays += weeks[wk].size;
+              wlfTotalWeeks++;
+            }
+          }
+        }
+
+        response.memora = {
+          activeUsers: memoraUserIds.length,
+          activeMs: memoraActiveMs,
+          sessionCount: memoraSessionCount,
+          realReviewCount: memoraRealReviewCount,
+          againCount: memoraAgainCount,
+          hardCount: memoraHardCount,
+          goodCount: memoraGoodCount,
+          easyCount: memoraEasyCount,
+          lapseCount: memoraLapseCount,
+          recallRate: totalReviews > 0 ? parseFloat((recallSum / totalReviews).toFixed(1)) : null,
+          weeklyLearningFrequency: wlfTotalWeeks > 0 ? parseFloat((wlfTotalDays / wlfTotalWeeks).toFixed(1)) : null,
+        };
+      }
+    }
+
+    return e.json(200, response);
+  } catch (err) {
+    return e.json(400, { message: err.toString() });
+  }
+});
