@@ -14,3 +14,14 @@
 .statistics-error-state { padding: 24px; text-align: center; color: var(--error); }
 .statistics-error-state button { margin-top: 12px; padding: 8px 16px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
 .statistics-skeleton { padding: 24px; text-align: center; color: var(--text-disabled); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border-width: 0; }
+.statistics-heatmap-wrapper { padding-bottom: 20px; }
+.statistics-heatmap { display: grid; gap: 3px; }
+.statistics-heatmap__cell { border-radius: 2px; outline-offset: 1px; cursor: pointer; background: var(--surface-3); }
+.statistics-heatmap__cell:focus-visible { outline: 2px solid var(--focus-ring); }
+.statistics-heatmap__cell[data-level="1"] { background: var(--statistics-level-1); }
+.statistics-heatmap__cell[data-level="2"] { background: var(--statistics-level-2); }
+.statistics-heatmap__cell[data-level="3"] { background: var(--statistics-level-3); }
+.statistics-heatmap__cell[data-level="4"] { background: var(--statistics-level-4); }
+.statistics-heatmap__cell[data-level="5"] { background: var(--statistics-level-5); }
+.statistics-heatmap__tooltip { position: absolute; background: var(--surface-2); border: 1px solid var(--border-subtle); padding: 4px 8px; font-size: 12px; pointer-events: none; z-index: 10; }
