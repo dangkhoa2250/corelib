@@ -1,8 +1,9 @@
 use rusqlite::params;
 use tempfile::TempDir;
 
+use crate::learning::{NewCard, NewCardSource};
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
-use crate::statistics::{ActivityCheckpoint, NewActivitySession};
+use crate::statistics::{ActivityCheckpoint, NewActivitySession, StatisticsRange};
 
 fn db() -> (TempDir, LibraryDatabase) {
     let directory = TempDir::new().expect("temporary statistics database");
@@ -645,4 +646,897 @@ fn deleting_deck_preserves_aggregate_practice_activity() {
         )
         .expect("deck count");
     assert_eq!(decks, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Task 4: personal aggregate query tests
+// ---------------------------------------------------------------------------
+
+const FIXED_NOW: &str = "2026-07-18T23:59:00.000Z";
+const TODAY_LOCAL_DAY: &str = "2026-07-18";
+
+fn seed_document_with_pages(database: &mut LibraryDatabase, id: &str, num_pages: i64) {
+    database
+        .insert_local(NewLocalDocument {
+            id: id.into(),
+            title: format!("Document {id}"),
+            content_hash: format!("hash-{id}"),
+            managed_path: format!("/managed/{id}.pdf"),
+        })
+        .expect("seed document");
+    database
+        .connection
+        .execute(
+            "UPDATE documents SET num_pages = ?1 WHERE id = ?2",
+            params![num_pages, id],
+        )
+        .expect("set num_pages");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn start_session(
+    database: &mut LibraryDatabase,
+    id: &str,
+    app_key: &str,
+    activity_kind: &str,
+    occurred_at: &str,
+    local_day: &str,
+    context_kind: Option<&str>,
+    context_id: Option<&str>,
+) {
+    database
+        .start_activity_session(NewActivitySession {
+            id: id.into(),
+            app_key: app_key.into(),
+            activity_kind: activity_kind.into(),
+            context_kind: context_kind.map(str::to_string),
+            context_id: context_id.map(str::to_string),
+            occurred_at: occurred_at.into(),
+            local_day: local_day.into(),
+            timezone_offset_minutes: 0,
+        })
+        .expect("start session");
+}
+
+fn checkpoint(
+    database: &mut LibraryDatabase,
+    session_id: &str,
+    occurred_at: &str,
+    active_ms: i64,
+    document_id: Option<&str>,
+    page: Option<i64>,
+    page_visit_increment: i64,
+) {
+    database
+        .checkpoint_activity_session(ActivityCheckpoint {
+            session_id: session_id.into(),
+            occurred_at: occurred_at.into(),
+            active_ms,
+            document_id: document_id.map(str::to_string),
+            page,
+            page_visit_increment,
+        })
+        .expect("checkpoint");
+}
+
+#[allow(clippy::too_many_arguments)]
+fn insert_review_log(
+    database: &LibraryDatabase,
+    id: &str,
+    card_id: &str,
+    reviewed_at: &str,
+    rating: &str,
+    prior_state: &str,
+    next_state: &str,
+    elapsed_ms: i64,
+) {
+    database
+        .connection
+        .execute(
+            "INSERT INTO review_logs(
+                id, card_id, reviewed_at, rating, prior_state, next_state,
+                prior_due_at, next_due_at, interval_seconds, elapsed_ms, scheduler_version
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6,
+                       '2026-07-18T00:00:00.000Z', '2026-07-19T00:00:00.000Z',
+                       86400, ?7, 'test')",
+            params![id, card_id, reviewed_at, rating, prior_state, next_state, elapsed_ms],
+        )
+        .expect("insert review log");
+}
+
+fn create_card_for_document(
+    database: &mut LibraryDatabase,
+    deck_name: &str,
+    document_id: &str,
+    page: i64,
+    front: &str,
+) -> String {
+    let card = database
+        .create_card(NewCard {
+            deck_name: deck_name.into(),
+            front: front.into(),
+            back: "answer".into(),
+            source: Some(NewCardSource {
+                document_id: document_id.into(),
+                page,
+                quote: format!("quote-{front}"),
+                rects_json: "[]".into(),
+            }),
+            tags: vec![],
+            front_language: None,
+        })
+        .expect("create card");
+    card.id
+}
+
+fn seed_primary_fixture(database: &mut LibraryDatabase) -> (crate::model::DeckSummary, String) {
+    seed_document_with_pages(database, "doc-1", 10);
+
+    // Reading session on doc-1 with visits to pages [1, 2, 2, 4].
+    start_session(
+        database,
+        "session-read-1",
+        "reading",
+        "reading",
+        "2026-07-18T01:00:00.000Z",
+        "2026-07-18",
+        Some("document"),
+        Some("doc-1"),
+    );
+    checkpoint(
+        database,
+        "session-read-1",
+        "2026-07-18T01:00:15.000Z",
+        15_000,
+        Some("doc-1"),
+        Some(1),
+        1,
+    );
+    checkpoint(
+        database,
+        "session-read-1",
+        "2026-07-18T01:00:30.000Z",
+        15_000,
+        Some("doc-1"),
+        Some(2),
+        1,
+    );
+    checkpoint(
+        database,
+        "session-read-1",
+        "2026-07-18T01:00:45.000Z",
+        15_000,
+        Some("doc-1"),
+        Some(2),
+        1,
+    );
+    checkpoint(
+        database,
+        "session-read-1",
+        "2026-07-18T01:01:00.000Z",
+        15_000,
+        Some("doc-1"),
+        Some(4),
+        1,
+    );
+
+    // One card linked to doc-1, marked review so the Again review counts as a lapse.
+    let deck = database.create_deck("Biology").expect("deck");
+    let card_id = create_card_for_document(database, "Biology", "doc-1", 1, "card-1");
+    database
+        .connection
+        .execute(
+            "UPDATE cards SET state='review' WHERE id = ?1",
+            params![card_id],
+        )
+        .expect("set review state");
+
+    // 3 real reviews linked to the document through the card's source.
+    // 1 Again (prior_state='review', elapsed=600s, capped at 300s) — counts as a lapse.
+    insert_review_log(
+        database,
+        "log-1",
+        &card_id,
+        "2026-07-18T02:00:00.000Z",
+        "again",
+        "review",
+        "relearning",
+        600_000,
+    );
+    // 2 Good (elapsed=30s each, contribute to recall rate).
+    insert_review_log(
+        database,
+        "log-2",
+        &card_id,
+        "2026-07-18T02:01:00.000Z",
+        "good",
+        "review",
+        "review",
+        30_000,
+    );
+    insert_review_log(
+        database,
+        "log-3",
+        &card_id,
+        "2026-07-18T02:02:00.000Z",
+        "good",
+        "review",
+        "review",
+        30_000,
+    );
+
+    (deck, card_id)
+}
+
+#[test]
+fn primary_metrics_match_personal_aggregate_spec() {
+    let (_directory, mut database) = db();
+    seed_primary_fixture(&mut database);
+
+    let overview = database
+        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("overview");
+    let document = database
+        .document_statistics("doc-1", StatisticsRange::All, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("document statistics");
+
+    assert_eq!(document.document_id, "doc-1");
+    assert_eq!(document.unique_pages, 3);
+    assert_eq!(document.page_visits, 4);
+    assert_eq!(document.revisits, 1);
+    assert_eq!(document.coverage, 0.3);
+    assert_eq!(document.real_reviews, 3);
+    assert_eq!(document.recall_rate, Some(2.0 / 3.0));
+    assert_eq!(document.again_count, 1);
+    assert_eq!(document.lapses, 1);
+    assert_eq!(overview.memora_active_ms, 360_000); // capped 5m + 30s + 30s
+}
+
+#[test]
+fn statistics_range_parse_round_trips_known_values() {
+    assert_eq!(
+        StatisticsRange::parse("7d").expect("7d"),
+        StatisticsRange::Days7
+    );
+    assert_eq!(
+        StatisticsRange::parse("30d").expect("30d"),
+        StatisticsRange::Days30
+    );
+    assert_eq!(
+        StatisticsRange::parse("1y").expect("1y"),
+        StatisticsRange::Year1
+    );
+    assert_eq!(
+        StatisticsRange::parse("all").expect("all"),
+        StatisticsRange::All
+    );
+    assert!(StatisticsRange::parse("invalid").is_err());
+}
+
+#[test]
+fn zero_denominators_return_none_instead_of_zero_percent() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+
+    let overview = database
+        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("overview");
+    assert_eq!(overview.active_ms, 0);
+    assert_eq!(overview.reading_active_ms, 0);
+    assert_eq!(overview.memora_active_ms, 0);
+    assert_eq!(overview.current_streak, 0);
+    assert_eq!(overview.active_days, 0);
+    assert_eq!(overview.buckets.len(), 30);
+    assert!(overview.buckets.iter().all(|bucket| bucket.active_ms == 0));
+
+    let reading = database
+        .reading_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("reading");
+    assert_eq!(reading.active_ms, 0);
+    assert_eq!(reading.session_count, 0);
+    assert_eq!(reading.average_session_ms, None);
+    assert_eq!(reading.page_visits, 0);
+    assert_eq!(reading.unique_pages, 0);
+    assert_eq!(reading.revisits, 0);
+
+    let memora = database
+        .memora_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("memora");
+    assert_eq!(memora.active_ms, 0);
+    assert_eq!(memora.practice_active_ms, 0);
+    assert_eq!(memora.session_count, 0);
+    assert_eq!(memora.real_reviews, 0);
+    assert_eq!(memora.recall_rate, None);
+    assert_eq!(memora.lapse_rate, None);
+    assert_eq!(memora.average_answer_ms, None);
+
+    let document = database
+        .document_statistics("doc-1", StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("document");
+    assert_eq!(document.real_reviews, 0);
+    assert_eq!(document.recall_rate, None);
+    assert_eq!(document.average_session_ms, None);
+    assert_eq!(document.coverage, 0.0); // no visits -> 0 / 10
+
+    let deck = database.create_deck("Empty").expect("deck");
+    let detail = database
+        .deck_statistics_detail(
+            &deck.id,
+            StatisticsRange::Days30,
+            FIXED_NOW,
+            TODAY_LOCAL_DAY,
+        )
+        .expect("deck detail");
+    assert_eq!(detail.real_reviews, 0);
+    assert_eq!(detail.recall_rate, None);
+    assert_eq!(detail.lapse_rate, None);
+}
+
+#[test]
+fn range_filters_activity_sessions_and_review_logs_by_local_day() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+
+    // In-range reading session (today).
+    start_session(
+        &mut database,
+        "session-today",
+        "reading",
+        "reading",
+        "2026-07-18T01:00:00.000Z",
+        "2026-07-18",
+        Some("document"),
+        Some("doc-1"),
+    );
+    checkpoint(
+        &mut database,
+        "session-today",
+        "2026-07-18T01:00:30.000Z",
+        30_000,
+        Some("doc-1"),
+        Some(1),
+        1,
+    );
+
+    // Out-of-range reading session (one year ago) — outside even Year1.
+    start_session(
+        &mut database,
+        "session-old",
+        "reading",
+        "reading",
+        "2025-01-01T01:00:00.000Z",
+        "2025-01-01",
+        Some("document"),
+        Some("doc-1"),
+    );
+    checkpoint(
+        &mut database,
+        "session-old",
+        "2025-01-01T01:00:30.000Z",
+        30_000,
+        Some("doc-1"),
+        Some(1),
+        1,
+    );
+
+    // Out-of-range review log (one year ago).
+    let deck = database.create_deck("Biology").expect("deck");
+    let card_id = create_card_for_document(&mut database, "Biology", "doc-1", 1, "card");
+    insert_review_log(
+        &database,
+        "log-old",
+        &card_id,
+        "2025-01-01T02:00:00.000Z",
+        "good",
+        "review",
+        "review",
+        30_000,
+    );
+
+    let reading_30 = database
+        .reading_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("reading 30d");
+    assert_eq!(reading_30.active_ms, 30_000);
+    assert_eq!(reading_30.session_count, 1);
+
+    let reading_all = database
+        .reading_statistics(StatisticsRange::All, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("reading all");
+    assert_eq!(reading_all.active_ms, 60_000);
+    assert_eq!(reading_all.session_count, 2);
+
+    let document_30 = database
+        .document_statistics("doc-1", StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("document 30d");
+    assert_eq!(document_30.real_reviews, 0); // old review excluded
+
+    let document_all = database
+        .document_statistics("doc-1", StatisticsRange::All, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("document all");
+    assert_eq!(document_all.real_reviews, 1);
+
+    // Suppress unused warning when the test doesn't otherwise touch deck.
+    let _ = deck;
+}
+
+#[test]
+fn range_boundary_includes_start_local_day() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+
+    // Days7 starts at 2026-07-12 (today minus 6). Place one session on the
+    // boundary and one just before it.
+    start_session(
+        &mut database,
+        "session-boundary",
+        "reading",
+        "reading",
+        "2026-07-12T01:00:00.000Z",
+        "2026-07-12",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "session-boundary",
+        "2026-07-12T01:00:30.000Z",
+        15_000,
+        None,
+        None,
+        0,
+    );
+
+    start_session(
+        &mut database,
+        "session-outside",
+        "reading",
+        "reading",
+        "2026-07-11T01:00:00.000Z",
+        "2026-07-11",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "session-outside",
+        "2026-07-11T01:00:30.000Z",
+        15_000,
+        None,
+        None,
+        0,
+    );
+
+    let reading = database
+        .reading_statistics(StatisticsRange::Days7, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("reading");
+    assert_eq!(reading.session_count, 1);
+    assert_eq!(reading.active_ms, 15_000);
+    assert_eq!(
+        reading.buckets.first().expect("first bucket").local_day,
+        "2026-07-12"
+    );
+    assert_eq!(reading.buckets.len(), 7);
+}
+
+#[test]
+fn active_day_threshold_requires_min_activity_or_real_review() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+
+    // Day 1: exactly 60,000ms — qualifies.
+    start_session(
+        &mut database,
+        "session-d1",
+        "reading",
+        "reading",
+        "2026-07-16T01:00:00.000Z",
+        "2026-07-16",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "session-d1",
+        "2026-07-16T01:01:00.000Z",
+        60_000,
+        None,
+        None,
+        0,
+    );
+
+    // Day 2: 30,000ms only — does NOT qualify by activity; no reviews either.
+    start_session(
+        &mut database,
+        "session-d2",
+        "reading",
+        "reading",
+        "2026-07-17T01:00:00.000Z",
+        "2026-07-17",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "session-d2",
+        "2026-07-17T01:00:30.000Z",
+        30_000,
+        None,
+        None,
+        0,
+    );
+
+    // Day 3: zero activity but one review log — qualifies.
+    let _deck = database.create_deck("Biology").expect("deck");
+    let card_id = create_card_for_document(&mut database, "Biology", "doc-1", 1, "card");
+    insert_review_log(
+        &database,
+        "log-d3",
+        &card_id,
+        "2026-07-18T02:00:00.000Z",
+        "good",
+        "review",
+        "review",
+        30_000,
+    );
+
+    let overview = database
+        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("overview");
+    assert_eq!(overview.active_days, 2); // days 1 and 3 only
+}
+
+#[test]
+fn current_streak_ending_yesterday_when_today_inactive() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+
+    // Yesterday and the day before yesterday qualify; today is inactive.
+    for (session_id, day) in [("session-y", "2026-07-17"), ("session-y2", "2026-07-16")] {
+        let occurred_at = format!("{day}T01:00:00.000Z");
+        let ended_at = format!("{day}T01:02:00.000Z");
+        start_session(
+            &mut database,
+            session_id,
+            "reading",
+            "reading",
+            &occurred_at,
+            day,
+            None,
+            None,
+        );
+        checkpoint(
+            &mut database,
+            session_id,
+            &ended_at,
+            60_000,
+            None,
+            None,
+            0,
+        );
+    }
+
+    let overview = database
+        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("overview");
+    assert_eq!(overview.current_streak, 2);
+}
+
+#[test]
+fn current_streak_remains_untruncated_by_short_range() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+
+    // 8 consecutive active days ending today — exceeds the 7-day window.
+    let base_date = chrono::NaiveDate::parse_from_str("2026-07-18", "%Y-%m-%d").expect("date");
+    for offset in 0..8 {
+        let day_string = (base_date - chrono::Duration::days(offset))
+            .format("%Y-%m-%d")
+            .to_string();
+        let session_id = format!("session-streak-{offset}");
+        let occurred_at = format!("{day_string}T01:00:00.000Z");
+        let ended_at = format!("{day_string}T01:02:00.000Z");
+        start_session(
+            &mut database,
+            &session_id,
+            "reading",
+            "reading",
+            &occurred_at,
+            &day_string,
+            None,
+            None,
+        );
+        checkpoint(
+            &mut database,
+            &session_id,
+            &ended_at,
+            60_000,
+            None,
+            None,
+            0,
+        );
+    }
+
+    let overview = database
+        .statistics_overview(StatisticsRange::Days7, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("overview");
+    assert_eq!(overview.current_streak, 8);
+    assert_eq!(overview.buckets.len(), 7); // buckets still obey the range
+}
+
+#[test]
+fn practice_sessions_count_for_active_time_but_not_recall() {
+    let (_directory, mut database) = db();
+
+    start_session(
+        &mut database,
+        "practice-1",
+        "memora",
+        "practice",
+        "2026-07-18T01:00:00.000Z",
+        "2026-07-18",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "practice-1",
+        "2026-07-18T01:00:30.000Z",
+        30_000,
+        None,
+        None,
+        0,
+    );
+
+    let memora = database
+        .memora_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("memora");
+    assert_eq!(memora.practice_active_ms, 30_000);
+    assert_eq!(memora.active_ms, 30_000);
+    assert_eq!(memora.session_count, 1);
+    assert_eq!(memora.real_reviews, 0);
+    assert_eq!(memora.recall_rate, None);
+    assert_eq!(memora.lapse_rate, None);
+    assert_eq!(memora.average_answer_ms, None);
+
+    let overview = database
+        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("overview");
+    assert_eq!(overview.memora_active_ms, 30_000);
+    assert_eq!(overview.active_ms, 30_000);
+}
+
+#[test]
+fn memora_session_count_sums_real_study_sessions_and_practice_sessions() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+    let deck = database.create_deck("Biology").expect("deck");
+    let card_id = create_card_for_document(&mut database, "Biology", "doc-1", 1, "card");
+
+    // Real study session with one consumed card and persisted review log.
+    insert_review_log(
+        &database,
+        "log-real",
+        &card_id,
+        "2026-07-18T02:00:00.000Z",
+        "good",
+        "review",
+        "review",
+        30_000,
+    );
+    database
+        .connection
+        .execute(
+            "INSERT INTO study_sessions(id, scope_kind, deck_id, created_at, expires_at)
+             VALUES ('study-1', 'deck', ?1, '2026-07-18T01:50:00.000Z', '2026-07-18T23:59:59.000Z')",
+            params![deck.id],
+        )
+        .expect("study session");
+    database
+        .connection
+        .execute(
+            "INSERT INTO study_session_cards(
+                 id, session_id, card_id, grant_token, expected_state, expected_due_at,
+                 admitted_as_new, granted_at, consumed_at, review_log_id
+             )
+             VALUES ('ssc-1', 'study-1', ?1, 'token-1', 'review',
+                     '2026-07-18T00:00:00.000Z', 0, '2026-07-18T01:55:00.000Z',
+                     '2026-07-18T02:00:00.000Z', 'log-real')",
+            params![card_id],
+        )
+        .expect("study_session_cards");
+
+    // Two practice sessions — both should count.
+    start_session(
+        &mut database,
+        "practice-1",
+        "memora",
+        "practice",
+        "2026-07-18T03:00:00.000Z",
+        "2026-07-18",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "practice-1",
+        "2026-07-18T03:00:30.000Z",
+        30_000,
+        None,
+        None,
+        0,
+    );
+    start_session(
+        &mut database,
+        "practice-2",
+        "memora",
+        "practice",
+        "2026-07-18T04:00:00.000Z",
+        "2026-07-18",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "practice-2",
+        "2026-07-18T04:00:30.000Z",
+        15_000,
+        None,
+        None,
+        0,
+    );
+
+    let memora = database
+        .memora_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("memora");
+    // 1 real study session + 2 practice sessions.
+    assert_eq!(memora.session_count, 3);
+}
+
+#[test]
+fn deck_scope_filters_review_outcomes_and_card_states() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+    let deck_a = database.create_deck("DeckA").expect("deckA");
+    let deck_b = database.create_deck("DeckB").expect("deckB");
+
+    let card_a = create_card_for_document(&mut database, "DeckA", "doc-1", 1, "card-a");
+    let card_b = create_card_for_document(&mut database, "DeckB", "doc-1", 1, "card-b");
+
+    // 2 good reviews on deck_a; 1 again review on deck_b.
+    insert_review_log(
+        &database,
+        "log-a1",
+        &card_a,
+        "2026-07-18T02:00:00.000Z",
+        "good",
+        "review",
+        "review",
+        30_000,
+    );
+    insert_review_log(
+        &database,
+        "log-a2",
+        &card_a,
+        "2026-07-18T02:01:00.000Z",
+        "good",
+        "review",
+        "review",
+        30_000,
+    );
+    insert_review_log(
+        &database,
+        "log-b1",
+        &card_b,
+        "2026-07-18T02:02:00.000Z",
+        "again",
+        "review",
+        "relearning",
+        30_000,
+    );
+
+    let detail_a = database
+        .deck_statistics_detail(&deck_a.id, StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("deck a");
+    assert_eq!(detail_a.deck_id, deck_a.id);
+    assert_eq!(detail_a.real_reviews, 2);
+    assert_eq!(detail_a.recall_rate, Some(1.0));
+    assert_eq!(detail_a.rating_distribution.again, 0);
+    assert_eq!(detail_a.rating_distribution.good, 2);
+    assert_eq!(detail_a.lapse_rate, Some(0.0));
+
+    let detail_b = database
+        .deck_statistics_detail(&deck_b.id, StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("deck b");
+    assert_eq!(detail_b.real_reviews, 1);
+    assert_eq!(detail_b.recall_rate, Some(0.0));
+    assert_eq!(detail_b.rating_distribution.again, 1);
+    assert_eq!(detail_b.lapse_rate, Some(1.0));
+}
+
+#[test]
+fn due_forecast_excludes_suspended_and_deleted_cards() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+    let _deck = database.create_deck("Biology").expect("deck");
+
+    let card_active = create_card_for_document(&mut database, "Biology", "doc-1", 1, "active");
+    let card_suspended =
+        create_card_for_document(&mut database, "Biology", "doc-1", 1, "suspended");
+    let card_deleted = create_card_for_document(&mut database, "Biology", "doc-1", 1, "deleted");
+
+    let due_today = "2026-07-18T12:00:00.000Z";
+    for card_id in [card_active.as_str(), card_suspended.as_str(), card_deleted.as_str()] {
+        database
+            .connection
+            .execute(
+                "UPDATE cards SET state='review', due_at=?1 WHERE id=?2",
+                params![due_today, card_id],
+            )
+            .expect("set due");
+    }
+
+    database
+        .set_cards_suspended(std::slice::from_ref(&card_suspended), true)
+        .expect("suspend");
+    database.trash_cards(std::slice::from_ref(&card_deleted)).expect("trash");
+
+    let memora = database
+        .memora_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("memora");
+    assert_eq!(memora.due_forecast.today, 1);
+    assert_eq!(memora.due_forecast.next_7_days, 0);
+    assert_eq!(memora.due_forecast.next_30_days, 0);
+}
+
+#[test]
+fn zero_filled_buckets_cover_every_local_day_in_range() {
+    let (_directory, mut database) = db();
+
+    // A single active day; every other day in the 7-day window should still
+    // appear in the buckets with active_ms = 0.
+    start_session(
+        &mut database,
+        "session-only",
+        "reading",
+        "reading",
+        "2026-07-16T01:00:00.000Z",
+        "2026-07-16",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "session-only",
+        "2026-07-16T01:01:00.000Z",
+        60_000,
+        None,
+        None,
+        0,
+    );
+
+    let reading = database
+        .reading_statistics(StatisticsRange::Days7, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("reading");
+    assert_eq!(reading.buckets.len(), 7);
+    assert_eq!(
+        reading.buckets.first().expect("first").local_day,
+        "2026-07-12"
+    );
+    assert_eq!(
+        reading.buckets.last().expect("last").local_day,
+        "2026-07-18"
+    );
+    let active_buckets: Vec<&i64> = reading
+        .buckets
+        .iter()
+        .map(|bucket| &bucket.active_ms)
+        .filter(|value| **value > 0)
+        .collect();
+    assert_eq!(active_buckets.len(), 1);
+    let day_16 = reading
+        .buckets
+        .iter()
+        .find(|bucket| bucket.local_day == "2026-07-16")
+        .expect("day 16");
+    assert_eq!(day_16.active_ms, 60_000);
 }
