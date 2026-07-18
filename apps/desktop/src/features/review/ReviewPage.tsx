@@ -1,7 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LearningCard, ReviewRating, StudyGrant, StudyRatingResult, StudySession } from "../../domain/learning";
 import { ReviewSessionSurface } from "./ReviewSessionSurface";
 import { useElapsedTime } from "./useElapsedTime";
+import { useActiveTimer } from "../statistics/useActiveTimer";
+import { startActivitySession, checkpointActivitySession, finishActivitySession } from "../../lib/statistics";
+import type { StatisticsActivityApi } from "../reader/useReadingActivitySession";
+
+function getLocalDay(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().split("T")[0];
+}
+
+const defaultActivityApi: StatisticsActivityApi = {
+  start: (input) => startActivitySession(input),
+  checkpoint: (input) => checkpointActivitySession(input),
+  finish: (sessionId, occurredAt) => finishActivitySession({ sessionId, occurredAt }),
+};
 
 export interface StudyReviewPageProps {
   mode: "study";
@@ -17,6 +31,7 @@ export interface PracticeReviewPageProps {
   cards: LearningCard[];
   onBack?: () => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
+  activityApi?: StatisticsActivityApi;
 }
 
 export type ReviewPageProps = StudyReviewPageProps | PracticeReviewPageProps;
@@ -110,7 +125,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
             </div>
             {onBack ? (
               <button type="button" onClick={onBack} className="review-page__back-btn">
-                Back to Library
+                &larr; Back
               </button>
             ) : null}
             {error ? <p className="review-page__error" role="alert">{error}</p> : null}
@@ -209,7 +224,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
   );
 }
 
-function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeReviewPageProps) {
+function PracticeReviewPage({ cards, onBack, getDocumentFileUrl, activityApi }: PracticeReviewPageProps) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +234,69 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeRevie
 
   const card = cards[index];
   const elapsed = useElapsedTime(cardStartedAt, Boolean(card));
+
+  const sessionTimer = useActiveTimer({ running: cards.length > 0 });
+  const activitySessionIdRef = useRef<string | null>(null);
+  const activityApiRef = useRef(activityApi ?? defaultActivityApi);
+  activityApiRef.current = activityApi ?? defaultActivityApi;
+
+  useEffect(() => {
+    if (cards.length === 0) return;
+    const id = crypto.randomUUID();
+    activitySessionIdRef.current = id;
+    const now = new Date();
+    const deckId = cards[0]!.deckId;
+    activityApiRef.current.start({
+      id,
+      appKey: "memora",
+      activityKind: "practice",
+      contextKind: "deck",
+      contextId: deckId,
+      occurredAt: now.toISOString(),
+      localDay: getLocalDay(),
+      timezoneOffsetMinutes: -now.getTimezoneOffset(),
+    }).catch(() => {});
+    return () => {
+      const sid = activitySessionIdRef.current;
+      if (sid) {
+        activitySessionIdRef.current = null;
+        activityApiRef.current.finish(sid, new Date().toISOString()).catch(() => {});
+      }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (cards.length === 0 || !activitySessionIdRef.current) return;
+    const interval = setInterval(() => {
+      const id = activitySessionIdRef.current;
+      if (!id) return;
+      activityApiRef.current.checkpoint({
+        sessionId: id,
+        occurredAt: new Date().toISOString(),
+        activeMs: sessionTimer.snapshot(),
+        pageVisitIncrement: 0,
+      }).catch(() => {});
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [cards.length, sessionTimer]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const finishSession = () => {
+    const sid = activitySessionIdRef.current;
+    if (sid) {
+      activitySessionIdRef.current = null;
+      activityApiRef.current.finish(sid, new Date().toISOString()).catch(() => {});
+    }
+  };
+
+  const handleBack = () => {
+    finishSession();
+    onBack?.();
+  };
+
+  useEffect(() => {
+    if (card || cards.length === 0) return;
+    finishSession();
+  }, [card, cards.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!card) return;
@@ -256,7 +334,7 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeRevie
             ))}
           </div>
           {onBack ? (
-            <button type="button" onClick={onBack} className="review-page__back-btn" style={{ marginTop: "24px" }}>
+            <button type="button" onClick={handleBack} className="review-page__back-btn" style={{ marginTop: "24px" }}>
               Back to Deck
             </button>
           ) : null}
@@ -282,7 +360,7 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeRevie
         <header className="review-page__header">
           <div className="review-page__header-left">
             {onBack ? (
-              <button type="button" onClick={onBack} className="review-page__back-btn">
+              <button type="button" onClick={handleBack} className="review-page__back-btn">
                 &larr; Back
               </button>
             ) : null}
