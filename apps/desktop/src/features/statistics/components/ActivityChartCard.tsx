@@ -1,0 +1,154 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import type { StatisticsRange } from "../../../domain/statistics";
+import {
+  deriveStatisticsPalette,
+  loadStatisticsPreferences,
+  saveStatisticsPreferences,
+} from "../preferences";
+import type { ActivityChartSeries } from "../registry";
+import { ActivityHeatmap } from "./ActivityHeatmap";
+import { ActivityGraph, type GraphMode } from "./ActivityGraph";
+import { StatisticsColorPicker } from "./StatisticsColorPicker";
+
+interface ActivityChartCardProps {
+  range: StatisticsRange;
+  totalBuckets: { date: string; value: number }[];
+  series: ActivityChartSeries[];
+}
+
+function rangeDefaultGraphMode(range: StatisticsRange): GraphMode {
+  return range === "1y" || range === "all" ? "weekly" : "daily";
+}
+
+export function ActivityChartCard({
+  range,
+  totalBuckets,
+  series,
+}: ActivityChartCardProps) {
+  const prefs = useMemo(() => loadStatisticsPreferences(), []);
+
+  const initialView =
+    range === "1y" || range === "all" ? "graph" : prefs.chartView;
+
+  const [view, setView] = useState<"heatmap" | "graph">(initialView);
+  const [graphMode, setGraphMode] = useState<GraphMode>(
+    rangeDefaultGraphMode(range),
+  );
+  const [selectedApp, setSelectedApp] = useState("all");
+  const [baseColor, setBaseColor] = useState(prefs.baseColor);
+
+  useEffect(() => {
+    setGraphMode(rangeDefaultGraphMode(range));
+  }, [range]);
+
+  const handleViewChange = useCallback(
+    (newView: "heatmap" | "graph") => {
+      setView(newView);
+      saveStatisticsPreferences({
+        ...loadStatisticsPreferences(),
+        chartView: newView,
+      });
+    },
+    [],
+  );
+
+  const handleColorChange = useCallback((color: string) => {
+    setBaseColor(color);
+    saveStatisticsPreferences({
+      ...loadStatisticsPreferences(),
+      baseColor: color,
+    });
+  }, []);
+
+  const theme =
+    document.documentElement.classList.contains("dark") ? "dark" : "light";
+  const palette = useMemo(
+    () => deriveStatisticsPalette(baseColor, theme),
+    [baseColor, theme],
+  );
+
+  const appOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [
+      { value: "all", label: "All apps" },
+    ];
+    for (const s of series) {
+      opts.push({ value: s.appKey, label: s.title });
+    }
+    return opts;
+  }, [series]);
+
+  const filteredData = useMemo(() => {
+    if (selectedApp === "all") {
+      return totalBuckets;
+    }
+    const appSeries = series.find((s) => s.appKey === selectedApp);
+    return appSeries?.buckets ?? [];
+  }, [selectedApp, totalBuckets, series]);
+
+  const heatmapData = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const b of filteredData) {
+      map[b.date] = (map[b.date] || 0) + b.value;
+    }
+    return map;
+  }, [filteredData]);
+
+  return (
+    <section className="statistics-section">
+      <div className="statistics-section__header">
+        <h2 className="statistics-section__title">Activity</h2>
+        <div className="statistics-chart-card__toggle">
+          <button
+            type="button"
+            className="statistics-control"
+            aria-pressed={view === "heatmap"}
+            onClick={() => handleViewChange("heatmap")}
+          >
+            Heatmap
+          </button>
+          <button
+            type="button"
+            className="statistics-control"
+            aria-pressed={view === "graph"}
+            onClick={() => handleViewChange("graph")}
+          >
+            Graph
+          </button>
+        </div>
+      </div>
+      <div className="statistics-chart-card__controls">
+        <select
+          className="statistics-control"
+          aria-label="Statistics app"
+          value={selectedApp}
+          onChange={(e) => setSelectedApp(e.target.value)}
+        >
+          {appOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {view === "heatmap" && (
+        <ActivityHeatmap
+          data={heatmapData}
+          range={range}
+          palette={palette}
+        />
+      )}
+      {view === "graph" && (
+        <ActivityGraph
+          buckets={filteredData}
+          mode={graphMode}
+          onModeChange={setGraphMode}
+          valueLabel="Active time"
+        />
+      )}
+      <StatisticsColorPicker
+        baseColor={baseColor}
+        onChange={handleColorChange}
+      />
+    </section>
+  );
+}

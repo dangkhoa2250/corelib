@@ -31,3 +31,10 @@
 .statistics-graph__mode-btn { padding: 4px 12px; font-size: 12px; border: 1px solid var(--border-subtle); background: var(--surface-1); color: var(--text-primary); cursor: pointer; border-radius: 4px; }
 .statistics-graph__mode-btn[aria-pressed="true"] { background: var(--interactive-selected); border-color: var(--interactive-selected); }
 .statistics-graph__tooltip { position: absolute; background: var(--surface-2); border: 1px solid var(--border-subtle); padding: 4px 8px; font-size: 12px; pointer-events: none; z-index: 10; border-radius: 4px; }
+.statistics-chart-card__toggle { display: flex; gap: 4px; }
+.statistics-chart-card__controls { display: flex; gap: 8px; margin-bottom: 12px; }
+.statistics-color-picker { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+.statistics-color-picker__label { font-size: 13px; color: var(--text-secondary); }
+.statistics-color-picker__swatches { display: flex; gap: 6px; }
+.statistics-color-picker__swatch { width: 22px; height: 22px; border: 2px solid var(--border-subtle); border-radius: 50%; cursor: pointer; padding: 0; outline: none; }
+.statistics-color-picker__swatch[aria-pressed="true"] { border-color: var(--text-primary); outline: 2px solid var(--text-primary); outline-offset: 2px; }
