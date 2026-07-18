@@ -25,3 +25,9 @@
 .statistics-heatmap__cell[data-level="4"] { background: var(--statistics-level-4); }
 .statistics-heatmap__cell[data-level="5"] { background: var(--statistics-level-5); }
 .statistics-heatmap__tooltip { position: absolute; background: var(--surface-2); border: 1px solid var(--border-subtle); padding: 4px 8px; font-size: 12px; pointer-events: none; z-index: 10; }
+.statistics-graph { width: 100%; }
+.statistics-graph svg { display: block; width: 100%; height: 100%; }
+.statistics-graph__mode-bar { display: flex; gap: 4px; margin-bottom: 8px; }
+.statistics-graph__mode-btn { padding: 4px 12px; font-size: 12px; border: 1px solid var(--border-subtle); background: var(--surface-1); color: var(--text-primary); cursor: pointer; border-radius: 4px; }
+.statistics-graph__mode-btn[aria-pressed="true"] { background: var(--interactive-selected); border-color: var(--interactive-selected); }
+.statistics-graph__tooltip { position: absolute; background: var(--surface-2); border: 1px solid var(--border-subtle); padding: 4px 8px; font-size: 12px; pointer-events: none; z-index: 10; border-radius: 4px; }
