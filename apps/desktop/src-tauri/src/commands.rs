@@ -1293,8 +1293,8 @@ pub struct AccountServiceState {
 
 use crate::account::{
     AccountApi, AccountGroup, AccountProfile, AccountStatus, AccountStatusResponse,
-    FeatureAssignment, FeatureAssignmentInput, FeatureDefinition, SessionSnapshot,
-    AdminMetrics, AnalyticsEventInput,
+    DailyStatisticsSnapshot, FeatureAssignment, FeatureAssignmentInput, FeatureDefinition,
+    SessionSnapshot, AdminMetrics, AdminStatistics, AnalyticsEventInput,
 };
 
 #[tauri::command]
@@ -1444,6 +1444,23 @@ pub fn admin_delete_user(
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<(), String> {
     state.api.admin_delete_user(&user_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn account_upsert_daily_statistics(
+    input: DailyStatisticsSnapshot,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<(), String> {
+    state.api.upsert_daily_statistics(input).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_get_statistics(
+    range: String,
+    app_key: String,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<AdminStatistics, String> {
+    state.api.admin_statistics(&range, &app_key).map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------

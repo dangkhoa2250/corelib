@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use keyring::Entry;
 
@@ -135,6 +136,102 @@ pub struct MetricVersion {
 pub struct MetricErrorCode {
     pub code: String,
     pub count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyStatisticsSnapshot {
+    pub schema_version: i32,
+    pub local_day: String,
+    pub app_key: String,
+    pub active_ms: i64,
+    pub active_day: bool,
+    pub session_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_visit_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unique_page_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real_review_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub again_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hard_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub good_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easy_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lapse_count: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminStatisticsBucket {
+    pub local_day: String,
+    pub contributing_users: i64,
+    pub insufficient_sample: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminAppAggregate {
+    pub active_users: i64,
+    pub active_ms: i64,
+    pub session_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_visit_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real_review_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub again_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hard_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub good_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easy_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lapse_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recall_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub returning_user_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weekly_learning_frequency: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminStatistics {
+    pub approved_users: i64,
+    pub analytics_enabled_users: i64,
+    pub opt_in_percentage: f64,
+    pub contributing_users: i64,
+    pub insufficient_sample: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dau: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wau: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mau: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_days: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_active_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_active_days: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_allocation: Option<HashMap<String, f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reading: Option<AdminAppAggregate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memora: Option<AdminAppAggregate>,
+    pub buckets: Vec<AdminStatisticsBucket>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -319,6 +416,8 @@ pub trait AccountApi {
     fn admin_set_feature_assignment(&self, input: FeatureAssignmentInput) -> Result<FeatureAssignment, AccountError>;
     fn admin_metrics(&self) -> Result<AdminMetrics, AccountError>;
     fn admin_delete_user(&self, user_id: &str) -> Result<(), AccountError>;
+    fn upsert_daily_statistics(&self, input: DailyStatisticsSnapshot) -> Result<(), AccountError>;
+    fn admin_statistics(&self, range: &str, app_key: &str) -> Result<AdminStatistics, AccountError>;
 }
 
 pub struct PocketBaseAccountApi<S: SessionStore, H: HttpClient> {
@@ -732,6 +831,37 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         let (status, res) = self.http.delete(&url, Some(&token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             Ok(())
+        } else {
+            Err(self.handle_error_response(status, &res))
+        }
+    }
+
+    fn upsert_daily_statistics(&self, input: DailyStatisticsSnapshot) -> Result<(), AccountError> {
+        if self.base_url.is_empty() {
+            return Err(AccountError::AccountServiceNotConfigured);
+        }
+        let token = self.get_active_token()?;
+        let url = format!("{}/api/corelib/analytics/daily-statistics", self.base_url);
+        let body = serde_json::to_value(&input).map_err(|e| AccountError::Internal(e.to_string()))?;
+        let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
+        if status == 204 {
+            Ok(())
+        } else {
+            Err(self.handle_error_response(status, &res))
+        }
+    }
+
+    fn admin_statistics(&self, range: &str, app_key: &str) -> Result<AdminStatistics, AccountError> {
+        if self.base_url.is_empty() {
+            return Err(AccountError::AccountServiceNotConfigured);
+        }
+        let token = self.get_active_token()?;
+        let url = format!("{}/api/corelib/admin/statistics?range={}&appKey={}", self.base_url, range, app_key);
+        let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
+        if status == 200 {
+            let stats: AdminStatistics = serde_json::from_value(res)
+                .map_err(|e| AccountError::Internal(e.to_string()))?;
+            Ok(stats)
         } else {
             Err(self.handle_error_response(status, &res))
         }

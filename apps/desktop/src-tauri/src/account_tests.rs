@@ -2,8 +2,8 @@
 mod tests {
     use crate::account::{
         AccountApi, AccountError, AccountProfile, AccountRole, AccountStatus, AccountStatusResponse,
-        AnalyticsEventInput, HttpClient, MemorySessionStore, PocketBaseAccountApi,
-        SessionStore,
+        AnalyticsEventInput, DailyStatisticsSnapshot, HttpClient,
+        MemorySessionStore, PocketBaseAccountApi, SessionStore,
     };
     use serde_json::json;
     use std::sync::Mutex;
@@ -185,5 +185,80 @@ mod tests {
         let res = api.send_analytics(event_invalid_key);
         assert!(res.is_err());
         assert_eq!(res.unwrap_err(), AccountError::InvalidEvent);
+    }
+
+    #[test]
+    fn upserts_daily_statistics() {
+        let store = MemorySessionStore::new();
+        store.set_token("token-abc").unwrap();
+        let http = MockHttpClient::new(vec![(204, json!(null))]);
+
+        let api = PocketBaseAccountApi::new_with_deps(
+            "http://localhost:8090".to_string(),
+            store,
+            http,
+        );
+
+        let input = DailyStatisticsSnapshot {
+            schema_version: 1,
+            local_day: "2026-07-19".to_string(),
+            app_key: "reading".to_string(),
+            active_ms: 3600000,
+            active_day: true,
+            session_count: 3,
+            page_visit_count: Some(12),
+            unique_page_count: None,
+            real_review_count: None,
+            again_count: None,
+            hard_count: None,
+            good_count: None,
+            easy_count: None,
+            lapse_count: None,
+        };
+
+        let res = api.upsert_daily_statistics(input);
+        assert!(res.is_ok());
+
+        let reqs = api.http.requests.lock().unwrap();
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(reqs[0].0, "POST");
+        assert!(reqs[0].1.contains("/api/corelib/analytics/daily-statistics"));
+    }
+
+    #[test]
+    fn retrieves_admin_statistics() {
+        let store = MemorySessionStore::new();
+        store.set_token("token-abc").unwrap();
+        let http = MockHttpClient::new(vec![(
+            200,
+            json!({
+                "approvedUsers": 10,
+                "analyticsEnabledUsers": 8,
+                "optInPercentage": 80.0,
+                "contributingUsers": 5,
+                "insufficientSample": false,
+                "buckets": []
+            }),
+        )]);
+
+        let api = PocketBaseAccountApi::new_with_deps(
+            "http://localhost:8090".to_string(),
+            store,
+            http,
+        );
+
+        let res = api.admin_statistics("7d", "reading");
+        assert!(res.is_ok());
+
+        let stats = res.unwrap();
+        assert_eq!(stats.approved_users, 10);
+        assert_eq!(stats.buckets.len(), 0);
+
+        let reqs = api.http.requests.lock().unwrap();
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(reqs[0].0, "GET");
+        assert!(reqs[0].1.contains("/api/corelib/admin/statistics"));
+        assert!(reqs[0].1.contains("range=7d"));
+        assert!(reqs[0].1.contains("appKey=reading"));
     }
 }

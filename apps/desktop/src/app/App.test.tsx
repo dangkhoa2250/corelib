@@ -138,6 +138,8 @@ function anonymousAccountApi(): AccountApi {
     adminSetFeatureAssignment: vi.fn(),
     adminMetrics: vi.fn(),
     adminDeleteUser: vi.fn(),
+    upsertDailyStatistics: vi.fn(),
+    adminStatistics: vi.fn(),
   };
 }
 
@@ -1089,6 +1091,56 @@ test("surfaces an error when a deck deletion fails", async () => {
 
   expect(await screen.findByRole("alert")).toHaveTextContent("deck not found");
   expect(screen.getByText("English")).toBeInTheDocument();
+});
+
+test("navigates to Statistics via sidebar button", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+    />,
+  );
+
+  const sidebar = screen.getByRole("navigation", { name: "Primary" });
+  expect(within(sidebar).getByRole("button", { name: "Statistics" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Statistics" }));
+  expect(await screen.findByRole("heading", { level: 1, name: "Statistics" })).toBeInTheDocument();
+});
+
+test("Quick Open resolves insights alias to the statistics route", async () => {
+  const user = userEvent.setup();
+  vi.mocked(invoke).mockImplementation(async (cmd) => {
+    if (cmd === "search_everything") return [] as any;
+    if (cmd === "list_trashed_cards") return { rows: [], total: 0, nextCursor: null } as any;
+    return undefined as any;
+  });
+
+  render(
+    <App
+      libraryApi={{ list: vi.fn().mockResolvedValue([]), pick: vi.fn(), importDocuments: vi.fn() }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([]),
+        createCard: vi.fn(),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
+      }}
+    />,
+  );
+
+  const searchButton = screen.getByRole("button", { name: "Search (Command K)" });
+  await user.click(searchButton);
+  await screen.findByRole("searchbox", { name: "Quick Open" });
+  const searchbox = screen.getByRole("searchbox", { name: "Quick Open" });
+  await user.type(searchbox, "insights");
+
+  const entry = await screen.findByRole("button", { name: /Open Statistics/ });
+  expect(entry).toBeInTheDocument();
 });
 
 test("opens the search palette from the sidebar search field", async () => {

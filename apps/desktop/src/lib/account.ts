@@ -12,6 +12,8 @@ import type {
   FeatureAssignmentInput,
   FeatureAssignment,
   AdminMetrics,
+  AdminStatistics,
+  DailyStatisticsSnapshot,
 } from "../domain/account";
 
 // Validation & Invocation helpers
@@ -209,5 +211,13 @@ export class PocketBaseAccountApiClient implements AccountApi {
 
   adminDeleteUser(userId: string): Promise<void> {
     return this.call<void>("admin_delete_user", { userId });
+  }
+
+  upsertDailyStatistics(input: DailyStatisticsSnapshot): Promise<void> {
+    return this.call<void>("account_upsert_daily_statistics", { input });
+  }
+
+  adminStatistics(range: string, appKey: string): Promise<AdminStatistics> {
+    return this.call<AdminStatistics>("admin_get_statistics", { range, appKey });
   }
 }

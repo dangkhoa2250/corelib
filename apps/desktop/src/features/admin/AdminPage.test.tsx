@@ -55,6 +55,8 @@ const mockApi = (overrides: Partial<AccountApi> = {}): AccountApi => ({
   adminSetFeatureAssignment: vi.fn(),
   adminMetrics: vi.fn().mockResolvedValue(mockMetrics),
   adminDeleteUser: vi.fn(),
+  upsertDailyStatistics: vi.fn(),
+  adminStatistics: vi.fn(),
   ...overrides,
 });
 

@@ -194,6 +194,8 @@ pub fn run() {
             commands::admin_set_feature_assignment,
             commands::admin_get_metrics,
             commands::admin_delete_user,
+            commands::account_upsert_daily_statistics,
+            commands::admin_get_statistics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
