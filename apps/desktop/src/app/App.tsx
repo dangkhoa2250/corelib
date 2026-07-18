@@ -47,6 +47,7 @@ import { PocketBaseAccountApiClient } from "../lib/account";
 import type { AccountApi } from "../domain/account";
 import { AdminPage } from "../features/admin/AdminPage";
 import { StatisticsPage } from "../features/statistics/StatisticsPage";
+import { StatisticsAnalyticsSync } from "../features/statistics/StatisticsAnalyticsSync";
 import { AnalyticsClient } from "../lib/analytics";
 import { createCommandRegistry } from "./commandRegistry";
 import type { AppRoute } from "./routes";
@@ -243,6 +244,16 @@ function AnalyticsInstrumentation({
   }, [client]);
 
   return null;
+}
+
+function SyncCoordinator({ accountApi }: { accountApi: AccountApi }) {
+  const account = useAccount();
+  return (
+    <StatisticsAnalyticsSync
+      enabled={account?.session?.profile.analyticsEnabled ?? false}
+      accountApi={accountApi}
+    />
+  );
 }
 
 export function App({
@@ -770,6 +781,7 @@ export function App({
   return (
     <AccountGate api={accountApi}>
       <AnalyticsInstrumentation client={analyticsClient} route={route} />
+      <SyncCoordinator accountApi={accountApi} />
       <div className="app-shell">
       <AppSidebar
         active={activeSection}

@@ -2,6 +2,24 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 
+const mockStore: Record<string, string> = {};
+vi.stubGlobal("localStorage", {
+  getItem: (key: string) => mockStore[key] ?? null,
+  setItem: (key: string, value: string) => {
+    mockStore[key] = value;
+  },
+  removeItem: (key: string) => {
+    delete mockStore[key];
+  },
+  clear: () => {
+    for (const k of Object.keys(mockStore)) delete mockStore[k];
+  },
+  get length() {
+    return Object.keys(mockStore).length;
+  },
+  key: (index: number) => Object.keys(mockStore)[index] ?? null,
+});
+
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
   convertFileSrc: (path: string) => path,

@@ -1678,3 +1678,196 @@ fn query_daily_review_sums(
     };
     Ok(rows)
 }
+
+// ---------------------------------------------------------------------------
+// Daily snapshot queries (consent-bounded, numeric-only fields)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailySnapshotQuery {
+    pub consent_started_at: String,
+    pub from_local_day: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyStatisticsSnapshot {
+    pub schema_version: i64,
+    pub local_day: String,
+    pub app_key: String,
+    pub active_ms: i64,
+    pub active_day: bool,
+    pub session_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_visit_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unique_page_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real_review_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub again_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hard_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub good_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easy_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lapse_count: Option<i64>,
+}
+
+pub fn get_daily_statistics_snapshots(
+    conn: &rusqlite::Connection,
+    query: &DailySnapshotQuery,
+) -> Result<Vec<DailyStatisticsSnapshot>> {
+    let mut snapshots: Vec<DailyStatisticsSnapshot> = Vec::new();
+
+    // Reading snapshots: aggregate by local_day from activity_sessions +
+    // reading_session_pages. Only numeric fields are exposed — no IDs, pages,
+    // titles, or text content.
+    // Use CTEs to avoid duplication from the LEFT JOIN on pages.
+    let reading_sql = "
+        WITH session_agg AS (
+            SELECT local_day,
+                   SUM(raw_active_ms) AS active_ms,
+                   COUNT(DISTINCT id) AS session_count
+            FROM activity_sessions
+            WHERE app_key = 'reading'
+              AND local_day >= ?1
+              AND local_day <= ?2
+            GROUP BY local_day
+        ),
+        page_agg AS (
+            SELECT a.local_day,
+                   COALESCE(SUM(p.visit_count), 0) AS page_visits,
+                   COUNT(DISTINCT p.page) AS unique_pages
+            FROM reading_session_pages p
+            JOIN activity_sessions a ON a.id = p.session_id
+            WHERE a.app_key = 'reading'
+              AND a.local_day >= ?1
+              AND a.local_day <= ?2
+            GROUP BY a.local_day
+        )
+        SELECT s.local_day, s.active_ms, s.session_count,
+               COALESCE(p.page_visits, 0), COALESCE(p.unique_pages, 0)
+        FROM session_agg s
+        LEFT JOIN page_agg p ON p.local_day = s.local_day
+        ORDER BY s.local_day
+    ";
+    {
+        let mut stmt = conn.prepare(reading_sql)?;
+        let rows = stmt
+            .query_map(params![query.from_local_day, today_upper_bound()], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, i64>(3)?,
+                    row.get::<_, i64>(4)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for (local_day, active_ms, session_count, page_visits, unique_pages) in rows {
+            snapshots.push(DailyStatisticsSnapshot {
+                schema_version: 1,
+                local_day,
+                app_key: "reading".to_string(),
+                active_ms,
+                active_day: active_ms >= ACTIVE_DAY_THRESHOLD_MS,
+                session_count,
+                page_visit_count: Some(page_visits),
+                unique_page_count: Some(unique_pages),
+                real_review_count: None,
+                again_count: None,
+                hard_count: None,
+                good_count: None,
+                easy_count: None,
+                lapse_count: None,
+            });
+        }
+    }
+
+    // Practice session counts per day for memora session counting.
+    let practice_sql = "
+        SELECT local_day, COUNT(DISTINCT id)
+        FROM activity_sessions
+        WHERE activity_kind = 'practice'
+          AND local_day >= ?1
+          AND local_day <= ?2
+        GROUP BY local_day
+    ";
+    let mut practice_counts: HashMap<String, i64> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(practice_sql)?;
+        let rows = stmt
+            .query_map(params![query.from_local_day, today_upper_bound()], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for (day, count) in rows {
+            practice_counts.insert(day, count);
+        }
+    }
+
+    // Memora snapshots: aggregate review_logs by UTC date, capped per rating.
+    // Only review_logs after consent_started_at are included.
+    let memora_sql = "
+        SELECT strftime('%Y-%m-%d', reviewed_at) as local_day,
+               COUNT(*),
+               SUM(MIN(elapsed_ms, ?1)),
+               SUM(CASE WHEN rating = 'again' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN rating = 'hard' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN rating = 'good' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN rating = 'easy' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN prior_state = 'review' AND rating = 'again' THEN 1 ELSE 0 END)
+        FROM review_logs
+        WHERE reviewed_at >= ?2
+          AND reviewed_at <= ?3
+        GROUP BY local_day
+        ORDER BY local_day
+    ";
+    {
+        let now_utc = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let mut stmt = conn.prepare(memora_sql)?;
+        let rows = stmt
+            .query_map(
+                params![REVIEW_TIME_CAP_MS, query.consent_started_at, now_utc],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, i64>(1)?,
+                        row.get::<_, i64>(2)?,
+                        row.get::<_, i64>(3)?,
+                        row.get::<_, i64>(4)?,
+                        row.get::<_, i64>(5)?,
+                        row.get::<_, i64>(6)?,
+                        row.get::<_, i64>(7)?,
+                    ))
+                },
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        for (local_day, review_count, capped_ms, again, hard, good, easy, lapses) in rows {
+            let practice_count = practice_counts.get(&local_day).copied().unwrap_or(0);
+            snapshots.push(DailyStatisticsSnapshot {
+                schema_version: 1,
+                local_day,
+                app_key: "memora".to_string(),
+                active_ms: capped_ms,
+                active_day: capped_ms >= ACTIVE_DAY_THRESHOLD_MS || practice_count > 0,
+                session_count: practice_count,
+                page_visit_count: None,
+                unique_page_count: None,
+                real_review_count: Some(review_count),
+                again_count: Some(again),
+                hard_count: Some(hard),
+                good_count: Some(good),
+                easy_count: Some(easy),
+                lapse_count: Some(lapses),
+            });
+        }
+    }
+
+    snapshots.sort_by(|a, b| a.local_day.cmp(&b.local_day).then(a.app_key.cmp(&b.app_key)));
+    Ok(snapshots)
+}

@@ -10,6 +10,8 @@ import type {
   StartActivitySessionInput,
   ActivityCheckpointInput,
   FinishActivitySessionInput,
+  DailySnapshotQuery,
+  DailyStatisticsSnapshot,
 } from "../domain/statistics";
 
 export function getStatisticsOverview(
@@ -68,4 +70,13 @@ export function finishActivitySession(
   call: Invoke = invoke as Invoke,
 ): Promise<void> {
   return call<void>("finish_activity_session", { input });
+}
+
+export function getDailyStatisticsSnapshots(
+  query: DailySnapshotQuery,
+  call: Invoke = invoke as Invoke,
+): Promise<DailyStatisticsSnapshot[]> {
+  return call<DailyStatisticsSnapshot[]>("get_daily_statistics_snapshots", {
+    query,
+  });
 }

@@ -178,6 +178,7 @@ pub fn run() {
             commands::start_activity_session,
             commands::checkpoint_activity_session,
             commands::finish_activity_session,
+            commands::get_daily_statistics_snapshots,
             commands::account_register,
             commands::account_sign_in,
             commands::account_session,

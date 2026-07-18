@@ -72,6 +72,9 @@ beforeEach(() => {
         },
       };
     }
+    if (cmd === "get_daily_statistics_snapshots") {
+      return [];
+    }
     return undefined as any;
   });
 });

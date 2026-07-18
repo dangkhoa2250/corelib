@@ -1652,6 +1652,22 @@ pub fn finish_activity_session(
         .map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDailyStatisticsSnapshotsInput {
+    pub query: crate::statistics::DailySnapshotQuery,
+}
+
+#[tauri::command]
+pub fn get_daily_statistics_snapshots(
+    input: GetDailyStatisticsSnapshotsInput,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<crate::statistics::DailyStatisticsSnapshot>, String> {
+    let db = learning_lock(&state)?;
+    crate::statistics::get_daily_statistics_snapshots(&db.connection, &input.query)
+        .map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod learning_command_tests {
     use super::{elapsed_days, interval_label, parse_now};

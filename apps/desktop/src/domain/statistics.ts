@@ -114,3 +114,25 @@ export interface FinishActivitySessionInput {
   sessionId: string;
   occurredAt: string;
 }
+
+export interface DailySnapshotQuery {
+  consentStartedAt: string;
+  fromLocalDay: string;
+}
+
+export interface DailyStatisticsSnapshot {
+  schemaVersion: 1;
+  localDay: string;
+  appKey: "reading" | "memora";
+  activeMs: number;
+  activeDay: boolean;
+  sessionCount: number;
+  pageVisitCount?: number;
+  uniquePageCount?: number;
+  realReviewCount?: number;
+  againCount?: number;
+  hardCount?: number;
+  goodCount?: number;
+  easyCount?: number;
+  lapseCount?: number;
+}

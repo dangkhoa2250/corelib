@@ -3,7 +3,10 @@ use tempfile::TempDir;
 
 use crate::learning::{NewCard, NewCardSource};
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
-use crate::statistics::{ActivityCheckpoint, NewActivitySession, StatisticsRange};
+use crate::statistics::{
+    get_daily_statistics_snapshots, ActivityCheckpoint, DailySnapshotQuery,
+    NewActivitySession, StatisticsRange,
+};
 
 fn db() -> (TempDir, LibraryDatabase) {
     let directory = TempDir::new().expect("temporary statistics database");
@@ -1584,4 +1587,203 @@ fn deck_scope_excludes_other_decks_practice_and_review_activity() {
     let nonzero_b: Vec<&i64> = detail_b.buckets.iter().filter(|b| b.active_ms > 0).map(|b| &b.active_ms).collect();
     assert_eq!(nonzero_b.len(), 1, "expected exactly one non-zero bucket for deck_b");
     assert_eq!(*nonzero_b[0], 60_000);
+}
+
+// ---------------------------------------------------------------------------
+// Daily snapshot tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn daily_snapshots_exclude_data_before_consent_started_at() {
+    let (_directory, mut database) = db();
+    seed_document(&mut database, "doc-1");
+
+    // Reading session before consent
+    start_session(
+        &mut database,
+        "session-pre",
+        "reading",
+        "reading",
+        "2026-07-15T01:00:00.000Z",
+        "2026-07-15",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "session-pre",
+        "2026-07-15T01:01:00.000Z",
+        60_000,
+        None,
+        None,
+        0,
+    );
+
+    // Reading session after consent (from_local_day = 2026-07-16)
+    start_session(
+        &mut database,
+        "session-post",
+        "reading",
+        "reading",
+        "2026-07-16T01:00:00.000Z",
+        "2026-07-16",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "session-post",
+        "2026-07-16T01:01:00.000Z",
+        60_000,
+        None,
+        None,
+        0,
+    );
+
+    let query = DailySnapshotQuery {
+        consent_started_at: "2026-07-16T00:00:00.000Z".into(),
+        from_local_day: "2026-07-16".into(),
+    };
+    let snapshots =
+        get_daily_statistics_snapshots(&database.connection, &query).expect("daily snapshots");
+
+    let reading_days: Vec<&str> = snapshots
+        .iter()
+        .filter(|s| s.app_key == "reading")
+        .map(|s| s.local_day.as_str())
+        .collect();
+    assert_eq!(reading_days, vec!["2026-07-16"]);
+}
+
+#[test]
+fn daily_snapshots_reading_contains_only_numeric_fields() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 20);
+
+    start_session(
+        &mut database,
+        "s1",
+        "reading",
+        "reading",
+        "2026-07-18T01:00:00.000Z",
+        "2026-07-18",
+        Some("document"),
+        Some("doc-1"),
+    );
+    checkpoint(
+        &mut database,
+        "s1",
+        "2026-07-18T01:02:00.000Z",
+        120_000,
+        Some("doc-1"),
+        Some(3),
+        1,
+    );
+    checkpoint(
+        &mut database,
+        "s1",
+        "2026-07-18T01:03:00.000Z",
+        30_000,
+        Some("doc-1"),
+        Some(5),
+        1,
+    );
+
+    let query = DailySnapshotQuery {
+        consent_started_at: "2026-07-01T00:00:00.000Z".into(),
+        from_local_day: "2026-07-18".into(),
+    };
+    let snapshots =
+        get_daily_statistics_snapshots(&database.connection, &query).expect("daily snapshots");
+
+    let reading = snapshots
+        .iter()
+        .find(|s| s.app_key == "reading")
+        .expect("reading snapshot");
+    assert_eq!(reading.local_day, "2026-07-18");
+    assert_eq!(reading.active_ms, 150_000);
+    assert!(reading.active_day);
+    assert_eq!(reading.session_count, 1);
+    assert_eq!(reading.page_visit_count, Some(2));
+    assert_eq!(reading.unique_page_count, Some(2));
+    // Memora fields must be None
+    assert!(reading.real_review_count.is_none());
+    assert!(reading.again_count.is_none());
+    assert!(reading.hard_count.is_none());
+    assert!(reading.good_count.is_none());
+    assert!(reading.easy_count.is_none());
+    assert!(reading.lapse_count.is_none());
+}
+
+#[test]
+fn daily_snapshots_memora_contains_only_numeric_fields() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-1", 10);
+    let _deck = database.create_deck("DeckA").expect("deck");
+    let card = create_card_for_document(&mut database, "DeckA", "doc-1", 1, "card-a");
+
+    insert_review_log(
+        &database,
+        "log-1",
+        &card,
+        "2026-07-18T02:00:00.000Z",
+        "good",
+        "review",
+        "review",
+        60_000,
+    );
+    insert_review_log(
+        &database,
+        "log-2",
+        &card,
+        "2026-07-18T02:01:00.000Z",
+        "again",
+        "review",
+        "relearning",
+        10_000,
+    );
+    insert_review_log(
+        &database,
+        "log-3",
+        &card,
+        "2026-07-18T02:02:00.000Z",
+        "hard",
+        "learning",
+        "learning",
+        5_000,
+    );
+
+    let query = DailySnapshotQuery {
+        consent_started_at: "2026-07-01T00:00:00.000Z".into(),
+        from_local_day: "2026-07-18".into(),
+    };
+    let snapshots =
+        get_daily_statistics_snapshots(&database.connection, &query).expect("daily snapshots");
+
+    let memora = snapshots
+        .iter()
+        .find(|s| s.app_key == "memora")
+        .expect("memora snapshot");
+    assert_eq!(memora.local_day, "2026-07-18");
+    assert_eq!(memora.real_review_count, Some(3));
+    assert_eq!(memora.again_count, Some(1));
+    assert_eq!(memora.hard_count, Some(1));
+    assert_eq!(memora.good_count, Some(1));
+    assert_eq!(memora.easy_count, Some(0));
+    assert_eq!(memora.lapse_count, Some(1)); // prior=review + rating=again
+    // Reading fields must be None
+    assert!(memora.page_visit_count.is_none());
+    assert!(memora.unique_page_count.is_none());
+}
+
+#[test]
+fn daily_snapshots_empty_range_returns_empty_vec() {
+    let (_directory, database) = db();
+    let query = DailySnapshotQuery {
+        consent_started_at: "2099-01-01T00:00:00.000Z".into(),
+        from_local_day: "2099-01-01".into(),
+    };
+    let snapshots =
+        get_daily_statistics_snapshots(&database.connection, &query).expect("daily snapshots");
+    assert!(snapshots.is_empty());
 }
