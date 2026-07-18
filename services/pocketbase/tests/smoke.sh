@@ -2,9 +2,11 @@
 set -euo pipefail
 
 base_url="${1:?pass PocketBase base URL, e.g. http://127.0.0.1:8090}"
+data_dir="${2:-services/pocketbase/pb_data}"
+database_path="${data_dir%/}/data.db"
 
 # Clear database tables to make the test idempotent
-sqlite3 services/pocketbase/pb_data/data.db "DELETE FROM users; DELETE FROM groups; DELETE FROM group_members; DELETE FROM features; DELETE FROM feature_assignments; DELETE FROM admin_audit_logs; DELETE FROM analytics_events;"
+sqlite3 "${database_path}" "DELETE FROM users; DELETE FROM groups; DELETE FROM group_members; DELETE FROM features; DELETE FROM feature_assignments; DELETE FROM admin_audit_logs; DELETE FROM analytics_events;"
 
 status="$(curl --silent --output /tmp/corelib-register.json --write-out '%{http_code}' \
   --request POST "${base_url}/api/corelib/register" \
@@ -47,7 +49,7 @@ status="$(curl --silent --output /tmp/corelib-me-anon.json --write-out '%{http_c
 test "${status}" = "401"
 
 # Approve the member via sqlite3
-sqlite3 services/pocketbase/pb_data/data.db "UPDATE users SET status = 'approved' WHERE email = 'member@example.test';"
+sqlite3 "${database_path}" "UPDATE users SET status = 'approved' WHERE email = 'member@example.test';"
 
 # Sign-in approved account: HTTP 200 with token and profile
 status="$(curl --silent --output /tmp/corelib-signin-approved.json --write-out '%{http_code}' \
@@ -84,7 +86,7 @@ status="$(curl --silent --output /tmp/corelib-register-admin.json --write-out '%
 test "${status}" = "200"
 
 # Approve and make admin via sqlite3
-sqlite3 services/pocketbase/pb_data/data.db "UPDATE users SET status = 'approved', role = 'admin' WHERE email = 'admin@example.test';"
+sqlite3 "${database_path}" "UPDATE users SET status = 'approved', role = 'admin' WHERE email = 'admin@example.test';"
 
 # Sign in as admin to get token
 status="$(curl --silent --output /tmp/corelib-signin-admin.json --write-out '%{http_code}' \
@@ -107,7 +109,7 @@ status="$(curl --silent --output /tmp/corelib-register-pending.json --write-out 
   --header 'content-type: application/json' \
   --data '{"displayName":"Pending User","email":"pending@example.test","password":"correct horse battery staple","passwordConfirm":"correct horse battery staple"}')"
 test "${status}" = "200"
-pending_id="$(sqlite3 services/pocketbase/pb_data/data.db "SELECT id FROM users WHERE email = 'pending@example.test';")"
+pending_id="$(sqlite3 "${database_path}" "SELECT id FROM users WHERE email = 'pending@example.test';")"
 
 # 2. Admin approves a pending user -> response is approved and audit row count increases by one
 status="$(curl --silent --output /tmp/corelib-admin-approve.json --write-out '%{http_code}' \
@@ -118,7 +120,7 @@ status="$(curl --silent --output /tmp/corelib-admin-approve.json --write-out '%{
 test "${status}" = "200"
 grep -q '"status":"approved"' /tmp/corelib-admin-approve.json
 
-audit_count="$(sqlite3 services/pocketbase/pb_data/data.db "SELECT count(*) FROM admin_audit_logs;")"
+audit_count="$(sqlite3 "${database_path}" "SELECT count(*) FROM admin_audit_logs;")"
 test "${audit_count}" = "1"
 
 # 3. Member in group beta gets feature beta_reader when group assignment is enabled
@@ -144,7 +146,7 @@ status="$(curl --silent --output /tmp/corelib-admin-assign-group.json --write-ou
   --data "{\"featureKey\":\"beta_reader\",\"subjectType\":\"group\",\"subjectId\":\"${group_id}\",\"enabled\":true}")"
 test "${status}" = "200"
 
-member_id="$(sqlite3 services/pocketbase/pb_data/data.db "SELECT id FROM users WHERE email = 'member@example.test';")"
+member_id="$(sqlite3 "${database_path}" "SELECT id FROM users WHERE email = 'member@example.test';")"
 status="$(curl --silent --output /tmp/corelib-admin-user-groups.json --write-out '%{http_code}' \
   --request POST "${base_url}/api/corelib/admin/users/${member_id}/groups" \
   --header "Authorization: Bearer ${admin_token}" \
@@ -181,9 +183,9 @@ status="$(curl --silent --output /tmp/corelib-register-prop.json --write-out '%{
   --header 'content-type: application/json' \
   --data '{"displayName":"Prop User","email":"prop@example.test","password":"correct horse battery staple","passwordConfirm":"correct horse battery staple"}' )"
 test "${status}" = "200"
-prop_id="$(sqlite3 services/pocketbase/pb_data/data.db "SELECT id FROM users WHERE email = 'prop@example.test';")"
+prop_id="$(sqlite3 "${database_path}" "SELECT id FROM users WHERE email = 'prop@example.test';")"
 
-sqlite3 services/pocketbase/pb_data/data.db "UPDATE users SET status = 'approved' WHERE email = 'prop@example.test';"
+sqlite3 "${database_path}" "UPDATE users SET status = 'approved' WHERE email = 'prop@example.test';"
 
 status="$(curl --silent --output /tmp/corelib-signin-prop.json --write-out '%{http_code}' \
   --request POST "${base_url}/api/corelib/sign-in" \
@@ -275,8 +277,8 @@ grep -q '"name":"handled_error"' /tmp/corelib-admin-metrics.json
 grep -q '"appVersion":"1.0.0"' /tmp/corelib-admin-metrics.json
 grep -q '"code":"network_unavailable"' /tmp/corelib-admin-metrics.json
 
-
-
-
-
-
+# Verify daily_statistics collection exists
+sqlite3 "${database_path}" \
+  "SELECT COUNT(*) FROM _collections WHERE name='daily_statistics';" | grep -q '^1$'
+sqlite3 "${database_path}" \
+  "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_daily_statistics_identity';" | grep -q '^1$'
