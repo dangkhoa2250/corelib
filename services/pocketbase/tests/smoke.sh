@@ -282,3 +282,79 @@ sqlite3 "${database_path}" \
   "SELECT COUNT(*) FROM _collections WHERE name='daily_statistics';" | grep -q '^1$'
 sqlite3 "${database_path}" \
   "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_daily_statistics_identity';" | grep -q '^1$'
+
+# --- Daily statistics ---
+
+# 1. Analytics-disabled user gets 403
+status="$(curl --silent --output /tmp/corelib-daily-disabled.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"schemaVersion":1,"localDay":"2026-07-18","appKey":"reading","activeMs":60000,"activeDay":true,"sessionCount":1,"pageVisitCount":8,"uniquePageCount":6}')"
+test "${status}" = "403"
+grep -q '"analytics_disabled"' /tmp/corelib-daily-disabled.json
+
+# 2. Opt back in
+curl --silent --request POST "${base_url}/api/corelib/me/analytics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"enabled":true}' > /dev/null
+
+# 3. Invalid localDay -> 400
+status="$(curl --silent --output /tmp/corelib-daily-invalid-day.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"schemaVersion":1,"localDay":"bad-date","appKey":"reading","activeMs":60000,"activeDay":true,"sessionCount":1}')"
+test "${status}" = "400"
+grep -q '"invalid_statistics_snapshot"' /tmp/corelib-daily-invalid-day.json
+
+# 4. Unknown appKey -> 400
+status="$(curl --silent --output /tmp/corelib-daily-unknown-app.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"schemaVersion":1,"localDay":"2026-07-18","appKey":"unknown","activeMs":60000,"activeDay":true,"sessionCount":1}')"
+test "${status}" = "400"
+grep -q '"invalid_statistics_snapshot"' /tmp/corelib-daily-unknown-app.json
+
+# 5. Valid reading payload -> 204
+status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"schemaVersion":1,"localDay":"2026-07-18","appKey":"reading","activeMs":60000,"activeDay":true,"sessionCount":1,"pageVisitCount":8,"uniquePageCount":6}')"
+test "${status}" = "204"
+
+# 6. Idempotent re-upload -> 204
+status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"schemaVersion":1,"localDay":"2026-07-18","appKey":"reading","activeMs":120000,"activeDay":true,"sessionCount":2,"pageVisitCount":10,"uniquePageCount":7}')"
+test "${status}" = "204"
+
+# 7. Verify only one row exists for the identity
+row_count="$(sqlite3 "${database_path}" "SELECT COUNT(*) FROM daily_statistics WHERE user=(SELECT id FROM users WHERE email='member@example.test') AND localDay='2026-07-18' AND appKey='reading';")"
+test "${row_count}" = "1"
+
+# 8. Verify the row contains the second cumulative values
+second_active_ms="$(sqlite3 "${database_path}" "SELECT activeMs FROM daily_statistics WHERE user=(SELECT id FROM users WHERE email='member@example.test') AND localDay='2026-07-18' AND appKey='reading';")"
+test "${second_active_ms}" = "120000"
+
+# 9. Extra key rejected -> 400
+status="$(curl --silent --output /tmp/corelib-daily-extra-key.json --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"schemaVersion":1,"localDay":"2026-07-18","appKey":"reading","activeMs":60000,"activeDay":true,"sessionCount":1,"documentId":"abc"}')"
+test "${status}" = "400"
+grep -q '"invalid_statistics_snapshot"' /tmp/corelib-daily-extra-key.json
+
+# 10. Valid memora payload -> 204
+status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"schemaVersion":1,"localDay":"2026-07-18","appKey":"memora","activeMs":30000,"activeDay":true,"sessionCount":1,"realReviewCount":10,"againCount":1,"hardCount":2,"goodCount":5,"easyCount":2,"lapseCount":1}')"
+test "${status}" = "204"
