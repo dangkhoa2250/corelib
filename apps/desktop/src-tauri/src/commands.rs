@@ -9,9 +9,7 @@ use std::{
     thread,
 };
 
-#[cfg(test)]
-use chrono::DateTime;
-use chrono::{Timelike, Utc};
+use chrono::{DateTime, Timelike, Utc};
 use serde::Deserialize;
 
 use tauri::State;
@@ -1162,6 +1160,14 @@ pub struct StudyRatingPayload {
     pub elapsed_ms: i64,
 }
 
+pub(crate) fn local_review_clock(now: DateTime<Utc>) -> (String, i64) {
+    let local_now = now.with_timezone(&chrono::Local);
+    (
+        local_now.date_naive().to_string(),
+        i64::from(local_now.hour() * 60 + local_now.minute()),
+    )
+}
+
 pub(crate) fn scope_from_payload(payload: StudyScopePayload) -> Result<StudyScope, String> {
     match payload.kind.as_str() {
         "all" => Ok(StudyScope::All),
@@ -1254,9 +1260,7 @@ pub fn rate_study_card(
         return Err("elapsedMs must be nonnegative".to_owned());
     }
     let now = Utc::now();
-    let local_now = chrono::Local::now();
-    let study_day = local_now.date_naive().to_string();
-    let local_minute_of_day = i64::from(local_now.hour() * 60 + local_now.minute());
+    let (study_day, local_minute_of_day) = local_review_clock(now);
     learning_lock(&state)?
         .rate_study_card(StudyRating {
             session_id: payload.session_id,
