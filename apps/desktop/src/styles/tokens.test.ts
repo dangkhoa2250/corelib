@@ -77,6 +77,16 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
   expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,6};/);
 });
 
+test("keeps non-interactive Statistics insight cards free of clickable affordances", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+
+  expect(statCss).not.toContain(".statistics-app-card:not(:disabled)");
+  expect(statCss).not.toContain(".statistics-app-card:disabled");
+  expect(statCss).toContain(".statistics-app-card__open:hover");
+  expect(statCss).toContain(".statistics-app-card__open:focus-visible");
+});
+
 test("keeps the calendar time heatmap inside its card without horizontal scrolling", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
