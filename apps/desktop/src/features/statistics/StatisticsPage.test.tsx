@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { StatisticsPage } from "./StatisticsPage";
 import { activeDayTrend, StatisticsOverviewPage } from "./pages/StatisticsOverviewPage";
@@ -76,4 +77,30 @@ test("reloads overview with the newly selected calendar period", async () => {
   await waitFor(() => expect(getOverview).toHaveBeenCalledWith(period));
   rerender(<StatisticsOverviewPage period={nextPeriod} onPeriodChange={vi.fn()} getOverview={getOverview} />);
   await waitFor(() => expect(getOverview).toHaveBeenLastCalledWith(nextPeriod));
+});
+
+test("keeps every registered app available in the activity filter when its summary fails", async () => {
+  const user = userEvent.setup();
+  const getOverview = vi.fn().mockResolvedValue(overview);
+  const failedApp = {
+    key: "reading",
+    title: "Reading",
+    icon: () => null,
+    loadSummary: vi.fn().mockRejectedValue(new Error("unavailable")),
+    loadDetail: vi.fn(),
+  };
+  render(
+    <StatisticsOverviewPage
+      period={period}
+      onPeriodChange={vi.fn()}
+      getOverview={getOverview}
+      apps={[failedApp]}
+    />,
+  );
+
+  const filter = await screen.findByRole("combobox", { name: "Statistics app" });
+  await waitFor(() => expect(failedApp.loadSummary).toHaveBeenCalledWith(period));
+  await screen.findByText("Statistics unavailable");
+  await user.click(filter);
+  expect(screen.getByRole("option", { name: "Reading" })).toBeInTheDocument();
 });

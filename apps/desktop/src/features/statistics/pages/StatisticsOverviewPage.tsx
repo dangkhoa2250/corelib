@@ -139,6 +139,7 @@ export function StatisticsOverviewPage({
             period={period}
             totalBuckets={convertBuckets(data.buckets)}
             timeBuckets={data.timeBuckets}
+            appOptions={apps.map(({ key, title }) => ({ appKey: key, title }))}
             series={apps.flatMap((app) => {
               const summary = appSummaries[app.key];
               return summary ? [{ appKey: app.key, title: app.title, buckets: summary.buckets }] : [];

@@ -16,9 +16,16 @@ interface ActivityChartCardProps {
   period?: StatisticsPeriod;
   totalBuckets: { date: string; value: number }[];
   series: ActivityChartSeries[];
+  appOptions?: ActivityChartAppOption[];
   timeBuckets?: StatisticsTimeBucket[];
   heatmapEnabled?: boolean;
   defaultGraphMode?: GraphMode;
+}
+
+/** Apps registered for this statistics surface, independent of loaded data. */
+export interface ActivityChartAppOption {
+  appKey: string;
+  title: string;
 }
 
 export function periodDefaultGraphMode(period?: StatisticsPeriod): GraphMode {
@@ -29,6 +36,7 @@ export function ActivityChartCard({
   period,
   totalBuckets,
   series,
+  appOptions: registeredApps,
   timeBuckets,
   heatmapEnabled = true,
   defaultGraphMode,
@@ -96,19 +104,25 @@ export function ActivityChartCard({
     const opts: { value: string; label: string }[] = [
       { value: "all", label: "All apps" },
     ];
-    for (const s of series) {
-      opts.push({ value: s.appKey, label: s.title });
+    for (const app of registeredApps ?? series) {
+      opts.push({ value: app.appKey, label: app.title });
     }
     return opts;
-  }, [series]);
+  }, [registeredApps, series]);
 
-  const filteredData = useMemo(() => {
+  const selectedData = useMemo(() => {
     if (selectedApp === "all") {
-      return totalBuckets;
+      return {
+        dailyBuckets: totalBuckets,
+        timeBuckets: timeBuckets ?? [],
+      };
     }
     const appSeries = series.find((s) => s.appKey === selectedApp);
-    return appSeries?.buckets ?? [];
-  }, [selectedApp, totalBuckets, series]);
+    return {
+      dailyBuckets: appSeries?.buckets ?? [],
+      timeBuckets: (timeBuckets ?? []).filter((bucket) => bucket.appKey === selectedApp),
+    };
+  }, [selectedApp, series, timeBuckets, totalBuckets]);
 
   const handleGraphModeChange = useCallback((mode: GraphMode) => {
     setHasExplicitGraphMode(true);
@@ -162,14 +176,14 @@ export function ActivityChartCard({
       {canShowHeatmap && view === "heatmap" && period && (
         <ActivityHeatmap
           period={period}
-          buckets={timeBuckets ?? []}
-          selectedApp={selectedApp}
+          buckets={selectedData.timeBuckets}
+          selectedApp="all"
           palette={palette}
         />
       )}
       {view === "graph" && (
         <ActivityGraph
-          buckets={filteredData}
+          buckets={selectedData.dailyBuckets}
           mode={graphMode}
           onModeChange={handleGraphModeChange}
           valueLabel="Active time"

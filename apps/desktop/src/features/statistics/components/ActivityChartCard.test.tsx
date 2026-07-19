@@ -114,3 +114,34 @@ test("uses icon-plus-label view controls", () => {
   expect(screen.getByRole("button", { name: "Heatmap" }).querySelector("svg")).not.toBeNull();
   expect(screen.getByRole("button", { name: "Graph" }).querySelector("svg")).not.toBeNull();
 });
+
+test("keeps registered apps selectable and filters both calendar visualizations", async () => {
+  const user = userEvent.setup();
+  localStorage.removeItem("library.statistics.preferences.v1");
+  render(
+    <ActivityChartCard
+      period={{ unit: "week", anchorLocalDay: "2026-07-13" }}
+      totalBuckets={[{ date: "2026-07-13", value: 60 }]}
+      series={[{ appKey: "reading", title: "Reading", buckets: [{ date: "2026-07-13", value: 30 }] }]}
+      appOptions={[
+        { appKey: "reading", title: "Reading" },
+        { appKey: "memora", title: "Memora" },
+      ]}
+      timeBuckets={[
+        { localDay: "2026-07-13", bucketStartHour: 12, activeMs: 30 * 60_000, appKey: "reading", isFuture: false },
+        { localDay: "2026-07-13", bucketStartHour: 12, activeMs: 20 * 60_000, appKey: "memora", isFuture: false },
+      ]}
+    />,
+  );
+
+  await user.click(screen.getByRole("combobox", { name: "Statistics app" }));
+  await user.click(screen.getByRole("option", { name: "Memora" }));
+  expect(screen.getByRole("gridcell", { name: /July 13, 2026, 12:00–16:00: 20 minutes/ })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Graph" }));
+  expect(screen.getByText("No data")).toBeInTheDocument();
+
+  await user.click(screen.getByRole("combobox", { name: "Statistics app" }));
+  await user.click(screen.getByRole("option", { name: "Reading" }));
+  expect(screen.getByLabelText("2026-07-13: 30 Active time")).toBeInTheDocument();
+});
