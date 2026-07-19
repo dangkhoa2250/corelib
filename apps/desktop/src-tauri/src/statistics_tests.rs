@@ -218,7 +218,7 @@ fn checkpoint_time_buckets_use_session_timezone_offset() {
     database.start_activity_session(NewActivitySession {
         id: "session-bucket-timezone".into(), app_key: "reading".into(), activity_kind: "reading".into(),
         context_kind: Some("document".into()), context_id: Some("doc-bucket-timezone".into()),
-        occurred_at: "2026-07-19T14:55:00.000Z".into(), local_day: "2026-07-19".into(), timezone_offset_minutes: -540,
+        occurred_at: "2026-07-19T14:55:00.000Z".into(), local_day: "2026-07-19".into(), timezone_offset_minutes: 540,
     }).expect("start");
     database.checkpoint_activity_session(ActivityCheckpoint {
         session_id: "session-bucket-timezone".into(), occurred_at: "2026-07-19T15:05:00.000Z".into(),
@@ -510,6 +510,10 @@ fn checkpoint_activity_session_rolls_back_session_update_when_page_upsert_fails(
         page_count_for_session(&database, "session-fk-rollback"),
         0,
         "no page row should remain after rollback"
+    );
+    assert!(
+        time_buckets_for_session(&database, "session-fk-rollback").is_empty(),
+        "bucket rows must roll back when the page upsert fails"
     );
 }
 

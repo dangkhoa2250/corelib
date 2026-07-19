@@ -286,7 +286,7 @@ fn split_active_segment(
     let offset_seconds = i32::try_from(offset_seconds).map_err(|_| {
         StatisticsError::Validation("timezone offset is outside the supported range".into())
     })?;
-    let offset = FixedOffset::west_opt(offset_seconds).ok_or_else(|| {
+    let offset = FixedOffset::east_opt(offset_seconds).ok_or_else(|| {
         StatisticsError::Validation("timezone offset is outside the supported range".into())
     })?;
     let end = end.with_timezone(&Utc);
