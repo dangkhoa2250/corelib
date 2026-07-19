@@ -1,4 +1,4 @@
-import type { StatisticsRange } from "../../domain/statistics";
+import type { StatisticsPeriod } from "../../domain/statistics";
 import type { ComponentType } from "react";
 import { IconLibrary, IconMemora } from "../../app/icons";
 import { getMemoraStatistics, getReadingStatistics } from "../../lib/statistics";
@@ -38,8 +38,8 @@ export interface StatisticsAppDefinition {
   key: string;
   title: string;
   icon: ComponentType;
-  loadSummary(range: StatisticsRange): Promise<AppStatisticsSummary>;
-  loadDetail(range: StatisticsRange): Promise<AppStatisticsDetail>;
+  loadSummary(period: StatisticsPeriod): Promise<AppStatisticsSummary>;
+  loadDetail(period: StatisticsPeriod): Promise<AppStatisticsDetail>;
 }
 
 const ReadingIcon = () => IconLibrary({ size: 18 });
@@ -50,8 +50,8 @@ export const DEFAULT_STATISTICS_APPS: StatisticsAppDefinition[] = [
     key: "reading",
     title: "Reading",
     icon: ReadingIcon,
-    async loadSummary(range) {
-      const data = await getReadingStatistics(range);
+    async loadSummary(period) {
+      const data = await getReadingStatistics(period);
       return {
         appKey: "reading",
         primary: { id: "active-time", label: "Active time", value: data.activeMs, unit: "milliseconds" },
@@ -59,8 +59,8 @@ export const DEFAULT_STATISTICS_APPS: StatisticsAppDefinition[] = [
         buckets: data.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) })),
       };
     },
-    async loadDetail(range) {
-      const data = await getReadingStatistics(range);
+    async loadDetail(period) {
+      const data = await getReadingStatistics(period);
       return {
         appKey: "reading",
         metrics: [
@@ -79,8 +79,8 @@ export const DEFAULT_STATISTICS_APPS: StatisticsAppDefinition[] = [
     key: "memora",
     title: "Memora",
     icon: MemoraIcon,
-    async loadSummary(range) {
-      const data = await getMemoraStatistics(range);
+    async loadSummary(period) {
+      const data = await getMemoraStatistics(period);
       return {
         appKey: "memora",
         primary: { id: "active-time", label: "Active time", value: data.activeMs, unit: "milliseconds" },
@@ -88,8 +88,8 @@ export const DEFAULT_STATISTICS_APPS: StatisticsAppDefinition[] = [
         buckets: data.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) })),
       };
     },
-    async loadDetail(range) {
-      const data = await getMemoraStatistics(range);
+    async loadDetail(period) {
+      const data = await getMemoraStatistics(period);
       return {
         appKey: "memora",
         metrics: [

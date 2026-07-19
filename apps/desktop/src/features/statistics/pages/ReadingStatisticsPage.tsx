@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ReadingStatistics, StatisticsRange } from "../../../domain/statistics";
+import type { ReadingStatistics, StatisticsPeriod } from "../../../domain/statistics";
 import { getReadingStatistics } from "../../../lib/statistics";
 import { KpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
@@ -18,14 +18,14 @@ function formatSessionTime(ms: number | null): string {
 }
 
 export interface ReadingStatisticsPageProps {
-  range: StatisticsRange;
-  onRangeChange(range: StatisticsRange): void;
+  period: StatisticsPeriod;
+  onPeriodChange?(period: StatisticsPeriod): void;
   getReadingStats?: typeof getReadingStatistics;
   onBack?: () => void;
 }
 
 export function ReadingStatisticsPage({
-  range,
+  period,
   getReadingStats = getReadingStatistics,
 }: ReadingStatisticsPageProps) {
   const [stats, setStats] = useState<ReadingStatistics | null>(null);
@@ -33,13 +33,13 @@ export function ReadingStatisticsPage({
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const result = await getReadingStats(range);
+      const result = await getReadingStats(period);
       setStats(result);
       setState("loaded");
     } catch {
       setState("error");
     }
-  }, [range, getReadingStats]);
+  }, [period, getReadingStats]);
 
   useEffect(() => {
     void load();
@@ -62,7 +62,7 @@ export function ReadingStatisticsPage({
               <KpiCard label="Unique pages" value={String(stats.uniquePages)} />
               <KpiCard label="Revisits" value={String(stats.revisits)} />
             </div>
-            <ActivityChartCard range={range} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
+            <ActivityChartCard period={period} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
           </>
         )}
       </MetricSection>

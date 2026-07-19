@@ -1,14 +1,14 @@
 import type { ReactNode } from "react";
 import { ScrollArea } from "../../../components/ScrollArea";
-import type { StatisticsRange } from "../../../domain/statistics";
-import { StatisticsRangePicker } from "./StatisticsRangePicker";
+import type { StatisticsPeriod } from "../../../domain/statistics";
+import { StatisticsPeriodPicker } from "./StatisticsPeriodPicker";
 
 interface StatisticsShellProps {
   title: string;
   onBack?: () => void;
   breadcrumb?: string;
-  range?: StatisticsRange;
-  onRangeChange?: (range: StatisticsRange) => void;
+  period?: StatisticsPeriod;
+  onPeriodChange?: (period: StatisticsPeriod) => void;
   children?: ReactNode;
 }
 
@@ -16,8 +16,8 @@ export function StatisticsShell({
   title,
   onBack,
   breadcrumb,
-  range,
-  onRangeChange,
+  period,
+  onPeriodChange,
   children,
 }: StatisticsShellProps) {
   return (
@@ -44,8 +44,8 @@ export function StatisticsShell({
               {breadcrumb ? <p className="statistics-breadcrumb">{breadcrumb}</p> : null}
               <h1>{title}</h1>
             </div>
-            {range && onRangeChange ? (
-              <StatisticsRangePicker range={range} onChange={onRangeChange} />
+            {period && onPeriodChange ? (
+              <StatisticsPeriodPicker period={period} onChange={onPeriodChange} />
             ) : null}
           </header>
           {children}

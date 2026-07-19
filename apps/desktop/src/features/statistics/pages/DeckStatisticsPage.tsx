@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { DeckStatisticsDetail, StatisticsRange } from "../../../domain/statistics";
+import type { DeckStatisticsDetail, StatisticsPeriod } from "../../../domain/statistics";
 import { getDeckStatisticsDetail } from "../../../lib/statistics";
 import { KpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
@@ -25,15 +25,15 @@ function formatRatio(value: number | null): string {
 
 export interface DeckStatisticsPageProps {
   deckId: string;
-  range: StatisticsRange;
-  onRangeChange(range: StatisticsRange): void;
+  period: StatisticsPeriod;
+  onPeriodChange?(period: StatisticsPeriod): void;
   getDeckStats?: typeof getDeckStatisticsDetail;
   onBack?: () => void;
 }
 
 export function DeckStatisticsPage({
   deckId,
-  range,
+  period,
   getDeckStats = getDeckStatisticsDetail,
 }: DeckStatisticsPageProps) {
   const [stats, setStats] = useState<DeckStatisticsDetail | null>(null);
@@ -41,13 +41,13 @@ export function DeckStatisticsPage({
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const result = await getDeckStats(deckId, range);
+      const result = await getDeckStats(deckId, period);
       setStats(result);
       setState("loaded");
     } catch {
       setState("error");
     }
-  }, [deckId, range, getDeckStats]);
+  }, [deckId, period, getDeckStats]);
 
   useEffect(() => {
     void load();
@@ -101,7 +101,7 @@ export function DeckStatisticsPage({
                 <KpiCard label="Next 30 days" value={String(stats.dueForecast.next30Days)} />
               </div>
             </MetricSection>
-            <ActivityChartCard range={range} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
+            <ActivityChartCard period={period} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
           </>
         )}
       </MetricSection>

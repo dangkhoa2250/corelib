@@ -1,5 +1,6 @@
 export type AccountStatus = "pending" | "approved" | "rejected";
 export type AccountRole = "member" | "admin";
+export type AdminAnalyticsRange = "7d" | "30d" | "1y" | "all";
 
 export interface AccountProfile {
   id: string;

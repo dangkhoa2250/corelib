@@ -6,7 +6,7 @@ import type {
   DocumentStatistics,
   MemoraStatistics,
   DeckStatisticsDetail,
-  StatisticsRange,
+  StatisticsPeriod,
   StartActivitySessionInput,
   ActivityCheckpointInput,
   FinishActivitySessionInput,
@@ -15,43 +15,43 @@ import type {
 } from "../domain/statistics";
 
 export function getStatisticsOverview(
-  range: StatisticsRange,
+  period: StatisticsPeriod,
   call: Invoke = invoke as Invoke,
 ): Promise<StatisticsOverview> {
-  return call<StatisticsOverview>("get_statistics_overview", { input: { range } });
+  return call<StatisticsOverview>("get_statistics_overview", { input: { period } });
 }
 
 export function getReadingStatistics(
-  range: StatisticsRange,
+  period: StatisticsPeriod,
   call: Invoke = invoke as Invoke,
 ): Promise<ReadingStatistics> {
-  return call<ReadingStatistics>("get_reading_statistics", { input: { range } });
+  return call<ReadingStatistics>("get_reading_statistics", { input: { period } });
 }
 
 export function getDocumentStatistics(
   documentId: string,
-  range: StatisticsRange,
+  period: StatisticsPeriod,
   call: Invoke = invoke as Invoke,
 ): Promise<DocumentStatistics> {
   return call<DocumentStatistics>("get_document_statistics", {
-    input: { documentId, range },
+    input: { documentId, period },
   });
 }
 
 export function getMemoraStatistics(
-  range: StatisticsRange,
+  period: StatisticsPeriod,
   call: Invoke = invoke as Invoke,
 ): Promise<MemoraStatistics> {
-  return call<MemoraStatistics>("get_memora_statistics", { input: { range } });
+  return call<MemoraStatistics>("get_memora_statistics", { input: { period } });
 }
 
 export function getDeckStatisticsDetail(
   deckId: string,
-  range: StatisticsRange,
+  period: StatisticsPeriod,
   call: Invoke = invoke as Invoke,
 ): Promise<DeckStatisticsDetail> {
   return call<DeckStatisticsDetail>("get_deck_statistics_detail", {
-    input: { deckId, range },
+    input: { deckId, period },
   });
 }
 

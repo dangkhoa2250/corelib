@@ -18,11 +18,12 @@ test("uses the typed Tauri statistics contract", async () => {
     activeDays: 0,
     buckets: [],
   });
-  await getStatisticsOverview("30d", call);
-  await getReadingStatistics("30d", call);
-  await getDocumentStatistics("doc-1", "30d", call);
-  await getMemoraStatistics("30d", call);
-  await getDeckStatisticsDetail("deck-1", "30d", call);
+  const period = { unit: "month" as const, anchorLocalDay: "2026-07-01" };
+  await getStatisticsOverview(period, call);
+  await getReadingStatistics(period, call);
+  await getDocumentStatistics("doc-1", period, call);
+  await getMemoraStatistics(period, call);
+  await getDeckStatisticsDetail("deck-1", period, call);
   await checkpointActivitySession(
     {
       sessionId: "s1",
@@ -35,19 +36,19 @@ test("uses the typed Tauri statistics contract", async () => {
     call,
   );
   expect(call).toHaveBeenNthCalledWith(1, "get_statistics_overview", {
-    input: { range: "30d" },
+    input: { period },
   });
   expect(call).toHaveBeenNthCalledWith(2, "get_reading_statistics", {
-    input: { range: "30d" },
+    input: { period },
   });
   expect(call).toHaveBeenNthCalledWith(3, "get_document_statistics", {
-    input: { documentId: "doc-1", range: "30d" },
+    input: { documentId: "doc-1", period },
   });
   expect(call).toHaveBeenNthCalledWith(4, "get_memora_statistics", {
-    input: { range: "30d" },
+    input: { period },
   });
   expect(call).toHaveBeenNthCalledWith(5, "get_deck_statistics_detail", {
-    input: { deckId: "deck-1", range: "30d" },
+    input: { deckId: "deck-1", period },
   });
   expect(call).toHaveBeenNthCalledWith(6, "checkpoint_activity_session", {
     input: expect.objectContaining({ sessionId: "s1", activeMs: 15000 }),

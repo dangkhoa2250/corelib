@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { StatisticsOverview, StatisticsRange } from "../../../domain/statistics";
+import type { StatisticsOverview, StatisticsPeriod } from "../../../domain/statistics";
 import { getStatisticsOverview } from "../../../lib/statistics";
 import { ActivityChartCard } from "../components/ActivityChartCard";
 import { AppInsightCard } from "../components/AppInsightCard";
@@ -8,8 +8,8 @@ import { MetricSection } from "../components/MetricSection";
 import type { AppStatisticsSummary, StatisticsAppDefinition } from "../registry";
 
 interface StatisticsOverviewPageProps {
-  range: StatisticsRange;
-  onRangeChange(range: StatisticsRange): void;
+  period: StatisticsPeriod;
+  onPeriodChange(period: StatisticsPeriod): void;
   getOverview?: typeof getStatisticsOverview;
   apps?: StatisticsAppDefinition[];
   onOpenApp?(appKey: string): void;
@@ -34,7 +34,7 @@ function formatMs(ms: number): string {
 }
 
 export function StatisticsOverviewPage({
-  range,
+  period,
   getOverview = getStatisticsOverview,
   apps = NO_APPS,
   onOpenApp,
@@ -50,13 +50,13 @@ export function StatisticsOverviewPage({
     setLoading(true);
     setError(null);
     setData(null);
-    Promise.resolve(getOverview(range))
+    Promise.resolve(getOverview(period))
       .then(setData)
       .catch((e: unknown) =>
         setError(e instanceof Error ? e.message : "Failed to load statistics"),
       )
       .finally(() => setLoading(false));
-  }, [range, getOverview]);
+  }, [period, getOverview]);
 
   useEffect(() => {
     load();
@@ -67,7 +67,7 @@ export function StatisticsOverviewPage({
     setAppsLoading(apps.length > 0);
     setAppSummaries({});
     setAppErrors(new Set());
-    void Promise.allSettled(apps.map((app) => app.loadSummary(range))).then((results) => {
+    void Promise.allSettled(apps.map((app) => app.loadSummary(period))).then((results) => {
       if (cancelled) return;
       const summaries: Record<string, AppStatisticsSummary> = {};
       const failures = new Set<string>();
@@ -81,7 +81,7 @@ export function StatisticsOverviewPage({
       setAppsLoading(false);
     });
     return () => { cancelled = true; };
-  }, [apps, range]);
+  }, [apps, period]);
 
   const handleRetry = useCallback(() => {
     load();
@@ -111,7 +111,7 @@ export function StatisticsOverviewPage({
           </div>
 
           <ActivityChartCard
-            range={range}
+            period={period}
             totalBuckets={convertBuckets(data.buckets)}
             series={apps.flatMap((app) => {
               const summary = appSummaries[app.key];

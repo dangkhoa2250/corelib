@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { MemoraStatistics, StatisticsRange } from "../../../domain/statistics";
+import type { MemoraStatistics, StatisticsPeriod } from "../../../domain/statistics";
 import { getMemoraStatistics } from "../../../lib/statistics";
 import { KpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
@@ -24,14 +24,14 @@ function formatRatio(value: number | null): string {
 }
 
 export interface MemoraStatisticsPageProps {
-  range: StatisticsRange;
-  onRangeChange(range: StatisticsRange): void;
+  period: StatisticsPeriod;
+  onPeriodChange?(period: StatisticsPeriod): void;
   getMemoraStats?: typeof getMemoraStatistics;
   onBack?: () => void;
 }
 
 export function MemoraStatisticsPage({
-  range,
+  period,
   getMemoraStats = getMemoraStatistics,
 }: MemoraStatisticsPageProps) {
   const [stats, setStats] = useState<MemoraStatistics | null>(null);
@@ -39,13 +39,13 @@ export function MemoraStatisticsPage({
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const result = await getMemoraStats(range);
+      const result = await getMemoraStats(period);
       setStats(result);
       setState("loaded");
     } catch {
       setState("error");
     }
-  }, [range, getMemoraStats]);
+  }, [period, getMemoraStats]);
 
   useEffect(() => {
     void load();
@@ -101,7 +101,7 @@ export function MemoraStatisticsPage({
                 <KpiCard label="Next 30 days" value={String(stats.dueForecast.next30Days)} />
               </div>
             </MetricSection>
-            <ActivityChartCard range={range} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
+            <ActivityChartCard period={period} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
           </>
         )}
       </MetricSection>

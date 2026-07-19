@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { StatisticsRange } from "../../../domain/statistics";
+import type { StatisticsPeriod } from "../../../domain/statistics";
 import { ScrollArea } from "../../../components/ScrollArea";
 
 interface ActivityHeatmapProps {
   data: Record<string, number>;
-  range: StatisticsRange;
+  period: StatisticsPeriod;
   palette: string[];
 }
 
@@ -120,9 +120,9 @@ function computeSummary(days: DayInfo[]) {
   return { activeDays, peakLevel, currentStreak: streak, totalMinutes, highest };
 }
 
-export function ActivityHeatmap({ data, range, palette }: ActivityHeatmapProps) {
+export function ActivityHeatmap({ data, period, palette }: ActivityHeatmapProps) {
   const grids: YearGrid[] = useMemo(() => {
-    if (range === "all") {
+    if (period.unit === "year") {
       const currentYear = new Date().getFullYear();
       const dataYears = Array.from(new Set(
         Object.keys(data)
@@ -135,10 +135,10 @@ export function ActivityHeatmap({ data, range, palette }: ActivityHeatmapProps) 
         return { year, days, maxColumn: maxColumn(days) };
       });
     }
-    const count = range === "7d" ? 7 : range === "30d" ? 30 : 365;
+    const count = period.unit === "week" ? 7 : 31;
     const days = buildRecentDays(count, data);
     return [{ year: new Date().getFullYear(), days, maxColumn: maxColumn(days) }];
-  }, [data, range]);
+  }, [data, period]);
 
   const allDays = useMemo(() => grids.flatMap((g) => g.days), [grids]);
 
@@ -218,7 +218,7 @@ export function ActivityHeatmap({ data, range, palette }: ActivityHeatmapProps) 
         <div data-testid="statistics-heatmap-scroll-content" className="statistics-heatmap-scroll__content" style={{ paddingBottom: 20 }}>
           {grids.map((grid, gridIdx) => (
             <section key={grid.year} className="statistics-heatmap-year">
-              {range === "all" && <h3 className="statistics-heatmap-year__label">{grid.year}</h3>}
+              {period.unit === "year" && <h3 className="statistics-heatmap-year__label">{grid.year}</h3>}
               <div
                 role="grid"
                 aria-label="Daily activity"

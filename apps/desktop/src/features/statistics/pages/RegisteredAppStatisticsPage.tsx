@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { StatisticsRange } from "../../../domain/statistics";
+import type { StatisticsPeriod } from "../../../domain/statistics";
 import type { AppStatisticsDetail, StatisticsAppDefinition } from "../registry";
 import { ActivityChartCard } from "../components/ActivityChartCard";
 import { formatMetric } from "../components/AppInsightCard";
@@ -8,23 +8,23 @@ import { MetricSection } from "../components/MetricSection";
 
 interface RegisteredAppStatisticsPageProps {
   app: StatisticsAppDefinition;
-  range: StatisticsRange;
+  period: StatisticsPeriod;
 }
 
-export function RegisteredAppStatisticsPage({ app, range }: RegisteredAppStatisticsPageProps) {
+export function RegisteredAppStatisticsPage({ app, period }: RegisteredAppStatisticsPageProps) {
   const [detail, setDetail] = useState<AppStatisticsDetail | null>(null);
   const [state, setState] = useState<"loading" | "loaded" | "error">("loading");
 
   const load = useCallback(async () => {
     setState("loading");
     try {
-      setDetail(await app.loadDetail(range));
+      setDetail(await app.loadDetail(period));
       setState("loaded");
     } catch {
       setDetail(null);
       setState("error");
     }
-  }, [app, range]);
+  }, [app, period]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -38,7 +38,7 @@ export function RegisteredAppStatisticsPage({ app, range }: RegisteredAppStatist
                 <KpiCard key={metric.id} label={metric.label} value={formatMetric(metric.value, metric.unit)} />
               ))}
             </div>
-            <ActivityChartCard range={range} totalBuckets={detail.buckets} series={[]} />
+            <ActivityChartCard period={period} totalBuckets={detail.buckets} series={[]} />
           </>
         )}
       </MetricSection>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { StatisticsRange } from "../../../domain/statistics";
+import type { StatisticsPeriod } from "../../../domain/statistics";
 import {
   deriveStatisticsPalette,
   loadStatisticsPreferences,
@@ -11,28 +11,28 @@ import { ActivityGraph, type GraphMode } from "./ActivityGraph";
 import { StatisticsColorPicker } from "./StatisticsColorPicker";
 
 interface ActivityChartCardProps {
-  range: StatisticsRange;
+  period: StatisticsPeriod;
   totalBuckets: { date: string; value: number }[];
   series: ActivityChartSeries[];
 }
 
-function rangeDefaultGraphMode(range: StatisticsRange): GraphMode {
-  return range === "1y" || range === "all" ? "weekly" : "daily";
+function rangeDefaultGraphMode(period: StatisticsPeriod): GraphMode {
+  return period.unit === "year" ? "weekly" : "daily";
 }
 
 export function ActivityChartCard({
-  range,
+  period,
   totalBuckets,
   series,
 }: ActivityChartCardProps) {
   const prefs = useMemo(() => loadStatisticsPreferences(), []);
 
   const initialView =
-    range === "1y" || range === "all" ? "graph" : prefs.chartView;
+    period.unit === "year" ? "graph" : prefs.chartView;
 
   const [view, setView] = useState<"heatmap" | "graph">(initialView);
   const [graphMode, setGraphMode] = useState<GraphMode>(
-    rangeDefaultGraphMode(range),
+    rangeDefaultGraphMode(period),
   );
   const [selectedApp, setSelectedApp] = useState("all");
   const [baseColor, setBaseColor] = useState(prefs.baseColor);
@@ -41,8 +41,8 @@ export function ActivityChartCard({
   );
 
   useEffect(() => {
-    setGraphMode(rangeDefaultGraphMode(range));
-  }, [range]);
+    setGraphMode(rangeDefaultGraphMode(period));
+  }, [period]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -143,7 +143,7 @@ export function ActivityChartCard({
       {view === "heatmap" && (
         <ActivityHeatmap
           data={heatmapData}
-          range={range}
+          period={period}
           palette={palette}
         />
       )}

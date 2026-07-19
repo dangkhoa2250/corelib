@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AdminStatistics, AdminStatisticsBucket } from "../../domain/account";
-import type { StatisticsRange } from "../../domain/statistics";
+import type { AdminAnalyticsRange, AdminStatistics, AdminStatisticsBucket } from "../../domain/account";
 import { KpiCard } from "../statistics/components/KpiCard";
 import { MetricSection } from "../statistics/components/MetricSection";
-import { StatisticsRangePicker } from "../statistics/components/StatisticsRangePicker";
+import { AdminAnalyticsRangePicker } from "./AdminAnalyticsRangePicker";
 import { StatisticsSkeleton } from "../statistics/components/StatisticsStates";
 import { ActivityChartCard } from "../statistics/components/ActivityChartCard";
 
@@ -12,11 +11,11 @@ const CACHE_KEY = "library.admin-statistics.cache.v1";
 interface CacheEntry {
   data: AdminStatistics;
   cachedAt: string;
-  range: StatisticsRange;
+  range: AdminAnalyticsRange;
   appKey: string;
 }
 
-function loadCache(range: StatisticsRange, appKey: string): CacheEntry | null {
+function loadCache(range: AdminAnalyticsRange, appKey: string): CacheEntry | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
@@ -27,7 +26,7 @@ function loadCache(range: StatisticsRange, appKey: string): CacheEntry | null {
   }
 }
 
-function saveCache(data: AdminStatistics, range: StatisticsRange, appKey: string) {
+function saveCache(data: AdminStatistics, range: AdminAnalyticsRange, appKey: string) {
   try {
     const entry: CacheEntry = { data, cachedAt: new Date().toISOString(), range, appKey };
     localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
@@ -59,7 +58,7 @@ function formatPercent(value: number): string {
 export function AdminAnalyticsPage({
   adminStatistics: adminStatisticsProp,
 }: AdminAnalyticsPageProps) {
-  const [range, setRange] = useState<StatisticsRange>("30d");
+  const [range, setRange] = useState<AdminAnalyticsRange>("30d");
   const [data, setData] = useState<AdminStatistics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +114,7 @@ export function AdminAnalyticsPage({
   return (
     <div className="statistics-shell__content" style={{ padding: "28px 20px 40px 28px" }}>
       <div className="statistics-range-picker" style={{ marginBottom: 24 }}>
-        <StatisticsRangePicker range={range} onChange={setRange} />
+        <AdminAnalyticsRangePicker range={range} onChange={setRange} />
         <select className="statistics-control" aria-label="Admin statistics app" value={appKey} onChange={(event) => setAppKey(event.target.value)}>
           <option value="all">All apps</option>
           <option value="reading">Reading</option>
@@ -241,7 +240,7 @@ export function AdminAnalyticsPage({
           )}
 
           {buckets.length > 0 && (
-            <ActivityChartCard range={range} totalBuckets={buckets} series={[]} />
+            <ActivityChartCard period={{ unit: range === "1y" || range === "all" ? "year" : range === "7d" ? "week" : "month", anchorLocalDay: "2000-01-01" }} totalBuckets={buckets} series={[]} />
           )}
         </>
       )}

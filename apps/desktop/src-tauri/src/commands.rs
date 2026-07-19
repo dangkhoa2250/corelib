@@ -1477,33 +1477,47 @@ pub fn admin_get_statistics(
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetStatisticsOverviewInput {
-    pub range: String,
+    pub period: StatisticsPeriodInput,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatisticsPeriodInput {
+    pub unit: String,
+    pub anchor_local_day: String,
+}
+
+impl StatisticsPeriodInput {
+    fn parse(&self) -> Result<crate::statistics::StatisticsPeriod, String> {
+        crate::statistics::StatisticsPeriod::parse(&self.unit, &self.anchor_local_day)
+            .map_err(|error| error.to_string())
+    }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetReadingStatisticsInput {
-    pub range: String,
+    pub period: StatisticsPeriodInput,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDocumentStatisticsInput {
     pub document_id: String,
-    pub range: String,
+    pub period: StatisticsPeriodInput,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetMemoraStatisticsInput {
-    pub range: String,
+    pub period: StatisticsPeriodInput,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetDeckStatisticsDetailInput {
     pub deck_id: String,
-    pub range: String,
+    pub period: StatisticsPeriodInput,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1553,11 +1567,10 @@ pub fn get_statistics_overview(
     input: GetStatisticsOverviewInput,
     state: State<'_, LibraryStore>,
 ) -> Result<crate::statistics::StatisticsOverview, String> {
-    let range =
-        crate::statistics::StatisticsRange::parse(&input.range).map_err(|e| e.to_string())?;
+    let period = input.period.parse()?;
     let (now_utc, today_local_day) = statistics_now();
     learning_lock(&state)?
-        .statistics_overview(range, &now_utc, &today_local_day)
+        .statistics_overview(&period, &now_utc, &today_local_day)
         .map_err(|e| e.to_string())
 }
 
@@ -1566,11 +1579,10 @@ pub fn get_reading_statistics(
     input: GetReadingStatisticsInput,
     state: State<'_, LibraryStore>,
 ) -> Result<crate::statistics::ReadingStatistics, String> {
-    let range =
-        crate::statistics::StatisticsRange::parse(&input.range).map_err(|e| e.to_string())?;
+    let period = input.period.parse()?;
     let (now_utc, today_local_day) = statistics_now();
     learning_lock(&state)?
-        .reading_statistics(range, &now_utc, &today_local_day)
+        .reading_statistics(&period, &now_utc, &today_local_day)
         .map_err(|e| e.to_string())
 }
 
@@ -1579,11 +1591,10 @@ pub fn get_document_statistics(
     input: GetDocumentStatisticsInput,
     state: State<'_, LibraryStore>,
 ) -> Result<crate::statistics::DocumentStatistics, String> {
-    let range =
-        crate::statistics::StatisticsRange::parse(&input.range).map_err(|e| e.to_string())?;
+    let period = input.period.parse()?;
     let (now_utc, today_local_day) = statistics_now();
     learning_lock(&state)?
-        .document_statistics(&input.document_id, range, &now_utc, &today_local_day)
+        .document_statistics(&input.document_id, &period, &now_utc, &today_local_day)
         .map_err(|e| e.to_string())
 }
 
@@ -1592,11 +1603,10 @@ pub fn get_memora_statistics(
     input: GetMemoraStatisticsInput,
     state: State<'_, LibraryStore>,
 ) -> Result<crate::statistics::MemoraStatistics, String> {
-    let range =
-        crate::statistics::StatisticsRange::parse(&input.range).map_err(|e| e.to_string())?;
+    let period = input.period.parse()?;
     let (now_utc, today_local_day) = statistics_now();
     learning_lock(&state)?
-        .memora_statistics(range, &now_utc, &today_local_day)
+        .memora_statistics(&period, &now_utc, &today_local_day)
         .map_err(|e| e.to_string())
 }
 
@@ -1605,11 +1615,10 @@ pub fn get_deck_statistics_detail(
     input: GetDeckStatisticsDetailInput,
     state: State<'_, LibraryStore>,
 ) -> Result<crate::statistics::DeckStatisticsDetail, String> {
-    let range =
-        crate::statistics::StatisticsRange::parse(&input.range).map_err(|e| e.to_string())?;
+    let period = input.period.parse()?;
     let (now_utc, today_local_day) = statistics_now();
     learning_lock(&state)?
-        .deck_statistics_detail(&input.deck_id, range, &now_utc, &today_local_day)
+        .deck_statistics_detail(&input.deck_id, &period, &now_utc, &today_local_day)
         .map_err(|e| e.to_string())
 }
 

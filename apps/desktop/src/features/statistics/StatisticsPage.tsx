@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import type { StatisticsRange } from "../../domain/statistics";
+import type { StatisticsPeriod } from "../../domain/statistics";
+import { currentPeriod } from "./period";
 import type { StatisticsRouteTarget } from "../../app/routes";
 import { StatisticsShell } from "./components/StatisticsShell";
 import { StatisticsOverviewPage } from "./pages/StatisticsOverviewPage";
@@ -28,7 +29,7 @@ export function StatisticsPage({
   onBack,
   apps = DEFAULT_STATISTICS_APPS,
 }: StatisticsPageProps) {
-  const [range, setRange] = useState<StatisticsRange>("30d");
+  const [period, setPeriod] = useState<StatisticsPeriod>(() => currentPeriod("month"));
   const [view, setView] = useState<StatisticsView>({ kind: "overview" });
 
   useEffect(() => {
@@ -73,34 +74,34 @@ export function StatisticsPage({
       title={title}
       breadcrumb={breadcrumb}
       onBack={shellBack}
-      range={range}
-      onRangeChange={setRange}
+      period={period}
+      onPeriodChange={setPeriod}
     >
       {view.kind === "overview" && (
         <StatisticsOverviewPage
-          range={range}
-          onRangeChange={setRange}
+          period={period}
+          onPeriodChange={setPeriod}
           apps={apps}
           onOpenApp={(appKey) => setView({ kind: "app", appKey })}
         />
       )}
       {view.kind === "app" && selectedApp && (
-        <RegisteredAppStatisticsPage app={selectedApp} range={range} />
+        <RegisteredAppStatisticsPage app={selectedApp} period={period} />
       )}
       {view.kind === "app" && !selectedApp && <MetricSection title="App statistics" state="empty" />}
       {view.kind === "document" && (
         <DocumentStatisticsPage
           documentId={view.documentId}
-          range={range}
-          onRangeChange={setRange}
+          period={period}
+          onPeriodChange={setPeriod}
           onBack={() => setView({ kind: "overview" })}
         />
       )}
       {view.kind === "deck" && (
         <DeckStatisticsPage
           deckId={view.deckId}
-          range={range}
-          onRangeChange={setRange}
+          period={period}
+          onPeriodChange={setPeriod}
           onBack={() => setView({ kind: "overview" })}
         />
       )}

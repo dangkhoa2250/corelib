@@ -1,4 +1,11 @@
-export type StatisticsRange = "7d" | "30d" | "1y" | "all";
+export type StatisticsPeriodUnit = "week" | "month" | "year";
+
+export interface StatisticsPeriod {
+  unit: StatisticsPeriodUnit;
+  anchorLocalDay: string;
+}
+
+export type StatisticsBucketStartHour = 0 | 4 | 8 | 12 | 16 | 20;
 
 export interface ActivityBucket {
   localDay: string;
@@ -11,7 +18,18 @@ export interface StatisticsOverview {
   memoraActiveMs: number;
   currentStreak: number;
   activeDays: number;
+  previousActiveMs: number;
+  previousActiveDays: number;
   buckets: ActivityBucket[];
+  timeBuckets: StatisticsTimeBucket[];
+}
+
+export interface StatisticsTimeBucket {
+  localDay: string;
+  bucketStartHour: StatisticsBucketStartHour;
+  appKey: "reading" | "memora";
+  activeMs: number;
+  isFuture: boolean;
 }
 
 export interface RatingDistribution {

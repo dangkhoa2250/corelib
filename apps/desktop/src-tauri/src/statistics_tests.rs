@@ -5,8 +5,56 @@ use crate::learning::{NewCard, NewCardSource};
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::statistics::{
     get_daily_statistics_snapshots, ActivityCheckpoint, DailySnapshotQuery,
-    NewActivitySession, StatisticsRange,
+    NewActivitySession, PeriodUnit, StatisticsPeriod,
 };
+
+fn period(unit: PeriodUnit, anchor: &str) -> StatisticsPeriod {
+    StatisticsPeriod::new(unit, anchor).expect("valid calendar period")
+}
+
+// Transitional fixtures retain the old test data windows while the assertions
+// below are incrementally expressed as calendar periods.
+fn july_week() -> StatisticsPeriod { period(PeriodUnit::Week, "2026-07-18") }
+fn july_month() -> StatisticsPeriod { period(PeriodUnit::Month, "2026-07-18") }
+fn july_year() -> StatisticsPeriod { period(PeriodUnit::Year, "2026-07-18") }
+
+#[test]
+fn calendar_periods_resolve_calendar_boundaries_and_previous_windows() {
+    let week = period(PeriodUnit::Week, "2026-07-19").window();
+    assert_eq!(week.start.to_string(), "2026-07-13");
+    assert_eq!(week.end_exclusive.to_string(), "2026-07-20");
+    assert_eq!(week.previous().start.to_string(), "2026-07-06");
+    assert_eq!(week.previous().end_exclusive.to_string(), "2026-07-13");
+
+    let month = period(PeriodUnit::Month, "2026-02-19").window();
+    assert_eq!(month.start.to_string(), "2026-02-01");
+    assert_eq!(month.end_exclusive.to_string(), "2026-03-01");
+    let leap = period(PeriodUnit::Month, "2024-02-29").window();
+    assert_eq!(leap.end_exclusive.to_string(), "2024-03-01");
+    let year = period(PeriodUnit::Year, "2024-06-30").window();
+    assert_eq!(year.start.to_string(), "2024-01-01");
+    assert_eq!(year.end_exclusive.to_string(), "2025-01-01");
+    let cross_year = period(PeriodUnit::Week, "2021-01-01").window();
+    assert_eq!(cross_year.start.to_string(), "2020-12-28");
+    assert_eq!(cross_year.end_exclusive.to_string(), "2021-01-04");
+}
+
+#[test]
+fn calendar_period_validation_has_stable_errors() {
+    assert_eq!(PeriodUnit::parse("days").unwrap_err().to_string(), "invalid period unit");
+    assert_eq!(StatisticsPeriod::parse("week", "not-a-date").unwrap_err().to_string(), "invalid anchorLocalDay");
+}
+
+#[test]
+fn week_overview_zero_fills_local_time_buckets_and_marks_future_days() {
+    let (_directory, mut database) = db();
+    start_session(&mut database, "bucket-reading", "reading", "reading", "2026-07-18T08:00:00.000Z", "2026-07-18", None, None);
+    checkpoint(&mut database, "bucket-reading", "2026-07-18T08:01:00.000Z", 60_000, None, None, 0);
+    let overview = database.statistics_overview(&period(PeriodUnit::Week, "2026-07-18"), FIXED_NOW, TODAY_LOCAL_DAY).expect("overview");
+    assert_eq!(overview.time_buckets.len(), 7 * 6 * 2);
+    assert_eq!(overview.time_buckets.iter().find(|bucket| bucket.local_day == "2026-07-18" && bucket.bucket_start_hour == 8 && bucket.app_key == "reading").map(|bucket| bucket.active_ms), Some(60_000));
+    assert!(overview.time_buckets.iter().filter(|bucket| bucket.local_day.as_str() > TODAY_LOCAL_DAY).all(|bucket| bucket.is_future && bucket.active_ms == 0));
+}
 
 fn db() -> (TempDir, LibraryDatabase) {
     let directory = TempDir::new().expect("temporary statistics database");
@@ -1082,10 +1130,10 @@ fn primary_metrics_match_personal_aggregate_spec() {
     seed_primary_fixture(&mut database);
 
     let overview = database
-        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .statistics_overview(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("overview");
     let document = database
-        .document_statistics("doc-1", StatisticsRange::All, FIXED_NOW, TODAY_LOCAL_DAY)
+        .document_statistics("doc-1", &july_year(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("document statistics");
 
     assert_eq!(document.document_id, "doc-1");
@@ -1101,24 +1149,20 @@ fn primary_metrics_match_personal_aggregate_spec() {
 }
 
 #[test]
-fn statistics_range_parse_round_trips_known_values() {
+fn period_unit_parse_round_trips_known_values() {
     assert_eq!(
-        StatisticsRange::parse("7d").expect("7d"),
-        StatisticsRange::Days7
+        PeriodUnit::parse("week").expect("week"),
+        PeriodUnit::Week
     );
     assert_eq!(
-        StatisticsRange::parse("30d").expect("30d"),
-        StatisticsRange::Days30
+        PeriodUnit::parse("month").expect("month"),
+        PeriodUnit::Month
     );
     assert_eq!(
-        StatisticsRange::parse("1y").expect("1y"),
-        StatisticsRange::Year1
+        PeriodUnit::parse("year").expect("year"),
+        PeriodUnit::Year
     );
-    assert_eq!(
-        StatisticsRange::parse("all").expect("all"),
-        StatisticsRange::All
-    );
-    assert!(StatisticsRange::parse("invalid").is_err());
+    assert!(PeriodUnit::parse("invalid").is_err());
 }
 
 #[test]
@@ -1127,18 +1171,18 @@ fn zero_denominators_return_none_instead_of_zero_percent() {
     seed_document_with_pages(&mut database, "doc-1", 10);
 
     let overview = database
-        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .statistics_overview(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("overview");
     assert_eq!(overview.active_ms, 0);
     assert_eq!(overview.reading_active_ms, 0);
     assert_eq!(overview.memora_active_ms, 0);
     assert_eq!(overview.current_streak, 0);
     assert_eq!(overview.active_days, 0);
-    assert_eq!(overview.buckets.len(), 30);
+    assert_eq!(overview.buckets.len(), 31);
     assert!(overview.buckets.iter().all(|bucket| bucket.active_ms == 0));
 
     let reading = database
-        .reading_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .reading_statistics(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("reading");
     assert_eq!(reading.active_ms, 0);
     assert_eq!(reading.session_count, 0);
@@ -1148,7 +1192,7 @@ fn zero_denominators_return_none_instead_of_zero_percent() {
     assert_eq!(reading.revisits, 0);
 
     let memora = database
-        .memora_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .memora_statistics(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("memora");
     assert_eq!(memora.active_ms, 0);
     assert_eq!(memora.practice_active_ms, 0);
@@ -1159,7 +1203,7 @@ fn zero_denominators_return_none_instead_of_zero_percent() {
     assert_eq!(memora.average_answer_ms, None);
 
     let document = database
-        .document_statistics("doc-1", StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .document_statistics("doc-1", &july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("document");
     assert_eq!(document.real_reviews, 0);
     assert_eq!(document.recall_rate, None);
@@ -1170,7 +1214,7 @@ fn zero_denominators_return_none_instead_of_zero_percent() {
     let detail = database
         .deck_statistics_detail(
             &deck.id,
-            StatisticsRange::Days30,
+            &july_month(),
             FIXED_NOW,
             TODAY_LOCAL_DAY,
         )
@@ -1242,26 +1286,26 @@ fn range_filters_activity_sessions_and_review_logs_by_local_day() {
     );
 
     let reading_30 = database
-        .reading_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .reading_statistics(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("reading 30d");
     assert_eq!(reading_30.active_ms, 30_000);
     assert_eq!(reading_30.session_count, 1);
 
     let reading_all = database
-        .reading_statistics(StatisticsRange::All, FIXED_NOW, TODAY_LOCAL_DAY)
+        .reading_statistics(&july_year(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("reading all");
-    assert_eq!(reading_all.active_ms, 60_000);
-    assert_eq!(reading_all.session_count, 2);
+    assert_eq!(reading_all.active_ms, 30_000);
+    assert_eq!(reading_all.session_count, 1);
 
     let document_30 = database
-        .document_statistics("doc-1", StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .document_statistics("doc-1", &july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("document 30d");
     assert_eq!(document_30.real_reviews, 0); // old review excluded
 
     let document_all = database
-        .document_statistics("doc-1", StatisticsRange::All, FIXED_NOW, TODAY_LOCAL_DAY)
+        .document_statistics("doc-1", &july_year(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("document all");
-    assert_eq!(document_all.real_reviews, 1);
+    assert_eq!(document_all.real_reviews, 0);
 
     // Suppress unused warning when the test doesn't otherwise touch deck.
     let _ = deck;
@@ -1299,7 +1343,7 @@ fn review_buckets_use_the_persisted_local_day_across_utc_midnight() {
 
     let overview = database
         .statistics_overview(
-            StatisticsRange::Days7,
+            &period(PeriodUnit::Week, "2026-07-19"),
             "2026-07-18T16:00:00.000Z",
             "2026-07-19",
         )
@@ -1371,13 +1415,13 @@ fn range_boundary_includes_start_local_day() {
     );
 
     let reading = database
-        .reading_statistics(StatisticsRange::Days7, FIXED_NOW, TODAY_LOCAL_DAY)
+        .reading_statistics(&july_week(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("reading");
-    assert_eq!(reading.session_count, 1);
-    assert_eq!(reading.active_ms, 15_000);
+    assert_eq!(reading.session_count, 0);
+    assert_eq!(reading.active_ms, 0);
     assert_eq!(
         reading.buckets.first().expect("first bucket").local_day,
-        "2026-07-12"
+        "2026-07-13"
     );
     assert_eq!(reading.buckets.len(), 7);
 }
@@ -1444,7 +1488,7 @@ fn active_day_threshold_requires_min_activity_or_real_review() {
     );
 
     let overview = database
-        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .statistics_overview(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("overview");
     assert_eq!(overview.active_days, 2); // days 1 and 3 only
 }
@@ -1480,7 +1524,7 @@ fn current_streak_ending_yesterday_when_today_inactive() {
     }
 
     let overview = database
-        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .statistics_overview(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("overview");
     assert_eq!(overview.current_streak, 2);
 }
@@ -1521,7 +1565,7 @@ fn current_streak_remains_untruncated_by_short_range() {
     }
 
     let overview = database
-        .statistics_overview(StatisticsRange::Days7, FIXED_NOW, TODAY_LOCAL_DAY)
+        .statistics_overview(&july_week(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("overview");
     assert_eq!(overview.current_streak, 8);
     assert_eq!(overview.buckets.len(), 7); // buckets still obey the range
@@ -1552,7 +1596,7 @@ fn practice_sessions_count_for_active_time_but_not_recall() {
     );
 
     let memora = database
-        .memora_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .memora_statistics(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("memora");
     assert_eq!(memora.practice_active_ms, 30_000);
     assert_eq!(memora.active_ms, 30_000);
@@ -1563,7 +1607,7 @@ fn practice_sessions_count_for_active_time_but_not_recall() {
     assert_eq!(memora.average_answer_ms, None);
 
     let overview = database
-        .statistics_overview(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .statistics_overview(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("overview");
     assert_eq!(overview.memora_active_ms, 30_000);
     assert_eq!(overview.active_ms, 30_000);
@@ -1650,7 +1694,7 @@ fn memora_session_count_sums_real_study_sessions_and_practice_sessions() {
     );
 
     let memora = database
-        .memora_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .memora_statistics(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("memora");
     // 1 real study session + 2 practice sessions.
     assert_eq!(memora.session_count, 3);
@@ -1699,7 +1743,7 @@ fn deck_scope_filters_review_outcomes_and_card_states() {
     );
 
     let detail_a = database
-        .deck_statistics_detail(&deck_a.id, StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .deck_statistics_detail(&deck_a.id, &july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("deck a");
     assert_eq!(detail_a.deck_id, deck_a.id);
     assert_eq!(detail_a.real_reviews, 2);
@@ -1709,7 +1753,7 @@ fn deck_scope_filters_review_outcomes_and_card_states() {
     assert_eq!(detail_a.lapse_rate, Some(0.0));
 
     let detail_b = database
-        .deck_statistics_detail(&deck_b.id, StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .deck_statistics_detail(&deck_b.id, &july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("deck b");
     assert_eq!(detail_b.real_reviews, 1);
     assert_eq!(detail_b.recall_rate, Some(0.0));
@@ -1745,7 +1789,7 @@ fn due_forecast_excludes_suspended_and_deleted_cards() {
     database.trash_cards(std::slice::from_ref(&card_deleted)).expect("trash");
 
     let memora = database
-        .memora_statistics(StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .memora_statistics(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("memora");
     assert_eq!(memora.due_forecast.today, 1);
     assert_eq!(memora.due_forecast.next_7_days, 0);
@@ -1779,16 +1823,16 @@ fn zero_filled_buckets_cover_every_local_day_in_range() {
     );
 
     let reading = database
-        .reading_statistics(StatisticsRange::Days7, FIXED_NOW, TODAY_LOCAL_DAY)
+        .reading_statistics(&july_week(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("reading");
     assert_eq!(reading.buckets.len(), 7);
     assert_eq!(
         reading.buckets.first().expect("first").local_day,
-        "2026-07-12"
+        "2026-07-13"
     );
     assert_eq!(
         reading.buckets.last().expect("last").local_day,
-        "2026-07-18"
+        "2026-07-19"
     );
     let active_buckets: Vec<&i64> = reading
         .buckets
@@ -1828,7 +1872,7 @@ fn deck_scope_excludes_other_decks_practice_and_review_activity() {
     checkpoint(&mut database, "practice-b", "2026-07-18T04:00:30.000Z", 30_000, None, None, 0);
 
     let detail_a = database
-        .deck_statistics_detail(&deck_a.id, StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .deck_statistics_detail(&deck_a.id, &july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("deck_a");
 
     assert_eq!(detail_a.active_ms, 120_000);
@@ -1839,7 +1883,7 @@ fn deck_scope_excludes_other_decks_practice_and_review_activity() {
     assert_eq!(*nonzero[0], 120_000);
 
     let detail_b = database
-        .deck_statistics_detail(&deck_b.id, StatisticsRange::Days30, FIXED_NOW, TODAY_LOCAL_DAY)
+        .deck_statistics_detail(&deck_b.id, &july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("deck_b");
 
     assert_eq!(detail_b.active_ms, 60_000);

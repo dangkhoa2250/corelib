@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use chrono::{DateTime, Duration, FixedOffset, NaiveDate, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, FixedOffset, NaiveDate, TimeZone, Timelike, Utc};
 use rusqlite::{params, OptionalExtension};
 
 use crate::library_db::LibraryDatabase;
@@ -34,41 +34,109 @@ impl From<rusqlite::Error> for StatisticsError {
 }
 
 // ---------------------------------------------------------------------------
-// Range + response types
+// Calendar period + response types
 // ---------------------------------------------------------------------------
 
-/// Selected historical window for aggregate queries.
-///
-/// Range boundaries use the persisted local calendar day for both activity
-/// sessions and real reviews.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum StatisticsRange {
-    Days7,
-    Days30,
-    Year1,
-    All,
+pub enum PeriodUnit {
+    Week,
+    Month,
+    Year,
 }
 
-impl StatisticsRange {
+impl PeriodUnit {
     pub fn parse(value: &str) -> Result<Self> {
         match value {
-            "7d" => Ok(Self::Days7),
-            "30d" => Ok(Self::Days30),
-            "1y" => Ok(Self::Year1),
-            "all" => Ok(Self::All),
-            _ => Err(StatisticsError::Validation(
-                "invalid statistics range".into(),
-            )),
+            "week" => Ok(Self::Week),
+            "month" => Ok(Self::Month),
+            "year" => Ok(Self::Year),
+            _ => Err(StatisticsError::Validation("invalid period unit".into())),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StatisticsPeriod {
+    pub unit: PeriodUnit,
+    pub anchor_local_day: NaiveDate,
+}
+
+impl StatisticsPeriod {
+    pub fn new(unit: PeriodUnit, anchor_local_day: &str) -> Result<Self> {
+        let anchor_local_day = NaiveDate::parse_from_str(anchor_local_day, "%Y-%m-%d")
+            .map_err(|_| StatisticsError::Validation("invalid anchorLocalDay".into()))?;
+        Ok(Self { unit, anchor_local_day })
+    }
+
+    pub fn parse(unit: &str, anchor_local_day: &str) -> Result<Self> {
+        Self::new(PeriodUnit::parse(unit)?, anchor_local_day)
+    }
+
+    pub fn window(&self) -> CalendarWindow {
+        CalendarWindow::for_period(self.unit, self.anchor_local_day)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CalendarWindow {
+    pub start: NaiveDate,
+    pub end_exclusive: NaiveDate,
+    start_text: String,
+    today: String,
+}
+
+impl CalendarWindow {
+    fn for_period(unit: PeriodUnit, anchor: NaiveDate) -> Self {
+        let start = match unit {
+            PeriodUnit::Week => anchor - Duration::days(anchor.weekday().num_days_from_monday() as i64),
+            PeriodUnit::Month => anchor.with_day(1).expect("first day of month"),
+            PeriodUnit::Year => anchor.with_month(1).and_then(|day| day.with_day(1)).expect("first day of year"),
+        };
+        let end_exclusive = match unit {
+            PeriodUnit::Week => start + Duration::days(7),
+            PeriodUnit::Month => if start.month() == 12 {
+                NaiveDate::from_ymd_opt(start.year() + 1, 1, 1).expect("next year")
+            } else {
+                NaiveDate::from_ymd_opt(start.year(), start.month() + 1, 1).expect("next month")
+            },
+            PeriodUnit::Year => NaiveDate::from_ymd_opt(start.year() + 1, 1, 1).expect("next year"),
+        };
+        Self::from_dates(start, end_exclusive)
+    }
+
+    fn from_dates(start: NaiveDate, end_exclusive: NaiveDate) -> Self {
+        Self {
+            start,
+            end_exclusive,
+            start_text: format_local_day(start),
+            today: format_local_day(end_exclusive - Duration::days(1)),
         }
     }
 
-    fn day_count(&self) -> Option<i64> {
-        match self {
-            Self::Days7 => Some(7),
-            Self::Days30 => Some(30),
-            Self::Year1 => Some(365),
-            Self::All => None,
+    pub fn previous(&self) -> Self {
+        let unit = (self.end_exclusive - self.start).num_days();
+        if unit == 7 {
+            Self::from_dates(self.start - Duration::days(7), self.start)
+        } else if self.start.month() == 1 && self.start.day() == 1 && self.end_exclusive.month() == 1 && self.end_exclusive.day() == 1 {
+            Self::from_dates(
+                NaiveDate::from_ymd_opt(self.start.year() - 1, 1, 1).expect("previous year"),
+                self.start,
+            )
+        } else {
+            let previous_end = self.start;
+            let previous_start = if previous_end.month() == 1 {
+                NaiveDate::from_ymd_opt(previous_end.year() - 1, 12, 1).expect("previous month")
+            } else {
+                NaiveDate::from_ymd_opt(previous_end.year(), previous_end.month() - 1, 1).expect("previous month")
+            };
+            Self::from_dates(previous_start, previous_end)
         }
+    }
+
+    fn start(&self) -> Option<&str> { Some(&self.start_text) }
+
+    fn bucket_days(&self, _connection: &rusqlite::Connection, _today_local_day: &str, _now_utc: &str) -> Result<Vec<String>> {
+        enumerate_days(&self.start_text, &self.today)
     }
 }
 
@@ -87,7 +155,20 @@ pub struct StatisticsOverview {
     pub memora_active_ms: i64,
     pub current_streak: i64,
     pub active_days: i64,
+    pub previous_active_ms: i64,
+    pub previous_active_days: i64,
     pub buckets: Vec<ActivityBucket>,
+    pub time_buckets: Vec<StatisticsTimeBucket>,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatisticsTimeBucket {
+    pub local_day: String,
+    pub bucket_start_hour: i64,
+    pub app_key: String,
+    pub active_ms: i64,
+    pub is_future: bool,
 }
 
 #[derive(Clone, Debug, Default, serde::Serialize)]
@@ -516,15 +597,13 @@ impl LibraryDatabase {
 
     pub fn statistics_overview(
         &self,
-        range: StatisticsRange,
+        period: &StatisticsPeriod,
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<StatisticsOverview> {
-        let window = RangeWindow::compute(range, today_local_day)?;
-        let reading_active =
-            query_activity_active_ms(&self.connection, Some("reading"), window.start(), None)?;
-        let practice_active =
-            query_activity_active_ms(&self.connection, Some("practice"), window.start(), None)?;
+        let window = period.window();
+        let reading_active = query_window_activity_ms(&self.connection, "reading", &window)?;
+        let practice_active = query_window_activity_ms(&self.connection, "practice", &window)?;
         let real_ms =
             query_capped_review_ms(&self.connection, &window, now_utc, ReviewScope::All)?;
         let memora_active = real_ms + practice_active;
@@ -538,27 +617,38 @@ impl LibraryDatabase {
         let bucket_days = window.bucket_days(&self.connection, today_local_day, now_utc)?;
         let buckets = build_total_buckets(&self.connection, &bucket_days, &window, now_utc)?;
 
+        let previous = window.previous();
+        let previous_reading = query_window_activity_ms(&self.connection, "reading", &previous)?;
+        let previous_practice = query_window_activity_ms(&self.connection, "practice", &previous)?;
+        let previous_real = query_capped_review_ms(&self.connection, &previous, now_utc, ReviewScope::All)?;
+        let previous_active_ms = previous_reading + previous_practice + previous_real;
+        let previous_active_days = count_active_days_in_window(&lifetime_active_days, &previous);
+        let time_buckets = build_time_buckets(&self.connection, &window, today_local_day)?;
+
         Ok(StatisticsOverview {
             active_ms,
             reading_active_ms: reading_active,
             memora_active_ms: memora_active,
             current_streak,
             active_days,
+            previous_active_ms,
+            previous_active_days,
             buckets,
+            time_buckets,
         })
     }
 
     pub fn reading_statistics(
         &self,
-        range: StatisticsRange,
+        period: &StatisticsPeriod,
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<ReadingStatistics> {
-        let window = RangeWindow::compute(range, today_local_day)?;
+        let window = period.window();
         let active_ms =
-            query_activity_active_ms(&self.connection, Some("reading"), window.start(), None)?;
+            query_activity_active_ms(&self.connection, "reading", &window, None)?;
         let session_count =
-            query_activity_session_count(&self.connection, Some("reading"), window.start())?;
+            query_activity_session_count(&self.connection, "reading", &window)?;
         let average_session_ms = average(active_ms, session_count);
 
         let page_metrics = query_reading_page_metrics(&self.connection, &window, None)?;
@@ -579,11 +669,11 @@ impl LibraryDatabase {
     pub fn document_statistics(
         &self,
         document_id: &str,
-        range: StatisticsRange,
+        period: &StatisticsPeriod,
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<DocumentStatistics> {
-        let window = RangeWindow::compute(range, today_local_day)?;
+        let window = period.window();
         let scope = ReviewScope::Document(document_id);
 
         let page_metrics = query_reading_page_metrics(&self.connection, &window, Some(document_id))?;
@@ -621,11 +711,11 @@ impl LibraryDatabase {
 
     pub fn memora_statistics(
         &self,
-        range: StatisticsRange,
+        period: &StatisticsPeriod,
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<MemoraStatistics> {
-        let window = RangeWindow::compute(range, today_local_day)?;
+        let window = period.window();
         let body = build_memora_body(&self.connection, &window, now_utc, today_local_day, None)?;
         Ok(MemoraStatistics {
             active_ms: body.active_ms,
@@ -646,11 +736,11 @@ impl LibraryDatabase {
     pub fn deck_statistics_detail(
         &self,
         deck_id: &str,
-        range: StatisticsRange,
+        period: &StatisticsPeriod,
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<DeckStatisticsDetail> {
-        let window = RangeWindow::compute(range, today_local_day)?;
+        let window = period.window();
         let body = build_memora_body(
             &self.connection,
             &window,
@@ -675,60 +765,8 @@ impl LibraryDatabase {
 }
 
 // ---------------------------------------------------------------------------
-// Range window + scope helpers
+// Calendar window + scope helpers
 // ---------------------------------------------------------------------------
-
-/// Resolved `[start_local_day, today_local_day]` window for a query.
-///
-/// `start` is `None` for `StatisticsRange::All`. UTC equivalents are derived
-/// by treating the local-day string as a UTC date (see the module-level
-/// comment on `StatisticsRange`).
-struct RangeWindow {
-    start: Option<String>,
-    today: String,
-}
-
-impl RangeWindow {
-    fn compute(range: StatisticsRange, today_local_day: &str) -> Result<Self> {
-        let today_date = parse_local_day(today_local_day)?;
-        let start = range
-            .day_count()
-            .map(|days| format_local_day(today_date - chrono::Duration::days(days - 1)));
-        Ok(Self {
-            start,
-            today: today_local_day.to_string(),
-        })
-    }
-
-    fn start(&self) -> Option<&str> {
-        self.start.as_deref()
-    }
-
-    /// Ordered list of local days covered by this window.
-    ///
-    /// Bounded ranges enumerate `[start, today]` inclusive so the UI always
-    /// sees a zero-filled grid. For `All`, walk from the earliest activity
-    /// day (review or activity) up to today; if there is no activity yet,
-    /// return an empty list.
-    fn bucket_days(
-        &self,
-        connection: &rusqlite::Connection,
-        today_local_day: &str,
-        now_utc: &str,
-    ) -> Result<Vec<String>> {
-        match &self.start {
-            Some(start) => enumerate_days(start, &self.today),
-            None => {
-                let earliest = earliest_activity_day(connection, today_local_day, now_utc)?;
-                match earliest {
-                    Some(day) => enumerate_days(&day, &self.today),
-                    None => Ok(Vec::new()),
-                }
-            }
-        }
-    }
-
-}
 
 #[derive(Clone, Copy)]
 enum ReviewScope<'a> {
@@ -772,7 +810,7 @@ struct MemoraBody {
 
 fn build_memora_body(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
     today_local_day: &str,
     deck_scope: Option<&str>,
@@ -782,12 +820,12 @@ fn build_memora_body(
         None => ReviewScope::All,
     };
 
-    let practice_active_ms = query_activity_active_ms(connection, Some("practice"), window.start(), deck_scope)?;
+    let practice_active_ms = query_activity_active_ms(connection, "practice", window, deck_scope)?;
     let real_ms = query_capped_review_ms(connection, window, now_utc, scope)?;
     let active_ms = real_ms + practice_active_ms;
 
     let real_session_count = query_real_study_session_count(connection, window, deck_scope)?;
-    let practice_session_count = query_practice_session_count(connection, window.start(), deck_scope)?;
+    let practice_session_count = query_practice_session_count(connection, window, deck_scope)?;
     let session_count = real_session_count + practice_session_count;
 
     let real_reviews = query_count_real_reviews(connection, window, now_utc, scope)?;
@@ -893,103 +931,57 @@ fn activity_window_clause(start: Option<&str>) -> &'static str {
 
 fn query_activity_active_ms(
     connection: &rusqlite::Connection,
-    activity_kind: Option<&str>,
-    start: Option<&str>,
+    activity_kind: &str,
+    window: &CalendarWindow,
     deck_scope: Option<&str>,
 ) -> Result<i64> {
-    let kind_clause = match activity_kind {
-        Some(_) => "activity_kind = ? AND",
-        None => "",
-    };
     let deck_clause = match (activity_kind, deck_scope) {
-        (Some("practice"), Some(_)) => "context_kind = 'deck' AND context_id = ? AND",
+        ("practice", Some(_)) => "AND context_kind = 'deck' AND context_id = ?4",
         _ => "",
     };
     let sql = format!(
         "SELECT COALESCE(SUM(raw_active_ms), 0) FROM activity_sessions
-         WHERE {kind_clause} {deck_clause} {window}",
-        kind_clause = kind_clause,
+         WHERE activity_kind = ?1 AND local_day >= ?2 AND local_day < ?3 {deck_clause}",
         deck_clause = deck_clause,
-        window = activity_window_clause(start),
     );
-    Ok(match (activity_kind, deck_scope, start) {
-        (Some(kind), Some(deck), Some(start_str)) => connection.query_row(
-            &sql,
-            params![kind, deck, today_upper_bound(), start_str],
-            |row| row.get(0),
-        )?,
-        (Some(kind), Some(deck), None) => connection.query_row(
-            &sql,
-            params![kind, deck, today_upper_bound()],
-            |row| row.get(0),
-        )?,
-        (Some(kind), None, Some(start_str)) => connection.query_row(
-            &sql,
-            params![kind, today_upper_bound(), start_str],
-            |row| row.get(0),
-        )?,
-        (Some(kind), None, None) => connection.query_row(
-            &sql,
-            params![kind, today_upper_bound()],
-            |row| row.get(0),
-        )?,
-        (None, _, Some(start_str)) => connection.query_row(
-            &sql,
-            params![today_upper_bound(), start_str],
-            |row| row.get(0),
-        )?,
-        (None, _, None) => connection.query_row(
-            &sql,
-            params![today_upper_bound()],
-            |row| row.get(0),
-        )?,
+    Ok(match deck_scope {
+        Some(deck) => connection.query_row(&sql, params![activity_kind, format_local_day(window.start), format_local_day(window.end_exclusive), deck], |row| row.get(0))?,
+        None => connection.query_row(&sql, params![activity_kind, format_local_day(window.start), format_local_day(window.end_exclusive)], |row| row.get(0))?,
     })
+}
+
+fn query_window_activity_ms(
+    connection: &rusqlite::Connection,
+    activity_kind: &str,
+    window: &CalendarWindow,
+) -> Result<i64> {
+    Ok(connection.query_row(
+        "SELECT COALESCE(SUM(raw_active_ms), 0) FROM activity_sessions
+         WHERE activity_kind = ?1 AND local_day >= ?2 AND local_day < ?3",
+        params![activity_kind, format_local_day(window.start), format_local_day(window.end_exclusive)],
+        |row| row.get(0),
+    )?)
 }
 
 fn query_activity_session_count(
     connection: &rusqlite::Connection,
-    activity_kind: Option<&str>,
-    start: Option<&str>,
+    activity_kind: &str,
+    window: &CalendarWindow,
 ) -> Result<i64> {
-    let kind_clause = match activity_kind {
-        Some(_) => "activity_kind = ? AND",
-        None => "",
-    };
-    let sql = format!(
-        "SELECT COUNT(*) FROM activity_sessions
-         WHERE {kind_clause} {window}",
-        kind_clause = kind_clause,
-        window = activity_window_clause(start),
-    );
-    Ok(match (activity_kind, start) {
-        (Some(kind), Some(start_str)) => connection.query_row(
-            &sql,
-            params![kind, today_upper_bound(), start_str],
-            |row| row.get(0),
-        )?,
-        (Some(kind), None) => connection.query_row(
-            &sql,
-            params![kind, today_upper_bound()],
-            |row| row.get(0),
-        )?,
-        (None, Some(start_str)) => connection.query_row(
-            &sql,
-            params![today_upper_bound(), start_str],
-            |row| row.get(0),
-        )?,
-        (None, None) => connection.query_row(&sql, params![today_upper_bound()], |row| {
-            row.get(0)
-        })?,
-    })
+    Ok(connection.query_row(
+        "SELECT COUNT(*) FROM activity_sessions WHERE activity_kind = ?1 AND local_day >= ?2 AND local_day < ?3",
+        params![activity_kind, format_local_day(window.start), format_local_day(window.end_exclusive)],
+        |row| row.get(0),
+    )?)
 }
 
 fn query_practice_session_count(
     connection: &rusqlite::Connection,
-    start: Option<&str>,
+    window: &CalendarWindow,
     deck_scope: Option<&str>,
 ) -> Result<i64> {
     let deck_clause = match deck_scope {
-        Some(_) => "AND context_kind = 'deck' AND context_id = ?",
+        Some(_) => "AND context_kind = 'deck' AND context_id = ?3",
         None => "",
     };
     let sql = format!(
@@ -997,31 +989,12 @@ fn query_practice_session_count(
          WHERE activity_kind = 'practice'
            AND raw_active_ms > 0
            {deck_clause}
-           AND {window}",
+           AND local_day >= ?1 AND local_day < ?2",
         deck_clause = deck_clause,
-        window = activity_window_clause(start),
     );
-    Ok(match (deck_scope, start) {
-        (Some(deck), Some(start_str)) => connection.query_row(
-            &sql,
-            params![deck, today_upper_bound(), start_str],
-            |row| row.get(0),
-        )?,
-        (Some(deck), None) => connection.query_row(
-            &sql,
-            params![deck, today_upper_bound()],
-            |row| row.get(0),
-        )?,
-        (None, Some(start_str)) => connection.query_row(
-            &sql,
-            params![today_upper_bound(), start_str],
-            |row| row.get(0),
-        )?,
-        (None, None) => connection.query_row(
-            &sql,
-            params![today_upper_bound()],
-            |row| row.get(0),
-        )?,
+    Ok(match deck_scope {
+        Some(deck) => connection.query_row(&sql, params![format_local_day(window.start), format_local_day(window.end_exclusive), deck], |row| row.get(0))?,
+        None => connection.query_row(&sql, params![format_local_day(window.start), format_local_day(window.end_exclusive)], |row| row.get(0))?,
     })
 }
 
@@ -1033,7 +1006,7 @@ struct PageMetrics {
 
 fn query_reading_page_metrics(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     document_id: Option<&str>,
 ) -> Result<PageMetrics> {
     let document_clause = match document_id {
@@ -1077,7 +1050,7 @@ fn query_reading_page_metrics(
 
 fn query_document_session_count(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     document_id: &str,
 ) -> Result<i64> {
     let sql = format!(
@@ -1102,7 +1075,7 @@ fn query_document_session_count(
 
 fn query_document_active_ms(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     document_id: &str,
 ) -> Result<i64> {
     let sql = format!(
@@ -1163,7 +1136,7 @@ fn review_window_clause(start: Option<&str>) -> &'static str {
 
 fn collect_review_rows(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     _now_utc: &str,
     scope: ReviewScope,
 ) -> Result<Vec<ReviewRow>> {
@@ -1216,7 +1189,7 @@ struct ReviewRow {
 
 fn query_capped_review_ms(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
     scope: ReviewScope,
 ) -> Result<i64> {
@@ -1230,7 +1203,7 @@ fn query_capped_review_ms(
 
 fn query_count_real_reviews(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
     scope: ReviewScope,
 ) -> Result<i64> {
@@ -1239,7 +1212,7 @@ fn query_count_real_reviews(
 
 fn query_rating_distribution(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
     scope: ReviewScope,
 ) -> Result<RatingDistribution> {
@@ -1258,7 +1231,7 @@ fn query_rating_distribution(
 
 fn query_count_lapses(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
     scope: ReviewScope,
 ) -> Result<i64> {
@@ -1271,7 +1244,7 @@ fn query_count_lapses(
 
 fn query_lapse_rate(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
     scope: ReviewScope,
 ) -> Result<Option<f64>> {
@@ -1289,7 +1262,7 @@ fn query_lapse_rate(
 
 fn query_average_answer_ms(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
     scope: ReviewScope,
 ) -> Result<Option<f64>> {
@@ -1310,7 +1283,7 @@ fn query_average_answer_ms(
 
 fn query_real_study_session_count(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     deck_scope: Option<&str>,
 ) -> Result<i64> {
     let scope_clause = match deck_scope {
@@ -1480,11 +1453,8 @@ fn query_lifetime_active_days(
     Ok(days)
 }
 
-fn count_active_days_in_window(days: &HashSet<String>, window: &RangeWindow) -> i64 {
-    let start_date = match window.start() {
-        Some(day) => day,
-        None => return days.len() as i64,
-    };
+fn count_active_days_in_window(days: &HashSet<String>, window: &CalendarWindow) -> i64 {
+    let start_date = window.start().expect("calendar windows have a start");
     days.iter()
         .filter(|day| day.as_str() >= start_date && day.as_str() <= window.today.as_str())
         .count() as i64
@@ -1492,7 +1462,7 @@ fn count_active_days_in_window(days: &HashSet<String>, window: &RangeWindow) -> 
 
 fn query_deck_active_days(
     connection: &rusqlite::Connection,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     deck_id: &str,
 ) -> Result<i64> {
     // Deck-scoped active days combine: any review log on a card in this deck,
@@ -1534,10 +1504,7 @@ fn query_deck_active_days(
         }
     }
 
-    let start_date = match window.start() {
-        Some(day) => day,
-        None => return Ok(days.len() as i64),
-    };
+    let start_date = window.start().expect("calendar windows have a start");
     Ok(days
         .iter()
         .filter(|day| day.as_str() >= start_date && day.as_str() <= window.today.as_str())
@@ -1602,7 +1569,7 @@ fn earliest_activity_day(
 fn build_total_buckets(
     connection: &rusqlite::Connection,
     bucket_days: &[String],
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
 ) -> Result<Vec<ActivityBucket>> {
     let mut daily: HashMap<String, i64> = HashMap::new();
@@ -1636,7 +1603,7 @@ fn build_total_buckets(
 fn build_reading_buckets(
     connection: &rusqlite::Connection,
     bucket_days: &[String],
-    window: &RangeWindow,
+    window: &CalendarWindow,
     document_id: Option<&str>,
 ) -> Result<Vec<ActivityBucket>> {
     let mut daily: HashMap<String, i64> = HashMap::new();
@@ -1688,7 +1655,7 @@ fn build_reading_buckets(
 fn build_memora_buckets(
     connection: &rusqlite::Connection,
     bucket_days: &[String],
-    window: &RangeWindow,
+    window: &CalendarWindow,
     now_utc: &str,
     deck_scope: Option<&str>,
 ) -> Result<Vec<ActivityBucket>> {
@@ -1748,6 +1715,64 @@ fn materialize_buckets(
         .collect())
 }
 
+fn build_time_buckets(
+    connection: &rusqlite::Connection,
+    window: &CalendarWindow,
+    today_local_day: &str,
+) -> Result<Vec<StatisticsTimeBucket>> {
+    let mut values: HashMap<(String, i64, String), i64> = HashMap::new();
+    let mut statement = connection.prepare(
+        "SELECT buckets.local_day, buckets.bucket_start_hour, sessions.app_key,
+                COALESCE(SUM(buckets.raw_active_ms), 0)
+         FROM activity_session_time_buckets buckets
+         JOIN activity_sessions sessions ON sessions.id = buckets.session_id
+         WHERE buckets.local_day >= ?1 AND buckets.local_day < ?2
+           AND ((sessions.app_key = 'reading' AND sessions.activity_kind = 'reading')
+             OR (sessions.app_key = 'memora' AND sessions.activity_kind = 'practice'))
+         GROUP BY buckets.local_day, buckets.bucket_start_hour, sessions.app_key",
+    )?;
+    let rows = statement.query_map(params![format_local_day(window.start), format_local_day(window.end_exclusive)], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, String>(2)?, row.get::<_, i64>(3)?))
+    })?;
+    for row in rows {
+        let (day, hour, app_key, active_ms) = row?;
+        values.insert((day, hour, app_key), active_ms);
+    }
+    let mut review_statement = connection.prepare(
+        "SELECT COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)),
+                (local_minute_of_day / 240) * 4, COALESCE(SUM(MIN(elapsed_ms, ?3)), 0)
+         FROM review_logs
+         WHERE COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)) >= ?1
+           AND COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)) < ?2
+         GROUP BY 1, 2",
+    )?;
+    let review_rows = review_statement.query_map(
+        params![format_local_day(window.start), format_local_day(window.end_exclusive), REVIEW_TIME_CAP_MS],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?)),
+    )?;
+    for row in review_rows {
+        let (day, hour, active_ms) = row?;
+        *values.entry((day, hour, "memora".into())).or_insert(0) += active_ms;
+    }
+
+    let mut buckets = Vec::new();
+    for day in enumerate_days(&format_local_day(window.start), &window.today)? {
+        let is_future = day.as_str() > today_local_day;
+        for bucket_start_hour in [0, 4, 8, 12, 16, 20] {
+            for app_key in ["reading", "memora"] {
+                buckets.push(StatisticsTimeBucket {
+                    active_ms: if is_future { 0 } else { values.get(&(day.clone(), bucket_start_hour, app_key.into())).copied().unwrap_or(0) },
+                    local_day: day.clone(),
+                    bucket_start_hour,
+                    app_key: app_key.into(),
+                    is_future,
+                });
+            }
+        }
+    }
+    Ok(buckets)
+}
+
 fn query_daily_activity_sums(
     connection: &rusqlite::Connection,
     sql: &str,
@@ -1783,7 +1808,7 @@ fn query_daily_activity_sums(
 fn query_daily_review_sums(
     connection: &rusqlite::Connection,
     sql: &str,
-    window: &RangeWindow,
+    window: &CalendarWindow,
     _now_utc: &str,
     deck_scope: Option<&str>,
 ) -> Result<Vec<(String, i64)>> {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { DocumentStatistics, StatisticsRange } from "../../../domain/statistics";
+import type { DocumentStatistics, StatisticsPeriod } from "../../../domain/statistics";
 import { getDocumentStatistics } from "../../../lib/statistics";
 import { KpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
@@ -24,15 +24,15 @@ function formatRatio(value: number | null): string {
 
 export interface DocumentStatisticsPageProps {
   documentId: string;
-  range: StatisticsRange;
-  onRangeChange(range: StatisticsRange): void;
+  period: StatisticsPeriod;
+  onPeriodChange?(period: StatisticsPeriod): void;
   getDocStats?: typeof getDocumentStatistics;
   onBack?: () => void;
 }
 
 export function DocumentStatisticsPage({
   documentId,
-  range,
+  period,
   getDocStats = getDocumentStatistics,
 }: DocumentStatisticsPageProps) {
   const [stats, setStats] = useState<DocumentStatistics | null>(null);
@@ -40,13 +40,13 @@ export function DocumentStatisticsPage({
   const load = useCallback(async () => {
     setState("loading");
     try {
-      const result = await getDocStats(documentId, range);
+      const result = await getDocStats(documentId, period);
       setStats(result);
       setState("loaded");
     } catch {
       setState("error");
     }
-  }, [documentId, range, getDocStats]);
+  }, [documentId, period, getDocStats]);
 
   useEffect(() => {
     void load();
@@ -84,7 +84,7 @@ export function DocumentStatisticsPage({
                 <KpiCard label="Lapses" value={String(stats.lapses)} />
               </div>
             </MetricSection>
-            <ActivityChartCard range={range} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
+            <ActivityChartCard period={period} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
           </>
         )}
       </MetricSection>
