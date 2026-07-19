@@ -186,6 +186,23 @@ test("filters options when typing", async () => {
   expect(screen.queryByText("Date")).toBeNull();
 });
 
+test("resets the active option to a filtered result", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+  render(<ComboboxTest onChange={onChange} ariaLabel="Fruit picker" />);
+
+  const trigger = screen.getByRole("combobox", { name: "Fruit picker" });
+  await user.click(trigger);
+  await user.keyboard("{ArrowDown}{ArrowDown}{ArrowDown}");
+  await user.type(screen.getByPlaceholderText("Search..."), "ban");
+
+  const banana = screen.getByRole("option", { name: "Banana" });
+  expect(trigger).toHaveAttribute("aria-activedescendant", banana.id);
+  await user.keyboard("{Enter}");
+  expect(onChange).toHaveBeenCalledWith("banana");
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+});
+
 test("shows no options message when filter has no results", async () => {
   const user = userEvent.setup();
   render(<ComboboxTest ariaLabel="Fruit picker" />);

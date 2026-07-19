@@ -39,6 +39,7 @@ export function Combobox<T extends string>({
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(false);
   const listboxId = useId();
 
   const selected = options.find((o) => o.value === value);
@@ -55,6 +56,7 @@ export function Combobox<T extends string>({
 
   useEffect(() => {
     if (!open) {
+      wasOpenRef.current = false;
       setQuery("");
       setHighlightedIndex(-1);
     }
@@ -62,14 +64,18 @@ export function Combobox<T extends string>({
 
   useEffect(() => {
     if (open) {
+      const justOpened = !wasOpenRef.current;
+      wasOpenRef.current = true;
       if (!searchable) {
         setQuery("");
       }
       searchRef.current?.focus();
       setHighlightedIndex((currentIndex) => {
-        if (currentIndex >= 0) return currentIndex;
+        if (justOpened && currentIndex >= 0 && currentIndex < filtered.length) {
+          return currentIndex;
+        }
         const selectedIndex = filtered.findIndex((o) => o.value === value);
-        return selectedIndex >= 0 ? selectedIndex : 0;
+        return selectedIndex >= 0 ? selectedIndex : filtered.length > 0 ? 0 : -1;
       });
     }
   }, [open, filtered, value, searchable]);
