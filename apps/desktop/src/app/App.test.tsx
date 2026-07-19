@@ -1114,6 +1114,11 @@ test("navigates to Statistics via sidebar button", async () => {
 
   await user.click(screen.getByRole("button", { name: "Statistics" }));
   expect(await screen.findByRole("heading", { level: 1, name: "Statistics" })).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Statistics" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
 });
 
 test("Quick Open resolves insights alias to the statistics route", async () => {

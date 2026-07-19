@@ -8,6 +8,7 @@ import type {
   AccountStatus,
 } from "../../domain/account";
 import { AdminAnalyticsPage } from "./AdminAnalyticsPage";
+import { ScrollArea } from "../../components/ScrollArea";
 
 export function AdminPage({ api }: { api: AccountApi }) {
   const [view, setView] = useState<"management" | "analytics">("management");
@@ -187,9 +188,11 @@ export function AdminPage({ api }: { api: AccountApi }) {
 
   if (loading) {
     return (
-      <div className="admin-page-container loading">
-        <div className="spinner" />
-      </div>
+      <ScrollArea className="admin-scroll-area" data-testid="admin-scroll-area">
+        <div data-testid="admin-scroll-content" style={{ paddingRight: 20, paddingBottom: 20 }}>
+          <div className="admin-page-container loading"><div className="spinner" /></div>
+        </div>
+      </ScrollArea>
     );
   }
 
@@ -197,14 +200,16 @@ export function AdminPage({ api }: { api: AccountApi }) {
   const processedUsers = users.filter((u) => u.status !== "pending");
 
   return (
-    <div className="admin-page-container">
+    <ScrollArea className="admin-scroll-area" data-testid="admin-scroll-area">
+      <div data-testid="admin-scroll-content" style={{ paddingRight: 20, paddingBottom: 20 }}>
+      <div className="admin-page-container">
       <style>{`
         .admin-page-container {
           padding: 30px;
           max-width: 1200px;
           margin: 0 auto;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          color: #f3f4f6;
+          color: var(--text-primary);
         }
 
         .admin-page-container.loading {
@@ -222,12 +227,12 @@ export function AdminPage({ api }: { api: AccountApi }) {
           font-size: 28px;
           font-weight: 700;
           margin: 0 0 8px 0;
-          color: #c084fc;
+          color: var(--purple);
         }
 
         .admin-header p {
           font-size: 14px;
-          color: #9ca3af;
+          color: var(--text-secondary);
           margin: 0;
         }
 
@@ -239,19 +244,19 @@ export function AdminPage({ api }: { api: AccountApi }) {
 
         .admin-nav button {
           padding: 8px 16px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          border: 1px solid var(--border-subtle);
           border-radius: 8px;
-          background: rgba(255, 255, 255, 0.03);
-          color: #f3f4f6;
+          background: var(--surface-1);
+          color: var(--text-primary);
           font-size: 14px;
           font-weight: 600;
           cursor: pointer;
         }
 
         .admin-nav button[aria-pressed="true"] {
-          background: rgba(124, 58, 237, 0.2);
-          border-color: rgba(124, 58, 237, 0.4);
-          color: #c084fc;
+          background: var(--interactive-selected);
+          border-color: var(--border-strong);
+          color: var(--purple);
         }
 
         .metrics-grid {
@@ -262,8 +267,8 @@ export function AdminPage({ api }: { api: AccountApi }) {
         }
 
         .metric-card {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--surface-1);
+          border: 1px solid var(--border-subtle);
           border-radius: 12px;
           padding: 20px;
         }
@@ -273,19 +278,19 @@ export function AdminPage({ api }: { api: AccountApi }) {
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-          color: #9ca3af;
+          color: var(--text-secondary);
           margin: 0 0 8px 0;
         }
 
         .metric-value {
           font-size: 28px;
           font-weight: 700;
-          color: #ffffff;
+          color: var(--text-primary);
         }
 
         .admin-section {
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.06);
+          background: var(--surface-1);
+          border: 1px solid var(--border-subtle);
           border-radius: 12px;
           padding: 24px;
           margin-bottom: 30px;
@@ -295,8 +300,8 @@ export function AdminPage({ api }: { api: AccountApi }) {
           font-size: 20px;
           font-weight: 700;
           margin: 0 0 20px 0;
-          color: #ffffff;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          color: var(--text-primary);
+          border-bottom: 1px solid var(--border-subtle);
           padding-bottom: 10px;
         }
 
@@ -308,19 +313,19 @@ export function AdminPage({ api }: { api: AccountApi }) {
 
         .admin-table th, .admin-table td {
           padding: 12px 16px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          border-bottom: 1px solid var(--border-subtle);
           font-size: 14px;
         }
 
         .admin-table th {
           font-weight: 600;
-          color: #9ca3af;
+          color: var(--text-secondary);
         }
 
         .btn-approve {
-          background: rgba(16, 185, 129, 0.1);
-          color: #34d399;
-          border: 1px solid rgba(16, 185, 129, 0.2);
+          background: var(--color-learning-bg);
+          color: var(--success);
+          border: 1px solid var(--success);
           padding: 6px 12px;
           border-radius: 6px;
           font-size: 12px;
@@ -330,9 +335,9 @@ export function AdminPage({ api }: { api: AccountApi }) {
         }
 
         .btn-reject {
-          background: rgba(239, 68, 68, 0.1);
-          color: #f87171;
-          border: 1px solid rgba(239, 68, 68, 0.2);
+          background: var(--color-danger-bg-soft);
+          color: var(--error);
+          border: 1px solid var(--error);
           padding: 6px 12px;
           border-radius: 6px;
           font-size: 12px;
@@ -341,9 +346,9 @@ export function AdminPage({ api }: { api: AccountApi }) {
         }
 
         .btn-delete {
-          background: rgba(139, 0, 0, 0.15);
-          color: #fca5a5;
-          border: 1px solid rgba(220, 38, 38, 0.35);
+          background: var(--color-danger-bg-soft);
+          color: var(--color-danger-text-strong);
+          border: 1px solid var(--error);
           padding: 6px 12px;
           border-radius: 6px;
           font-size: 12px;
@@ -353,23 +358,23 @@ export function AdminPage({ api }: { api: AccountApi }) {
         }
 
         .btn-delete:hover {
-          background: rgba(220, 38, 38, 0.25);
+          background: var(--color-danger-bg-hover);
         }
 
         .group-input {
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--surface-2);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
           padding: 6px 10px;
-          color: #ffffff;
+          color: var(--text-primary);
           font-size: 12px;
           width: 180px;
         }
 
         .status-select {
-          background: #111827;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          color: #ffffff;
+          background: var(--surface-2);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-primary);
           border-radius: 6px;
           padding: 6px 10px;
           font-size: 12px;
@@ -395,23 +400,23 @@ export function AdminPage({ api }: { api: AccountApi }) {
 
         .form-group label {
           font-size: 12px;
-          color: #9ca3af;
+          color: var(--text-secondary);
           font-weight: 600;
         }
 
         .form-group input, .form-group select {
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--surface-2);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
           padding: 8px 12px;
-          color: #ffffff;
+          color: var(--text-primary);
           font-size: 14px;
         }
 
         .btn-submit {
-          background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%);
+          background: var(--button-primary-bg);
           border: none;
-          color: #ffffff;
+          color: var(--button-primary-text);
           font-weight: 600;
           padding: 10px;
           border-radius: 6px;
@@ -425,8 +430,8 @@ export function AdminPage({ api }: { api: AccountApi }) {
           font-weight: 500;
           margin-left: 10px;
         }
-        .row-status.success { color: #34d399; }
-        .row-status.error { color: #f87171; }
+        .row-status.success { color: var(--success); }
+        .row-status.error { color: var(--error); }
       `}</style>
 
       <div className="admin-header">
@@ -484,7 +489,7 @@ export function AdminPage({ api }: { api: AccountApi }) {
           <section className="admin-section">
             <h2>Pending Accounts</h2>
             {pendingUsers.length === 0 ? (
-              <p style={{ color: "#9ca3af", fontSize: "14px" }}>No pending account approvals.</p>
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>No pending account approvals.</p>
             ) : (
               <table className="admin-table">
                 <thead>
@@ -702,6 +707,8 @@ export function AdminPage({ api }: { api: AccountApi }) {
           </div>
         </>
       )}
-    </div>
+      </div>
+      </div>
+    </ScrollArea>
   );
 }

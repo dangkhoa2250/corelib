@@ -286,6 +286,11 @@ sqlite3 "${database_path}" \
 # --- Daily statistics ---
 
 # 1. Analytics-disabled user gets 403
+curl --silent --request POST "${base_url}/api/corelib/me/analytics" \
+  --header "Authorization: Bearer ${token}" \
+  --header 'content-type: application/json' \
+  --data '{"enabled":false}' > /dev/null
+
 status="$(curl --silent --output /tmp/corelib-daily-disabled.json --write-out '%{http_code}' \
   --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
   --header "Authorization: Bearer ${token}" \
@@ -391,3 +396,57 @@ status="$(curl --silent --output /tmp/corelib-admin-stats-reading.json --write-o
   --request GET "${base_url}/api/corelib/admin/statistics?range=7d&appKey=reading" \
   --header "Authorization: Bearer ${admin_token}")"
 test "${status}" = "200"
+
+# 6. Add four more opted-in contributors. Together with the member above this
+# crosses the five-user privacy threshold for overall and Reading aggregates,
+# while Memora deliberately remains below the threshold.
+for user_index in 2 3 4 5; do
+  email="contributor${user_index}@example.test"
+  status="$(curl --silent --output "/tmp/corelib-register-contributor-${user_index}.json" --write-out '%{http_code}' \
+    --request POST "${base_url}/api/corelib/register" \
+    --header 'content-type: application/json' \
+    --data "{\"displayName\":\"Contributor ${user_index}\",\"email\":\"${email}\",\"password\":\"correct horse battery staple\",\"passwordConfirm\":\"correct horse battery staple\"}")"
+  test "${status}" = "200"
+  sqlite3 "${database_path}" "UPDATE users SET status = 'approved', analyticsEnabled = 1 WHERE email = '${email}';"
+
+  status="$(curl --silent --output "/tmp/corelib-signin-contributor-${user_index}.json" --write-out '%{http_code}' \
+    --request POST "${base_url}/api/corelib/sign-in" \
+    --header 'content-type: application/json' \
+    --data "{\"email\":\"${email}\",\"password\":\"correct horse battery staple\"}")"
+  test "${status}" = "200"
+  contributor_token="$(python3 -c "import json; print(json.load(open('/tmp/corelib-signin-contributor-${user_index}.json'))['token'])")"
+
+  status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+    --request POST "${base_url}/api/corelib/analytics/daily-statistics" \
+    --header "Authorization: Bearer ${contributor_token}" \
+    --header 'content-type: application/json' \
+    --data "{\"schemaVersion\":1,\"localDay\":\"2026-07-18\",\"appKey\":\"reading\",\"activeMs\":${user_index}00000,\"activeDay\":true,\"sessionCount\":${user_index},\"pageVisitCount\":${user_index},\"uniquePageCount\":${user_index}}")"
+  test "${status}" = "204"
+done
+
+status="$(curl --silent --output /tmp/corelib-admin-stats-sufficient.json --write-out '%{http_code}' \
+  --request GET "${base_url}/api/corelib/admin/statistics?range=7d&appKey=all" \
+  --header "Authorization: Bearer ${admin_token}")"
+test "${status}" = "200"
+
+python3 - <<'PY'
+import json
+
+with open("/tmp/corelib-admin-stats-sufficient.json", encoding="utf-8") as response_file:
+    data = json.load(response_file)
+
+assert data["contributingUsers"] == 5
+assert data["insufficientSample"] is False
+assert "activeMs" in data
+assert data["reading"]["contributingUsers"] == 5
+assert data["reading"]["insufficientSample"] is False
+assert "pageVisitCount" in data["reading"]
+assert data["memora"]["contributingUsers"] == 1
+assert data["memora"]["insufficientSample"] is True
+for private_metric in ("activeMs", "sessionCount", "realReviewCount", "recallRate"):
+    assert private_metric not in data["memora"]
+bucket = next(item for item in data["buckets"] if item["localDay"] == "2026-07-18")
+assert bucket["contributingUsers"] == 5
+assert bucket["insufficientSample"] is False
+assert "activeMs" in bucket
+PY

@@ -4,6 +4,7 @@ import { SignInPage } from "./SignInPage";
 import { RegisterPage } from "./RegisterPage";
 import { PendingAccountPage } from "./PendingAccountPage";
 import { RejectedAccountPage } from "./RejectedAccountPage";
+import { clearAdminStatisticsCache } from "../admin/AdminAnalyticsPage";
 
 export type GateState =
   | { kind: "loading" }
@@ -87,6 +88,7 @@ export function AccountGate({
       await api.signOut();
     } catch (_) {}
     setState({ kind: "anonymous" });
+    clearAdminStatisticsCache();
     setError(null);
   };
 

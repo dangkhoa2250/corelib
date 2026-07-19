@@ -20,6 +20,21 @@ export function useActiveTimer(
   runningRef.current = running;
   const hiddenRef = useRef(false);
 
+  const publish = useCallback((value: number) => {
+    const normalized = Math.max(0, Math.round(value));
+    setActiveMs(normalized);
+  }, []);
+
+  const snapshot = useCallback(() => {
+    if (!runningRef.current || hiddenRef.current) {
+      return accumulatedRef.current;
+    }
+    const now = Date.now();
+    const activeUntil = Math.min(now, lastActivityRef.current + idleAfterMsRef.current);
+    const openSegment = Math.max(0, activeUntil - segmentStartRef.current);
+    return accumulatedRef.current + openSegment;
+  }, []);
+
   useEffect(() => {
     if (!running) return;
     segmentStartRef.current = Date.now();
@@ -27,41 +42,27 @@ export function useActiveTimer(
     hiddenRef.current = false;
     const id = setInterval(() => {
       if (hiddenRef.current || !runningRef.current) return;
-      const now = Date.now();
-      const elapsed = now - segmentStartRef.current;
-      const idleElapsed = now - lastActivityRef.current;
-      if (idleElapsed >= idleAfterMsRef.current) {
-        setActiveMs(accumulatedRef.current + idleAfterMsRef.current);
-      } else {
-        setActiveMs(accumulatedRef.current + elapsed);
-      }
+      publish(snapshot());
     }, 100);
     return () => clearInterval(id);
-  }, [running]);
+  }, [running, publish, snapshot]);
 
   const markActivity = useCallback(() => {
     if (!runningRef.current) return;
     const now = Date.now();
-    const elapsed = now - segmentStartRef.current;
-    const idleElapsed = now - lastActivityRef.current;
-    if (idleElapsed < idleAfterMsRef.current) {
-      accumulatedRef.current += Math.min(elapsed, idleAfterMsRef.current);
-    } else {
-      accumulatedRef.current += idleAfterMsRef.current;
-    }
+    const activeUntil = Math.min(now, lastActivityRef.current + idleAfterMsRef.current);
+    accumulatedRef.current += Math.max(0, activeUntil - segmentStartRef.current);
     segmentStartRef.current = now;
     lastActivityRef.current = now;
-    setActiveMs(accumulatedRef.current);
-  }, []);
+    publish(accumulatedRef.current);
+  }, [publish]);
 
   const reset = useCallback(() => {
     accumulatedRef.current = 0;
     segmentStartRef.current = Date.now();
     lastActivityRef.current = Date.now();
-    setActiveMs(0);
-  }, []);
-
-  const snapshot = useCallback(() => activeMs, [activeMs]);
+    publish(0);
+  }, [publish]);
 
   useEffect(() => {
     if (!running) return;
@@ -82,13 +83,9 @@ export function useActiveTimer(
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
         const now = Date.now();
-        const elapsed = now - segmentStartRef.current;
-        const idleElapsed = now - lastActivityRef.current;
-        if (idleElapsed < idleAfterMsRef.current) {
-          accumulatedRef.current += Math.min(elapsed, idleAfterMsRef.current);
-        } else {
-          accumulatedRef.current += idleAfterMsRef.current;
-        }
+        const activeUntil = Math.min(now, lastActivityRef.current + idleAfterMsRef.current);
+        accumulatedRef.current += Math.max(0, activeUntil - segmentStartRef.current);
+        publish(accumulatedRef.current);
         hiddenRef.current = true;
       } else {
         segmentStartRef.current = Date.now();
@@ -98,6 +95,6 @@ export function useActiveTimer(
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, [running]);
+  }, [running, publish]);
   return { activeMs, markActivity, reset, snapshot };
 }

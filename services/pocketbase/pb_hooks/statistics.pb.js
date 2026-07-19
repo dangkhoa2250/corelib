@@ -5,6 +5,10 @@ routerAdd("POST", "/api/corelib/analytics/daily-statistics", (e) => {
 
   const data = e.requestInfo().body;
 
+  if (!data || JSON.stringify(data).length > 16384) {
+    return e.json(400, { message: "invalid_statistics_snapshot" });
+  }
+
   const COMMON = ["schemaVersion", "localDay", "appKey", "activeMs", "activeDay", "sessionCount"];
   const APPROVED_KEYS = ["reading", "memora"];
   const APP_KEYS = {
@@ -19,6 +23,12 @@ routerAdd("POST", "/api/corelib/analytics/daily-statistics", (e) => {
   const allowedKeys = APP_KEYS[data.appKey];
   for (const k of Object.keys(data)) {
     if (!allowedKeys.includes(k)) {
+      return e.json(400, { message: "invalid_statistics_snapshot" });
+    }
+  }
+
+  for (const requiredKey of allowedKeys) {
+    if (data[requiredKey] === undefined) {
       return e.json(400, { message: "invalid_statistics_snapshot" });
     }
   }
@@ -43,7 +53,7 @@ routerAdd("POST", "/api/corelib/analytics/daily-statistics", (e) => {
   const numericFields = ["activeMs", "sessionCount", "pageVisitCount", "uniquePageCount", "realReviewCount", "againCount", "hardCount", "goodCount", "easyCount", "lapseCount"];
   for (const field of numericFields) {
     if (data[field] !== undefined) {
-      if (typeof data[field] !== "number" || !Number.isInteger(data[field]) || data[field] < 0) {
+      if (typeof data[field] !== "number" || !Number.isSafeInteger(data[field]) || data[field] < 0) {
         return e.json(400, { message: "invalid_statistics_snapshot" });
       }
     }
@@ -104,15 +114,6 @@ routerAdd("POST", "/api/corelib/analytics/daily-statistics", (e) => {
   }
 });
 
-function getISOWeek(date) {
-  const dayNum = date.getUTCDay() || 7;
-  const thursday = new Date(date);
-  thursday.setUTCDate(date.getUTCDate() + 4 - dayNum);
-  const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
-  const weekNum = Math.ceil((((thursday - yearStart) / 86400000) + 1) / 7);
-  return thursday.getUTCFullYear() + "-W" + String(weekNum).padStart(2, "0");
-}
-
 routerAdd("GET", "/api/corelib/admin/statistics", (e) => {
   if (!e.auth) return e.json(401, { message: "invalid_session" });
   if (e.auth.getString("status") !== "approved") return e.json(403, { message: "account_not_approved" });
@@ -122,6 +123,15 @@ routerAdd("GET", "/api/corelib/admin/statistics", (e) => {
   const range = q.range || "30d";
   const appKey = q.appKey || "all";
 
+  const getISOWeek = (date) => {
+    const dayNum = date.getUTCDay() || 7;
+    const thursday = new Date(date);
+    thursday.setUTCDate(date.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(thursday.getUTCFullYear(), 0, 1));
+    const weekNum = Math.ceil((((thursday - yearStart) / 86400000) + 1) / 7);
+    return thursday.getUTCFullYear() + "-W" + String(weekNum).padStart(2, "0");
+  };
+
   if (!["7d", "30d", "1y", "all"].includes(range)) return e.json(400, { message: "invalid_range" });
   if (!["all", "reading", "memora"].includes(appKey)) return e.json(400, { message: "invalid_appKey" });
 
@@ -130,7 +140,7 @@ routerAdd("GET", "/api/corelib/admin/statistics", (e) => {
   const filterParams = {};
   if (range !== "all") {
     const days = range === "7d" ? 7 : range === "30d" ? 30 : 365;
-    const cutoff = new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     filter = "localDay >= {:cutoff}";
     filterParams.cutoff = cutoff;
   }
@@ -289,49 +299,65 @@ routerAdd("GET", "/api/corelib/admin/statistics", (e) => {
 
       const readingUserIds = Object.keys(readingUserDays);
       if (readingUserIds.length > 0) {
-        let returningCount = 0;
-        for (const uid of readingUserIds) {
-          if (readingUserDays[uid].size >= 2) returningCount++;
+        if (readingUserIds.length < 5) {
+          response.reading = {
+            activeUsers: readingUserIds.length,
+            contributingUsers: readingUserIds.length,
+            insufficientSample: true,
+          };
+        } else {
+          let returningCount = 0;
+          for (const uid of readingUserIds) {
+            if (readingUserDays[uid].size >= 2) returningCount++;
+          }
+          response.reading = {
+            activeUsers: readingUserIds.length,
+            contributingUsers: readingUserIds.length,
+            insufficientSample: false,
+            activeMs: readingActiveMs,
+            sessionCount: readingSessionCount,
+            pageVisitCount: readingPageVisits,
+            returningUserRate: parseFloat((returningCount / readingUserIds.length).toFixed(3)),
+          };
         }
-        response.reading = {
-          activeUsers: readingUserIds.length,
-          activeMs: readingActiveMs,
-          sessionCount: readingSessionCount,
-          pageVisitCount: readingPageVisits,
-          returningUserRate: parseFloat((returningCount / readingUserIds.length).toFixed(1)),
-        };
       }
 
       const memoraUserIds = Object.keys(memoraUserDays);
       if (memoraUserIds.length > 0) {
-        const recallSum = memoraHardCount + memoraGoodCount + memoraEasyCount;
-        const totalReviews = memoraAgainCount + recallSum;
-
-        let wlfTotalDays = 0;
-        let wlfTotalWeeks = 0;
-        for (const uid of memoraUserIds) {
-          const weeks = memoraReviewWeeks[uid];
-          if (weeks) {
-            for (const wk in weeks) {
-              wlfTotalDays += weeks[wk].size;
-              wlfTotalWeeks++;
+        if (memoraUserIds.length < 5) {
+          response.memora = {
+            activeUsers: memoraUserIds.length,
+            contributingUsers: memoraUserIds.length,
+            insufficientSample: true,
+          };
+        } else {
+          const recallSum = memoraHardCount + memoraGoodCount + memoraEasyCount;
+          const totalReviews = memoraAgainCount + recallSum;
+          let wlfTotalDays = 0;
+          for (const uid of memoraUserIds) {
+            const weeks = memoraReviewWeeks[uid];
+            if (weeks) {
+              for (const wk in weeks) wlfTotalDays += weeks[wk].size;
             }
           }
+          const allWeeks = Object.keys(weekUsers).length;
+          const frequencyDenominator = memoraUserIds.length * allWeeks;
+          response.memora = {
+            activeUsers: memoraUserIds.length,
+            contributingUsers: memoraUserIds.length,
+            insufficientSample: false,
+            activeMs: memoraActiveMs,
+            sessionCount: memoraSessionCount,
+            realReviewCount: memoraRealReviewCount,
+            againCount: memoraAgainCount,
+            hardCount: memoraHardCount,
+            goodCount: memoraGoodCount,
+            easyCount: memoraEasyCount,
+            lapseCount: memoraLapseCount,
+            recallRate: totalReviews > 0 ? parseFloat((recallSum / totalReviews).toFixed(3)) : null,
+            weeklyLearningFrequency: frequencyDenominator > 0 ? parseFloat((wlfTotalDays / frequencyDenominator).toFixed(3)) : null,
+          };
         }
-
-        response.memora = {
-          activeUsers: memoraUserIds.length,
-          activeMs: memoraActiveMs,
-          sessionCount: memoraSessionCount,
-          realReviewCount: memoraRealReviewCount,
-          againCount: memoraAgainCount,
-          hardCount: memoraHardCount,
-          goodCount: memoraGoodCount,
-          easyCount: memoraEasyCount,
-          lapseCount: memoraLapseCount,
-          recallRate: totalReviews > 0 ? parseFloat((recallSum / totalReviews).toFixed(1)) : null,
-          weeklyLearningFrequency: wlfTotalWeeks > 0 ? parseFloat((wlfTotalDays / wlfTotalWeeks).toFixed(1)) : null,
-        };
       }
     }
 

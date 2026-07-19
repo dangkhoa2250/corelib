@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 
 export type GraphMode = "daily" | "weekly" | "cumulative";
 
@@ -12,6 +12,7 @@ export interface ActivityGraphProps {
   mode: GraphMode;
   onModeChange(mode: GraphMode): void;
   valueLabel: string;
+  palette?: string[];
 }
 
 const VB_W = 600;
@@ -70,7 +71,7 @@ function formatShortDate(dateStr: string): string {
 
 const MODES: GraphMode[] = ["daily", "weekly", "cumulative"];
 
-export function ActivityGraph({ buckets, mode, onModeChange, valueLabel }: ActivityGraphProps) {
+export function ActivityGraph({ buckets, mode, onModeChange, valueLabel, palette }: ActivityGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [focusedIdx, setFocusedIdx] = useState(0);
@@ -247,10 +248,13 @@ export function ActivityGraph({ buckets, mode, onModeChange, valueLabel }: Activ
       ))}
     </div>
   );
+  const chartStyle = palette?.length
+    ? ({ "--chart-line": palette[4], "--chart-fill": palette[2] } as CSSProperties)
+    : undefined;
 
   if (buckets.length === 0) {
     return (
-      <div className="statistics-graph" ref={containerRef}>
+      <div className="statistics-graph" ref={containerRef} data-testid="activity-graph" style={chartStyle}>
         {modeButtons}
         <div className="statistics-empty-state">No data</div>
       </div>
@@ -258,7 +262,12 @@ export function ActivityGraph({ buckets, mode, onModeChange, valueLabel }: Activ
   }
 
   return (
-    <div className="statistics-graph" ref={containerRef} style={{ position: "relative" }}>
+    <div
+      className="statistics-graph"
+      ref={containerRef}
+      data-testid="activity-graph"
+      style={{ ...chartStyle, position: "relative" }}
+    >
       {modeButtons}
       <svg
         ref={svgRef}

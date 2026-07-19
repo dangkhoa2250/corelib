@@ -5,30 +5,38 @@ import { KpiCard } from "../statistics/components/KpiCard";
 import { MetricSection } from "../statistics/components/MetricSection";
 import { StatisticsRangePicker } from "../statistics/components/StatisticsRangePicker";
 import { StatisticsSkeleton } from "../statistics/components/StatisticsStates";
+import { ActivityChartCard } from "../statistics/components/ActivityChartCard";
 
 const CACHE_KEY = "library.admin-statistics.cache.v1";
 
 interface CacheEntry {
   data: AdminStatistics;
   cachedAt: string;
+  range: StatisticsRange;
+  appKey: string;
 }
 
-function loadCache(): CacheEntry | null {
+function loadCache(range: StatisticsRange, appKey: string): CacheEntry | null {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as CacheEntry;
+    const entry = JSON.parse(raw) as CacheEntry;
+    return entry.range === range && entry.appKey === appKey ? entry : null;
   } catch {
     return null;
   }
 }
 
-function saveCache(data: AdminStatistics) {
+function saveCache(data: AdminStatistics, range: StatisticsRange, appKey: string) {
   try {
-    const entry: CacheEntry = { data, cachedAt: new Date().toISOString() };
+    const entry: CacheEntry = { data, cachedAt: new Date().toISOString(), range, appKey };
     localStorage.setItem(CACHE_KEY, JSON.stringify(entry));
   } catch {
   }
+}
+
+export function clearAdminStatisticsCache(): void {
+  try { localStorage.removeItem(CACHE_KEY); } catch { /* cache cleanup is best effort */ }
 }
 
 interface AdminAnalyticsPageProps {
@@ -56,19 +64,19 @@ export function AdminAnalyticsPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
-  const [chartView, setChartView] = useState<"heatmap" | "graph">("heatmap");
+  const [appKey, setAppKey] = useState("all");
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const fn = adminStatisticsProp ?? (() => Promise.reject(new Error("No adminStatistics provider")));
-      const result = await fn(range, "");
+      const result = await fn(range, appKey);
       setData(result);
       setCachedAt(null);
-      saveCache(result);
+      saveCache(result, range, appKey);
     } catch (err: any) {
-      const cached = loadCache();
+      const cached = loadCache(range, appKey);
       if (cached) {
         setData(cached.data);
         setCachedAt(cached.cachedAt);
@@ -79,7 +87,7 @@ export function AdminAnalyticsPage({
     } finally {
       setLoading(false);
     }
-  }, [range, adminStatisticsProp]);
+  }, [range, appKey, adminStatisticsProp]);
 
   useEffect(() => {
     void loadData();
@@ -91,7 +99,7 @@ export function AdminAnalyticsPage({
     if (!data) return [];
     return data.buckets.map((b: AdminStatisticsBucket) => ({
       date: b.localDay,
-      value: b.activeMs || 0,
+      value: Math.round((b.activeMs || 0) / 60_000),
     }));
   }, [data]);
 
@@ -108,6 +116,11 @@ export function AdminAnalyticsPage({
     <div className="statistics-shell__content" style={{ padding: "28px 20px 40px 28px" }}>
       <div className="statistics-range-picker" style={{ marginBottom: 24 }}>
         <StatisticsRangePicker range={range} onChange={setRange} />
+        <select className="statistics-control" aria-label="Admin statistics app" value={appKey} onChange={(event) => setAppKey(event.target.value)}>
+          <option value="all">All apps</option>
+          <option value="reading">Reading</option>
+          <option value="memora">Memora</option>
+        </select>
       </div>
 
       {cachedAt && (
@@ -182,12 +195,18 @@ export function AdminAnalyticsPage({
             </MetricSection>
           )}
 
-          {data.reading && (
+          {data.reading?.insufficientSample && (
+            <MetricSection title="Reading">
+              <div className="statistics-card statistics-card--notice">Reading sample too small</div>
+            </MetricSection>
+          )}
+
+          {data.reading && !data.reading.insufficientSample && data.reading.activeUsers != null && (
             <MetricSection title="Reading">
               <div className="statistics-kpi-grid">
                 <KpiCard label="Active users" value={String(data.reading.activeUsers)} />
-                <KpiCard label="Active time" value={formatMs(data.reading.activeMs)} />
-                <KpiCard label="Sessions" value={String(data.reading.sessionCount)} />
+                <KpiCard label="Active time" value={formatMs(data.reading.activeMs ?? 0)} />
+                <KpiCard label="Sessions" value={String(data.reading.sessionCount ?? 0)} />
                 {data.reading.pageVisitCount != null && (
                   <KpiCard label="Page visits" value={String(data.reading.pageVisitCount)} />
                 )}
@@ -198,13 +217,19 @@ export function AdminAnalyticsPage({
             </MetricSection>
           )}
 
-          {data.memora && (
+          {data.memora?.insufficientSample && (
+            <MetricSection title="Memora">
+              <div className="statistics-card statistics-card--notice">Memora sample too small</div>
+            </MetricSection>
+          )}
+
+          {data.memora && !data.memora.insufficientSample && data.memora.activeUsers != null && (
             <MetricSection title="Memora">
               <div className="statistics-kpi-grid">
                 <KpiCard label="Active users" value={String(data.memora.activeUsers)} />
-                <KpiCard label="Active time" value={formatMs(data.memora.activeMs)} />
-                <KpiCard label="Sessions" value={String(data.memora.sessionCount)} />
-                <KpiCard label="Reviews" value={String(data.memora.realReviewCount)} />
+                <KpiCard label="Active time" value={formatMs(data.memora.activeMs ?? 0)} />
+                <KpiCard label="Sessions" value={String(data.memora.sessionCount ?? 0)} />
+                <KpiCard label="Reviews" value={String(data.memora.realReviewCount ?? 0)} />
                 {data.memora.recallRate != null && (
                   <KpiCard label="Recall rate" value={formatPercent(data.memora.recallRate * 100)} />
                 )}
@@ -216,39 +241,7 @@ export function AdminAnalyticsPage({
           )}
 
           {buckets.length > 0 && (
-            <MetricSection title="Activity chart">
-              <div className="statistics-chart-card__toggle" style={{ marginBottom: 12 }}>
-                <button
-                  type="button"
-                  className="statistics-control"
-                  aria-pressed={chartView === "heatmap"}
-                  onClick={() => setChartView("heatmap")}
-                >
-                  Heatmap
-                </button>
-                <button
-                  type="button"
-                  className="statistics-control"
-                  aria-pressed={chartView === "graph"}
-                  onClick={() => setChartView("graph")}
-                >
-                  Graph
-                </button>
-              </div>
-              {chartView === "heatmap" ? (
-                <div className="statistics-muted" style={{ padding: 16 }}>
-                  {buckets.length} days of data
-                </div>
-              ) : (
-                <div className="statistics-muted" style={{ padding: 16 }}>
-                  {buckets.map((b) => (
-                    <div key={b.date}>
-                      {b.date}: {formatMs(b.value)}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </MetricSection>
+            <ActivityChartCard range={range} totalBuckets={buckets} series={[]} />
           )}
         </>
       )}

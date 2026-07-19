@@ -106,9 +106,11 @@ export interface AdminStatisticsBucket {
 }
 
 export interface AdminAppAggregate {
-  activeUsers: number;
-  activeMs: number;
-  sessionCount: number;
+  contributingUsers: number;
+  insufficientSample: boolean;
+  activeUsers?: number;
+  activeMs?: number;
+  sessionCount?: number;
   pageVisitCount?: number;
   realReviewCount?: number;
   againCount?: number;

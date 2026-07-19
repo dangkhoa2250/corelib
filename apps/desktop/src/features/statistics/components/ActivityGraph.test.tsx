@@ -60,3 +60,19 @@ test("cumulativeSum is monotonic", () => {
   const cum = cumulativeSum(buckets);
   expect(cum.map(b => b.value)).toEqual([5, 15, 18]);
 });
+
+test("uses the selected chart color for its line and fill", () => {
+  render(
+    <ActivityGraph
+      buckets={dailyBuckets}
+      mode="daily"
+      onModeChange={vi.fn()}
+      valueLabel="Active time"
+      palette={["tone-1", "tone-2", "tone-3", "tone-4", "tone-5"]}
+    />,
+  );
+  expect(screen.getByTestId("activity-graph")).toHaveStyle({
+    "--chart-line": "tone-5",
+    "--chart-fill": "tone-3",
+  });
+});

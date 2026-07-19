@@ -48,11 +48,19 @@ function clearState(): void {
 interface StatisticsAnalyticsSyncProps {
   enabled: boolean;
   accountApi: AccountApi;
+  getSnapshots?: typeof getDailyStatisticsSnapshots;
+}
+
+function getLocalDay(date: Date): string {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .split("T")[0];
 }
 
 export function StatisticsAnalyticsSync({
   enabled,
   accountApi,
+  getSnapshots = getDailyStatisticsSnapshots,
 }: StatisticsAnalyticsSyncProps) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -68,9 +76,9 @@ export function StatisticsAnalyticsSync({
       writeState(state);
     }
 
-    const fromLocalDay = state.lastSyncAt
-      ? state.lastSyncAt.split("T")[0]
-      : new Date().toISOString().split("T")[0];
+    const fromLocalDay = getLocalDay(
+      new Date(state.lastSyncAt ?? state.consentStartedAt),
+    );
 
     const query: DailySnapshotQuery = {
       consentStartedAt: state.consentStartedAt,
@@ -78,7 +86,7 @@ export function StatisticsAnalyticsSync({
     };
 
     try {
-      const snapshots = await getDailyStatisticsSnapshots(query);
+      const snapshots = await getSnapshots(query);
       for (const snapshot of snapshots) {
         await accountApi.upsertDailyStatistics(
           snapshot as DailyStatisticsSnapshot & { schemaVersion: 1 },
@@ -89,7 +97,7 @@ export function StatisticsAnalyticsSync({
     } catch {
       // Will retry on next interval
     }
-  }, [enabled, accountApi]);
+  }, [enabled, accountApi, getSnapshots]);
 
   useEffect(() => {
     if (!enabled) {

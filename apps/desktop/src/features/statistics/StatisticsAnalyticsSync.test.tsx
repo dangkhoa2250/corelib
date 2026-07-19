@@ -1,6 +1,7 @@
 import { expect, test, vi, beforeEach, afterEach } from "vitest";
 import { render, act } from "@testing-library/react";
 import { StatisticsAnalyticsSync } from "./StatisticsAnalyticsSync";
+import type { DailyStatisticsSnapshot } from "../../domain/statistics";
 
 function mockLocalStorage() {
   const store: Record<string, string> = {};
@@ -28,6 +29,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -73,4 +75,65 @@ test("clears state on opt-out", async () => {
   expect(
     localStorage.getItem("library.statistics.analytics-sync.v1"),
   ).toBeNull();
+});
+
+test("derives the consent cursor from the user's local day", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-18T16:00:00.000Z"));
+  vi.spyOn(Date.prototype, "getTimezoneOffset").mockReturnValue(-540);
+  const getSnapshots = vi.fn().mockResolvedValue([]);
+  const accountApi = { upsertDailyStatistics: vi.fn() } as any;
+
+  render(
+    <StatisticsAnalyticsSync
+      enabled
+      accountApi={accountApi}
+      getSnapshots={getSnapshots}
+    />,
+  );
+  await act(async () => Promise.resolve());
+
+  expect(getSnapshots).toHaveBeenCalledWith(
+    expect.objectContaining({ fromLocalDay: "2026-07-19" }),
+  );
+});
+
+test("retries the same idempotent snapshot after an upload failure", async () => {
+  const snapshot: DailyStatisticsSnapshot = {
+    schemaVersion: 1,
+    localDay: "2026-07-18",
+    appKey: "reading",
+    activeMs: 60_000,
+    activeDay: true,
+    sessionCount: 1,
+    pageVisitCount: 1,
+    uniquePageCount: 1,
+  };
+  const getSnapshots = vi.fn().mockResolvedValue([snapshot]);
+  const accountApi = {
+    upsertDailyStatistics: vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(undefined),
+  } as any;
+
+  render(
+    <StatisticsAnalyticsSync
+      enabled
+      accountApi={accountApi}
+      getSnapshots={getSnapshots}
+    />,
+  );
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  window.dispatchEvent(new Event("online"));
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(accountApi.upsertDailyStatistics).toHaveBeenNthCalledWith(1, snapshot);
+  expect(accountApi.upsertDailyStatistics).toHaveBeenNthCalledWith(2, snapshot);
 });

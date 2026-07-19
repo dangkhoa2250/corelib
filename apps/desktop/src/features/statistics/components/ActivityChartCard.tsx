@@ -36,10 +36,22 @@ export function ActivityChartCard({
   );
   const [selectedApp, setSelectedApp] = useState("all");
   const [baseColor, setBaseColor] = useState(prefs.baseColor);
+  const [theme, setTheme] = useState<"light" | "dark">(
+    document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+  );
 
   useEffect(() => {
     setGraphMode(rangeDefaultGraphMode(range));
   }, [range]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const syncTheme = () => setTheme(root.dataset.theme === "dark" ? "dark" : "light");
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    syncTheme();
+    return () => observer.disconnect();
+  }, []);
 
   const handleViewChange = useCallback(
     (newView: "heatmap" | "graph") => {
@@ -60,8 +72,6 @@ export function ActivityChartCard({
     });
   }, []);
 
-  const theme =
-    document.documentElement.classList.contains("dark") ? "dark" : "light";
   const palette = useMemo(
     () => deriveStatisticsPalette(baseColor, theme),
     [baseColor, theme],
@@ -143,6 +153,7 @@ export function ActivityChartCard({
           mode={graphMode}
           onModeChange={setGraphMode}
           valueLabel="Active time"
+          palette={palette}
         />
       )}
       <StatisticsColorPicker

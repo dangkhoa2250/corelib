@@ -76,8 +76,9 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
   const [revealed, setRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [startedAt, setStartedAt] = useState(() => Date.now());
-  const elapsed = useElapsedTime(startedAt);
+  const grant = current.cards[index];
+  const answerTimer = useActiveTimer({ running: Boolean(grant) });
+  const elapsed = answerTimer.activeMs;
 
   useEffect(() => {
     setCurrent(session);
@@ -87,8 +88,8 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
   useEffect(() => {
     setRevealed(false);
     setError(null);
-    setStartedAt(Date.now());
-  }, [index, current.sessionId]);
+    answerTimer.reset();
+  }, [index, current.sessionId, answerTimer.reset]);
 
   const refreshSession = useCallback(async () => {
     setError(null);
@@ -111,8 +112,6 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
     }, delay);
     return () => window.clearTimeout(timer);
   }, [current.cards.length, current.nextLearningDueAt, refreshSession]);
-
-  const grant = current.cards[index];
 
   if (!grant) {
     if (current.nextLearningDueAt) {
@@ -156,7 +155,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
     setSaving(true);
     setError(null);
     try {
-      await onRate(current.sessionId, grant, rating, Date.now() - startedAt);
+      await onRate(current.sessionId, grant, rating, answerTimer.snapshot());
       await refreshSession();
     } catch (rateError) {
       if (errorMessage(rateError) === STALE_CARD_MESSAGE) {
@@ -236,7 +235,12 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl, activityApi }: 
   const elapsed = useElapsedTime(cardStartedAt, Boolean(card));
 
   const sessionTimer = useActiveTimer({ running: cards.length > 0 });
+  const sessionTimerRef = useRef(sessionTimer);
+  sessionTimerRef.current = sessionTimer;
   const activitySessionIdRef = useRef<string | null>(null);
+  const lastCheckpointedTimeRef = useRef(0);
+  const checkpointInFlightRef = useRef<Promise<void> | null>(null);
+  const finishSessionRef = useRef<() => void>(() => {});
   const activityApiRef = useRef(activityApi ?? defaultActivityApi);
   activityApiRef.current = activityApi ?? defaultActivityApi;
 
@@ -244,6 +248,7 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl, activityApi }: 
     if (cards.length === 0) return;
     const id = crypto.randomUUID();
     activitySessionIdRef.current = id;
+    lastCheckpointedTimeRef.current = 0;
     const now = new Date();
     const deckId = cards[0]!.deckId;
     activityApiRef.current.start({
@@ -257,36 +262,52 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl, activityApi }: 
       timezoneOffsetMinutes: -now.getTimezoneOffset(),
     }).catch(() => {});
     return () => {
-      const sid = activitySessionIdRef.current;
-      if (sid) {
-        activitySessionIdRef.current = null;
-        activityApiRef.current.finish(sid, new Date().toISOString()).catch(() => {});
-      }
+      finishSessionRef.current();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const checkpointPractice = useCallback((id: string): Promise<void> => {
+    const previous = checkpointInFlightRef.current ?? Promise.resolve();
+    const next = previous.then(async () => {
+      const snapshotMs = sessionTimerRef.current.snapshot();
+      const activeMs = Math.max(0, snapshotMs - lastCheckpointedTimeRef.current);
+      if (activeMs === 0) return;
+      await activityApiRef.current.checkpoint({
+        sessionId: id,
+        occurredAt: new Date().toISOString(),
+        activeMs,
+        pageVisitIncrement: 0,
+      });
+      lastCheckpointedTimeRef.current = snapshotMs;
+    });
+    const tracked = next.catch(() => {}).finally(() => {
+      if (checkpointInFlightRef.current === tracked) checkpointInFlightRef.current = null;
+    });
+    checkpointInFlightRef.current = tracked;
+    return next;
+  }, []);
 
   useEffect(() => {
     if (cards.length === 0 || !activitySessionIdRef.current) return;
     const interval = setInterval(() => {
       const id = activitySessionIdRef.current;
       if (!id) return;
-      activityApiRef.current.checkpoint({
-        sessionId: id,
-        occurredAt: new Date().toISOString(),
-        activeMs: sessionTimer.snapshot(),
-        pageVisitIncrement: 0,
-      }).catch(() => {});
+      checkpointPractice(id).catch(() => {});
     }, 15_000);
     return () => clearInterval(interval);
-  }, [cards.length, sessionTimer]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cards.length, checkpointPractice]);
 
-  const finishSession = () => {
+  const finishSession = useCallback(() => {
     const sid = activitySessionIdRef.current;
     if (sid) {
       activitySessionIdRef.current = null;
-      activityApiRef.current.finish(sid, new Date().toISOString()).catch(() => {});
+      checkpointPractice(sid)
+        .catch(() => {})
+        .then(() => activityApiRef.current.finish(sid, new Date().toISOString()))
+        .catch(() => {});
     }
-  };
+  }, [checkpointPractice]);
+  finishSessionRef.current = finishSession;
 
   const handleBack = () => {
     finishSession();

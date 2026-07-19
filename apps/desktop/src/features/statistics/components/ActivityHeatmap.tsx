@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import type { StatisticsRange } from "../../../domain/statistics";
+import { ScrollArea } from "../../../components/ScrollArea";
 
 interface ActivityHeatmapProps {
   data: Record<string, number>;
@@ -67,14 +68,14 @@ function buildYearDays(year: number, data: Record<string, number>): DayInfo[] {
 function buildRecentDays(count: number, data: Record<string, number>): DayInfo[] {
   const today = new Date();
   const result: DayInfo[] = [];
+  const first = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (count - 1));
+  const firstDow = first.getDay();
   for (let i = 0; i < count; i++) {
-    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (count - 1 - i));
+    const date = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i);
     const ds = dateStr(date);
     const minutes = data[ds] ?? 0;
     const level = getLevel(minutes);
-    const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000);
-    const jan1Dow = new Date(date.getFullYear(), 0, 1).getDay();
-    const column = Math.floor((dayOfYear - 1 + jan1Dow) / 7) + 1;
+    const column = Math.floor((i + firstDow) / 7) + 1;
     result.push({ date, dateStr: ds, minutes, level, column, row: date.getDay() + 1 });
   }
   return result;
@@ -105,23 +106,31 @@ function cellTooltip(date: Date, minutes: number): string {
 }
 
 function computeSummary(days: DayInfo[]) {
-  if (days.length === 0) return { activeDays: 0, peakLevel: 0, currentStreak: 0 };
+  if (days.length === 0) return { activeDays: 0, peakLevel: 0, currentStreak: 0, totalMinutes: 0, highest: null as DayInfo | null };
   const activeDays = days.filter((d) => d.minutes > 0).length;
   const peakLevel = Math.max(...days.map((d) => d.level));
+  const totalMinutes = days.reduce((total, day) => total + day.minutes, 0);
+  const highest = days.reduce<DayInfo | null>((best, day) => !best || day.minutes > best.minutes ? day : best, null);
   const sorted = [...days].sort((a, b) => b.date.getTime() - a.date.getTime());
   let streak = 0;
   for (const d of sorted) {
     if (d.minutes > 0) streak++;
     else break;
   }
-  return { activeDays, peakLevel, currentStreak: streak };
+  return { activeDays, peakLevel, currentStreak: streak, totalMinutes, highest };
 }
 
 export function ActivityHeatmap({ data, range, palette }: ActivityHeatmapProps) {
   const grids: YearGrid[] = useMemo(() => {
     if (range === "all") {
-      const cy = new Date().getFullYear();
-      return [cy - 1, cy, cy + 1].map((year) => {
+      const currentYear = new Date().getFullYear();
+      const dataYears = Array.from(new Set(
+        Object.keys(data)
+          .map((key) => Number(key.slice(0, 4)))
+          .filter((year) => Number.isInteger(year) && year <= currentYear),
+      )).sort((a, b) => b - a);
+      const years = (dataYears.length > 0 ? dataYears : [currentYear]).slice(0, 3);
+      return years.map((year) => {
         const days = buildYearDays(year, data);
         return { year, days, maxColumn: maxColumn(days) };
       });
@@ -134,6 +143,9 @@ export function ActivityHeatmap({ data, range, palette }: ActivityHeatmapProps) 
   const allDays = useMemo(() => grids.flatMap((g) => g.days), [grids]);
 
   const summary = useMemo(() => computeSummary(allDays), [allDays]);
+  const highestDayLabel = summary.highest && summary.highest.minutes > 0
+    ? summary.highest.date.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    : null;
 
   const [focused, setFocused] = useState(() => {
     for (let g = 0; g < grids.length; g++) {
@@ -202,38 +214,48 @@ export function ActivityHeatmap({ data, range, palette }: ActivityHeatmapProps) 
 
   return (
     <div className="statistics-heatmap-wrapper" style={paletteVars}>
-      {grids.map((grid, gridIdx) => (
-        <div
-          key={gridIdx}
-          role="grid"
-          aria-label="Daily activity"
-          className="statistics-heatmap"
-          style={{
-            gridTemplateColumns: `repeat(${grid.maxColumn}, 14px)`,
-            gridTemplateRows: "repeat(7, 14px)",
-          }}
-          onKeyDown={(e) => handleKeyDown(e, gridIdx)}
-        >
-          {grid.days.map((day, dayIdx) => {
-            const isFocused = focused.gridIdx === gridIdx && focused.dayIdx === dayIdx;
-            return (
+      <ScrollArea data-testid="statistics-heatmap-scroll" className="statistics-heatmap-scroll">
+        <div data-testid="statistics-heatmap-scroll-content" className="statistics-heatmap-scroll__content" style={{ paddingBottom: 20 }}>
+          {grids.map((grid, gridIdx) => (
+            <section key={grid.year} className="statistics-heatmap-year">
+              {range === "all" && <h3 className="statistics-heatmap-year__label">{grid.year}</h3>}
               <div
-                key={day.dateStr}
-                role="gridcell"
-                tabIndex={isFocused ? 0 : -1}
-                data-level={day.level}
-                data-cell-idx={`${gridIdx}-${dayIdx}`}
-                data-date={day.dateStr}
-                aria-label={cellLabel(day.date, day.minutes)}
-                title={cellTooltip(day.date, day.minutes)}
-                className="statistics-heatmap__cell"
-                style={{ gridRow: day.row, gridColumn: day.column }}
-                onClick={() => setFocused({ gridIdx, dayIdx })}
-              />
-            );
-          })}
+                role="grid"
+                aria-label="Daily activity"
+                className="statistics-heatmap"
+                style={{
+                  gridTemplateColumns: `repeat(${grid.maxColumn}, 14px)`,
+                  gridTemplateRows: "repeat(7, 14px)",
+                }}
+                onKeyDown={(e) => handleKeyDown(e, gridIdx)}
+              >
+                {grid.days.map((day, dayIdx) => {
+                  const isFocused = focused.gridIdx === gridIdx && focused.dayIdx === dayIdx;
+                  return (
+                    <div
+                      key={day.dateStr}
+                      role="gridcell"
+                      tabIndex={isFocused ? 0 : -1}
+                      data-level={day.level}
+                      data-cell-idx={`${gridIdx}-${dayIdx}`}
+                      data-date={day.dateStr}
+                      aria-label={cellLabel(day.date, day.minutes)}
+                      title={cellTooltip(day.date, day.minutes)}
+                      className="statistics-heatmap__cell"
+                      style={{ gridRow: day.row, gridColumn: day.column }}
+                      onClick={() => setFocused({ gridIdx, dayIdx })}
+                    />
+                  );
+                })}
+              </div>
+            </section>
+          ))}
         </div>
-      ))}
+      </ScrollArea>
+      <p className="statistics-heatmap__summary">
+        {summary.totalMinutes} minutes across {summary.activeDays} active days.
+        {highestDayLabel ? ` Highest day: ${highestDayLabel} (${summary.highest?.minutes} minutes).` : " No activity yet."}
+      </p>
       <div className="sr-only" aria-live="polite">
         Summary: {summary.activeDays} active days. Peak level: {summary.peakLevel}. Current streak:{" "}
         {summary.currentStreak} days.

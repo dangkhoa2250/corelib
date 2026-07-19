@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { useEffect, useState } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { useActiveTimer } from "./useActiveTimer";
 
@@ -11,6 +12,18 @@ function TimerHarness({ idleAfterMs, running }: { idleAfterMs?: number; running?
       <button onClick={timer.reset}>Reset</button>
     </div>
   );
+}
+
+function IntervalSnapshotHarness() {
+  const timer = useActiveTimer({ idleAfterMs: 90_000 });
+  const [sample, setSample] = useState(0);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setSample(timer.snapshot()), 1_000);
+    return () => window.clearInterval(id);
+  }, []); // Deliberately models a long-lived instrumentation interval.
+
+  return <span data-testid="snapshot">{sample}</span>;
 }
 
 afterEach(() => {
@@ -74,6 +87,15 @@ test("does not accumulate when running is false", () => {
   render(<TimerHarness idleAfterMs={90_000} running={false} />);
   act(() => vi.advanceTimersByTime(60_000));
   expect(screen.getByTestId("elapsed")).toHaveTextContent("0");
+});
+
+test("a long-lived interval reads the current snapshot instead of the first render", () => {
+  vi.useFakeTimers();
+  render(<IntervalSnapshotHarness />);
+
+  act(() => vi.advanceTimersByTime(5_000));
+
+  expect(screen.getByTestId("snapshot")).toHaveTextContent("5000");
 });
 
 test("cleans up global event listeners on unmount", () => {

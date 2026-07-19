@@ -74,6 +74,13 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
   expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,6};/);
 });
 
+test("loads the Statistics stylesheet from the application entry point", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const entry = readFileSync(join(currentDir, "../main.tsx"), "utf8");
+
+  expect(entry).toContain('import "./features/statistics/statistics.css";');
+});
+
 test("uses only public macOS view APIs to enable overlay scrollers", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const nativeApp = readFileSync(join(currentDir, "../../src-tauri/src/lib.rs"), "utf8");

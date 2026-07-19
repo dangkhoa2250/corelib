@@ -39,11 +39,8 @@ impl From<rusqlite::Error> for StatisticsError {
 
 /// Selected historical window for aggregate queries.
 ///
-/// Range boundaries use local-day strings (`YYYY-MM-DD`) for `activity_sessions`.
-/// For `review_logs.reviewed_at` (RFC3339 UTC), the start local-day is converted
-/// to a UTC timestamp by treating the local day as a UTC date. The deterministic
-/// test fixtures use `timezone_offset_minutes = 0`, so UTC dates line up exactly
-/// with `local_day` strings.
+/// Range boundaries use the persisted local calendar day for both activity
+/// sessions and real reviews.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatisticsRange {
     Days7,
@@ -220,6 +217,34 @@ fn validate_app_activity(app_key: &str, activity_kind: &str) -> Result<()> {
     }
 }
 
+fn validate_activity_context(
+    app_key: &str,
+    activity_kind: &str,
+    context_kind: Option<&str>,
+    context_id: Option<&str>,
+) -> Result<()> {
+    match (context_kind, context_id) {
+        (None, None) => Ok(()),
+        (Some(kind), Some(id)) if !id.trim().is_empty() => {
+            let expected = match (app_key, activity_kind) {
+                ("reading", "reading") => "document",
+                ("memora", "practice") => "deck",
+                _ => return Err(StatisticsError::Validation("unsupported activity context".into())),
+            };
+            if kind == expected {
+                Ok(())
+            } else {
+                Err(StatisticsError::Validation(format!(
+                    "invalid context kind for {app_key}/{activity_kind}: {kind}"
+                )))
+            }
+        }
+        _ => Err(StatisticsError::Validation(
+            "context_kind and context_id must both be present or absent".into(),
+        )),
+    }
+}
+
 fn validate_occurred_at(occurred_at: &str) -> Result<()> {
     DateTime::<FixedOffset>::parse_from_rfc3339(occurred_at)
         .map(|_| ())
@@ -239,6 +264,12 @@ fn validate_local_day(local_day: &str) -> Result<()> {
 impl LibraryDatabase {
     pub fn start_activity_session(&mut self, session: NewActivitySession) -> Result<()> {
         validate_app_activity(&session.app_key, &session.activity_kind)?;
+        validate_activity_context(
+            &session.app_key,
+            &session.activity_kind,
+            session.context_kind.as_deref(),
+            session.context_id.as_deref(),
+        )?;
         validate_occurred_at(&session.occurred_at)?;
         validate_local_day(&session.local_day)?;
 
@@ -287,18 +318,37 @@ impl LibraryDatabase {
         validate_occurred_at(&checkpoint.occurred_at)?;
 
         let transaction = self.connection.transaction()?;
-        let session_exists = transaction
+        let session = transaction
             .query_row(
-                "SELECT 1 FROM activity_sessions WHERE id = ?1",
+                "SELECT app_key, activity_kind, context_kind, context_id
+                 FROM activity_sessions WHERE id = ?1",
                 params![checkpoint.session_id],
-                |_| Ok(()),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, Option<String>>(3)?)),
             )
-            .optional()?
-            .is_some();
-        if !session_exists {
+            .optional()?;
+        let Some((app_key, activity_kind, context_kind, context_id)) = session else {
             // Dropping the transaction rolls back any pending writes (none yet here,
             // but this guard keeps the invariant explicit).
             return Err(StatisticsError::SessionNotFound);
+        };
+
+        match (checkpoint.document_id.as_deref(), checkpoint.page) {
+            (None, None) if checkpoint.page_visit_increment == 0 => {}
+            (Some(document_id), Some(_))
+                if app_key == "reading"
+                    && activity_kind == "reading"
+                    && context_kind.as_deref() == Some("document")
+                    && context_id.as_deref() == Some(document_id) => {}
+            (None, None) => {
+                return Err(StatisticsError::Validation(
+                    "page_visit_increment requires document_id and page".into(),
+                ));
+            }
+            _ => {
+                return Err(StatisticsError::Validation(
+                    "page checkpoint must match its reading document session".into(),
+                ));
+            }
         }
 
         transaction.execute(
@@ -576,14 +626,6 @@ impl RangeWindow {
         }
     }
 
-    /// RFC3339 UTC timestamp for the start of the start local day. `None` when
-    /// the range is `All` (no lower bound).
-    fn start_utc(&self) -> Result<Option<String>> {
-        match self.start.as_deref() {
-            Some(day) => Ok(Some(local_day_to_utc_start(day)?)),
-            None => Ok(None),
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -704,21 +746,10 @@ fn enumerate_days(start: &str, end: &str) -> Result<Vec<String>> {
     Ok(days)
 }
 
-fn local_day_to_utc_start(local_day: &str) -> Result<String> {
-    let date = parse_local_day(local_day)?;
-    Ok(format!("{}T00:00:00.000Z", date.format("%Y-%m-%d")))
-}
-
 fn parse_utc_timestamp(value: &str) -> Result<DateTime<Utc>> {
     DateTime::<FixedOffset>::parse_from_rfc3339(value)
         .map(|dt| dt.with_timezone(&Utc))
         .map_err(|_| StatisticsError::Validation(format!("invalid RFC3339 timestamp: {value}")))
-}
-
-fn utc_timestamp_to_local_day(value: &str) -> Option<String> {
-    DateTime::<FixedOffset>::parse_from_rfc3339(value)
-        .ok()
-        .map(|dt| dt.format("%Y-%m-%d").to_string())
 }
 
 fn average(total_ms: i64, count: i64) -> Option<f64> {
@@ -1022,16 +1053,16 @@ fn query_document_coverage(
 
 fn review_window_clause(start: Option<&str>) -> &'static str {
     if start.is_some() {
-        "review_logs.reviewed_at <= ? AND review_logs.reviewed_at >= ?"
+        "COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)) <= ? AND COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)) >= ?"
     } else {
-        "review_logs.reviewed_at <= ?"
+        "COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)) <= ?"
     }
 }
 
 fn collect_review_rows(
     connection: &rusqlite::Connection,
     window: &RangeWindow,
-    now_utc: &str,
+    _now_utc: &str,
     scope: ReviewScope,
 ) -> Result<Vec<ReviewRow>> {
     let join = scope.join_clause();
@@ -1049,7 +1080,6 @@ fn collect_review_rows(
         where_clause = review_window_clause(window.start()),
         scope_filter = scope_filter,
     );
-    let start_utc = window.start_utc()?;
     let mut stmt = connection.prepare(&sql)?;
     let review_map = |row: &rusqlite::Row<'_>| {
         Ok(ReviewRow {
@@ -1058,18 +1088,18 @@ fn collect_review_rows(
             elapsed_ms: row.get(2)?,
         })
     };
-    let rows = match (scope.bind_value(), start_utc.as_deref()) {
+    let rows = match (scope.bind_value(), window.start()) {
         (Some(value), Some(start)) => stmt
-            .query_map(params![now_utc, start, value], review_map)?
+            .query_map(params![window.today, start, value], review_map)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
         (Some(value), None) => stmt
-            .query_map(params![now_utc, value], review_map)?
+            .query_map(params![window.today, value], review_map)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
         (None, Some(start)) => stmt
-            .query_map(params![now_utc, start], review_map)?
+            .query_map(params![window.today, start], review_map)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
         (None, None) => stmt
-            .query_map(params![now_utc], review_map)?
+            .query_map(params![window.today], review_map)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
     };
     Ok(rows)
@@ -1186,7 +1216,7 @@ fn query_real_study_session_count(
         None => "",
     };
     let start_clause = if window.start().is_some() {
-        "AND study_sessions.created_at >= ?"
+        "AND COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)) >= ?"
     } else {
         ""
     };
@@ -1197,23 +1227,23 @@ fn query_real_study_session_count(
          FROM study_sessions
          JOIN study_session_cards
            ON study_session_cards.session_id = study_sessions.id
+         JOIN review_logs
+           ON review_logs.id = study_session_cards.review_log_id
          WHERE study_session_cards.consumed_at IS NOT NULL
            AND study_session_cards.review_log_id IS NOT NULL
-           AND study_sessions.created_at <= ?
+           AND COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)) <= ?
            {start_clause}
            {scope_clause}",
         start_clause = start_clause,
         scope_clause = scope_clause,
     );
-    let start_utc = window.start_utc()?;
-    let upper = "9999-12-31T23:59:59.999Z";
-    let count: i64 = match (deck_scope, start_utc.as_deref()) {
+    let count: i64 = match (deck_scope, window.start()) {
         (Some(deck), Some(start)) => {
-            connection.query_row(&sql, params![upper, start, deck], |row| row.get(0))?
+            connection.query_row(&sql, params![window.today, start, deck], |row| row.get(0))?
         }
-        (Some(deck), None) => connection.query_row(&sql, params![upper, deck], |row| row.get(0))?,
-        (None, Some(start)) => connection.query_row(&sql, params![upper, start], |row| row.get(0))?,
-        (None, None) => connection.query_row(&sql, params![upper], |row| row.get(0))?,
+        (Some(deck), None) => connection.query_row(&sql, params![window.today, deck], |row| row.get(0))?,
+        (None, Some(start)) => connection.query_row(&sql, params![window.today, start], |row| row.get(0))?,
+        (None, None) => connection.query_row(&sql, params![window.today], |row| row.get(0))?,
     };
     Ok(count)
 }
@@ -1312,7 +1342,7 @@ fn query_due_forecast(
 fn query_lifetime_active_days(
     connection: &rusqlite::Connection,
     today_local_day: &str,
-    now_utc: &str,
+    _now_utc: &str,
 ) -> Result<HashSet<String>> {
     let mut days: HashSet<String> = HashSet::new();
 
@@ -1333,15 +1363,16 @@ fn query_lifetime_active_days(
         }
     }
 
-    let mut review_stmt =
-        connection.prepare("SELECT DISTINCT reviewed_at FROM review_logs WHERE reviewed_at <= ?1")?;
+    let mut review_stmt = connection.prepare(
+        "SELECT DISTINCT COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10))
+         FROM review_logs
+         WHERE COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)) <= ?1",
+    )?;
     let review_rows: Vec<String> = review_stmt
-        .query_map(params![now_utc], |row| row.get(0))?
+        .query_map(params![today_local_day], |row| row.get(0))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
-    for reviewed_at in review_rows {
-        if let Some(day) = utc_timestamp_to_local_day(&reviewed_at) {
-            days.insert(day);
-        }
+    for day in review_rows {
+        days.insert(day);
     }
 
     Ok(days)
@@ -1368,15 +1399,14 @@ fn query_deck_active_days(
     let mut days: HashSet<String> = HashSet::new();
 
     let mut review_stmt = connection.prepare(
-        "SELECT DISTINCT strftime('%Y-%m-%d', review_logs.reviewed_at) AS day
+        "SELECT DISTINCT COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)) AS day
          FROM review_logs
          JOIN cards ON cards.id = review_logs.card_id
          WHERE cards.deck_id = ?1
-           AND review_logs.reviewed_at <= ?2",
+           AND COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)) <= ?2",
     )?;
-    let upper = "9999-12-31T23:59:59.999Z";
     let review_rows: Vec<String> = review_stmt
-        .query_map(params![deck_id, upper], |row| row.get(0))?
+        .query_map(params![deck_id, window.today], |row| row.get(0))?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     for day in review_rows {
         days.insert(day);
@@ -1442,7 +1472,7 @@ fn compute_current_streak(active_days: &HashSet<String>, today_local_day: &str) 
 fn earliest_activity_day(
     connection: &rusqlite::Connection,
     today_local_day: &str,
-    now_utc: &str,
+    _now_utc: &str,
 ) -> Result<Option<String>> {
     let activity_day: Option<String> = connection
         .query_row(
@@ -1454,11 +1484,12 @@ fn earliest_activity_day(
         .flatten();
     let review_day: Option<String> = connection
         .query_row(
-            "SELECT MIN(reviewed_at) FROM review_logs WHERE reviewed_at <= ?1",
-            params![now_utc],
+            "SELECT MIN(COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)))
+             FROM review_logs
+             WHERE COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)) <= ?1",
+            params![today_local_day],
             |row| row.get::<_, Option<String>>(0),
-        )?
-        .and_then(|value| utc_timestamp_to_local_day(&value));
+        )?;
     Ok(activity_day.into_iter().chain(review_day).min())
 }
 
@@ -1488,7 +1519,7 @@ fn build_total_buckets(
 
     // Capped real-study time per day, across all review logs.
     let review_sql = format!(
-        "SELECT reviewed_at, MIN(elapsed_ms, ?)
+        "SELECT COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)), MIN(elapsed_ms, ?)
          FROM review_logs
          WHERE {review_window}",
         review_window = review_window_clause(window.start()),
@@ -1587,7 +1618,7 @@ fn build_memora_buckets(
         None => ("", ""),
     };
     let review_sql = format!(
-        "SELECT reviewed_at, MIN(elapsed_ms, ?)
+        "SELECT COALESCE(NULLIF(review_logs.local_day, ''), substr(review_logs.reviewed_at, 1, 10)), MIN(elapsed_ms, ?)
          FROM review_logs
          {review_join}
          WHERE {review_window} {review_extra}",
@@ -1651,29 +1682,27 @@ fn query_daily_review_sums(
     connection: &rusqlite::Connection,
     sql: &str,
     window: &RangeWindow,
-    now_utc: &str,
+    _now_utc: &str,
     deck_scope: Option<&str>,
 ) -> Result<Vec<(String, i64)>> {
-    let start_utc = window.start_utc()?;
     let mut stmt = connection.prepare(sql)?;
     let extract = |row: &rusqlite::Row<'_>| -> rusqlite::Result<(String, i64)> {
-        let reviewed_at: String = row.get(0)?;
+        let local_day: String = row.get(0)?;
         let total: i64 = row.get(1)?;
-        let day = utc_timestamp_to_local_day(&reviewed_at).unwrap_or_else(|| reviewed_at.clone());
-        Ok((day, total))
+        Ok((local_day, total))
     };
-    let rows: Vec<(String, i64)> = match (start_utc.as_deref(), deck_scope) {
+    let rows: Vec<(String, i64)> = match (window.start(), deck_scope) {
         (Some(start), Some(deck)) => stmt
-            .query_map(params![REVIEW_TIME_CAP_MS, now_utc, start, deck], extract)?
+            .query_map(params![REVIEW_TIME_CAP_MS, window.today, start, deck], extract)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
         (Some(start), None) => stmt
-            .query_map(params![REVIEW_TIME_CAP_MS, now_utc, start], extract)?
+            .query_map(params![REVIEW_TIME_CAP_MS, window.today, start], extract)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
         (None, Some(deck)) => stmt
-            .query_map(params![REVIEW_TIME_CAP_MS, now_utc, deck], extract)?
+            .query_map(params![REVIEW_TIME_CAP_MS, window.today, deck], extract)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
         (None, None) => stmt
-            .query_map(params![REVIEW_TIME_CAP_MS, now_utc], extract)?
+            .query_map(params![REVIEW_TIME_CAP_MS, window.today], extract)?
             .collect::<std::result::Result<Vec<_>, _>>()?,
     };
     Ok(rows)
@@ -1736,6 +1765,7 @@ pub fn get_daily_statistics_snapshots(
             WHERE app_key = 'reading'
               AND local_day >= ?1
               AND local_day <= ?2
+              AND started_at >= ?3
             GROUP BY local_day
         ),
         page_agg AS (
@@ -1747,6 +1777,7 @@ pub fn get_daily_statistics_snapshots(
             WHERE a.app_key = 'reading'
               AND a.local_day >= ?1
               AND a.local_day <= ?2
+              AND a.started_at >= ?3
             GROUP BY a.local_day
         )
         SELECT s.local_day, s.active_ms, s.session_count,
@@ -1758,7 +1789,7 @@ pub fn get_daily_statistics_snapshots(
     {
         let mut stmt = conn.prepare(reading_sql)?;
         let rows = stmt
-            .query_map(params![query.from_local_day, today_upper_bound()], |row| {
+            .query_map(params![query.from_local_day, today_upper_bound(), query.consent_started_at], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, i64>(1)?,
@@ -1788,51 +1819,75 @@ pub fn get_daily_statistics_snapshots(
         }
     }
 
-    // Practice session counts per day for memora session counting.
+    // Practice contributes both active time and sessions. Sessions with no
+    // acknowledged active time are not learning sessions.
     let practice_sql = "
-        SELECT local_day, COUNT(DISTINCT id)
+        SELECT local_day,
+               COALESCE(SUM(raw_active_ms), 0),
+               COUNT(DISTINCT CASE WHEN raw_active_ms > 0 THEN id END)
         FROM activity_sessions
         WHERE activity_kind = 'practice'
           AND local_day >= ?1
           AND local_day <= ?2
+          AND started_at >= ?3
         GROUP BY local_day
     ";
-    let mut practice_counts: HashMap<String, i64> = HashMap::new();
+    let mut practice_by_day: HashMap<String, (i64, i64)> = HashMap::new();
     {
         let mut stmt = conn.prepare(practice_sql)?;
         let rows = stmt
-            .query_map(params![query.from_local_day, today_upper_bound()], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            .query_map(params![query.from_local_day, today_upper_bound(), query.consent_started_at], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        for (day, count) in rows {
-            practice_counts.insert(day, count);
+        for (day, active_ms, count) in rows {
+            practice_by_day.insert(day, (active_ms, count));
         }
     }
 
-    // Memora snapshots: aggregate review_logs by UTC date, capped per rating.
-    // Only review_logs after consent_started_at are included.
+    // Real reviews use the local day captured at rating time. The fallback is
+    // only for pre-migration development rows.
     let memora_sql = "
-        SELECT strftime('%Y-%m-%d', reviewed_at) as local_day,
+        SELECT COALESCE(NULLIF(review_logs.local_day, ''), substr(reviewed_at, 1, 10)) as review_day,
                COUNT(*),
                SUM(MIN(elapsed_ms, ?1)),
                SUM(CASE WHEN rating = 'again' THEN 1 ELSE 0 END),
                SUM(CASE WHEN rating = 'hard' THEN 1 ELSE 0 END),
                SUM(CASE WHEN rating = 'good' THEN 1 ELSE 0 END),
                SUM(CASE WHEN rating = 'easy' THEN 1 ELSE 0 END),
-               SUM(CASE WHEN prior_state = 'review' AND rating = 'again' THEN 1 ELSE 0 END)
+               SUM(CASE WHEN prior_state = 'review' AND rating = 'again' THEN 1 ELSE 0 END),
+               COUNT(DISTINCT study_session_cards.session_id)
         FROM review_logs
+        LEFT JOIN study_session_cards
+          ON study_session_cards.review_log_id = review_logs.id
         WHERE reviewed_at >= ?2
           AND reviewed_at <= ?3
-        GROUP BY local_day
-        ORDER BY local_day
+          AND COALESCE(NULLIF(review_logs.local_day, ''), substr(reviewed_at, 1, 10)) >= ?4
+        GROUP BY review_day
+        ORDER BY review_day
     ";
+    #[derive(Clone, Copy, Default)]
+    struct ReviewDayAggregate {
+        review_count: i64,
+        active_ms: i64,
+        again: i64,
+        hard: i64,
+        good: i64,
+        easy: i64,
+        lapses: i64,
+        session_count: i64,
+    }
+    let mut reviews_by_day: HashMap<String, ReviewDayAggregate> = HashMap::new();
     {
         let now_utc = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let mut stmt = conn.prepare(memora_sql)?;
         let rows = stmt
             .query_map(
-                params![REVIEW_TIME_CAP_MS, query.consent_started_at, now_utc],
+                params![REVIEW_TIME_CAP_MS, query.consent_started_at, now_utc, query.from_local_day],
                 |row| {
                     Ok((
                         row.get::<_, String>(0)?,
@@ -1843,29 +1898,56 @@ pub fn get_daily_statistics_snapshots(
                         row.get::<_, i64>(5)?,
                         row.get::<_, i64>(6)?,
                         row.get::<_, i64>(7)?,
+                        row.get::<_, i64>(8)?,
                     ))
                 },
             )?
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        for (local_day, review_count, capped_ms, again, hard, good, easy, lapses) in rows {
-            let practice_count = practice_counts.get(&local_day).copied().unwrap_or(0);
-            snapshots.push(DailyStatisticsSnapshot {
-                schema_version: 1,
-                local_day,
-                app_key: "memora".to_string(),
-                active_ms: capped_ms,
-                active_day: capped_ms >= ACTIVE_DAY_THRESHOLD_MS || practice_count > 0,
-                session_count: practice_count,
-                page_visit_count: None,
-                unique_page_count: None,
-                real_review_count: Some(review_count),
-                again_count: Some(again),
-                hard_count: Some(hard),
-                good_count: Some(good),
-                easy_count: Some(easy),
-                lapse_count: Some(lapses),
-            });
+        for (day, review_count, active_ms, again, hard, good, easy, lapses, session_count) in rows {
+            reviews_by_day.insert(
+                day,
+                ReviewDayAggregate {
+                    review_count,
+                    active_ms,
+                    again,
+                    hard,
+                    good,
+                    easy,
+                    lapses,
+                    session_count,
+                },
+            );
         }
+    }
+
+    let mut memora_days: Vec<String> = practice_by_day
+        .keys()
+        .chain(reviews_by_day.keys())
+        .cloned()
+        .collect();
+    memora_days.sort();
+    memora_days.dedup();
+    for local_day in memora_days {
+        let (practice_ms, practice_sessions) =
+            practice_by_day.get(&local_day).copied().unwrap_or((0, 0));
+        let reviews = reviews_by_day.get(&local_day).copied().unwrap_or_default();
+        let active_ms = practice_ms + reviews.active_ms;
+        snapshots.push(DailyStatisticsSnapshot {
+            schema_version: 1,
+            local_day,
+            app_key: "memora".to_string(),
+            active_ms,
+            active_day: active_ms >= ACTIVE_DAY_THRESHOLD_MS || reviews.review_count > 0,
+            session_count: practice_sessions + reviews.session_count,
+            page_visit_count: None,
+            unique_page_count: None,
+            real_review_count: Some(reviews.review_count),
+            again_count: Some(reviews.again),
+            hard_count: Some(reviews.hard),
+            good_count: Some(reviews.good),
+            easy_count: Some(reviews.easy),
+            lapse_count: Some(reviews.lapses),
+        });
     }
 
     snapshots.sort_by(|a, b| a.local_day.cmp(&b.local_day).then(a.app_key.cmp(&b.app_key)));

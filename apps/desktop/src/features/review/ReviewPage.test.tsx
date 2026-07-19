@@ -237,6 +237,33 @@ test("rates a grant and refreshes the backend queue", async () => {
   expect(await screen.findByText(/Next learning card/)).toBeInTheDocument();
 });
 
+test("study persists idle-aware answer time instead of wall-clock time", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-18T12:00:00.000Z"));
+  const onRate = vi.fn().mockResolvedValue({ card, reviewLogId: "log-idle" });
+
+  render(
+    <ReviewPage
+      mode="study"
+      session={studySession}
+      onRate={onRate}
+      onRefresh={vi.fn().mockResolvedValue({ ...studySession, cards: [] })}
+    />,
+  );
+
+  act(() => vi.advanceTimersByTime(120_000));
+  fireEvent.click(screen.getByRole("button", { name: /Flashcard/i }));
+  fireEvent.click(screen.getByRole("button", { name: "Good" }));
+  await act(async () => Promise.resolve());
+
+  expect(onRate).toHaveBeenCalledWith(
+    studySession.sessionId,
+    studySession.cards[0],
+    "good",
+    90_000,
+  );
+});
+
 test("stale ratings show an error without refreshing the queue", async () => {
   const user = userEvent.setup();
   const onRate = vi.fn().mockRejectedValue(
@@ -514,7 +541,7 @@ test("practice does not start an activity session without cards", () => {
   expect(activityApi.start).not.toHaveBeenCalled();
 });
 
-test("practice checkpoints every 15 seconds while active", () => {
+test("practice checkpoints every 15 seconds while active", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-07-18T12:00:00.000Z"));
   const activityApi = makeActivityApi();
@@ -523,7 +550,10 @@ test("practice checkpoints every 15 seconds while active", () => {
     <ReviewPage mode="practice" cards={[card]} onBack={onBack} activityApi={activityApi} />,
   );
 
-  act(() => vi.advanceTimersByTime(15_000));
+  await act(async () => {
+    vi.advanceTimersByTime(15_000);
+    await Promise.resolve();
+  });
 
   expect(activityApi.checkpoint).toHaveBeenCalledWith({
     sessionId: expect.any(String),
@@ -534,7 +564,32 @@ test("practice checkpoints every 15 seconds while active", () => {
   vi.useRealTimers();
 });
 
-test("practice finishes session on back navigation", () => {
+test("practice sends checkpoint deltas rather than cumulative active time", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-18T12:00:00.000Z"));
+  const activityApi = makeActivityApi();
+  render(<ReviewPage mode="practice" cards={[card]} activityApi={activityApi} />);
+
+  await act(async () => {
+    vi.advanceTimersByTime(15_000);
+    await Promise.resolve();
+  });
+  await act(async () => {
+    vi.advanceTimersByTime(15_000);
+    await Promise.resolve();
+  });
+
+  expect(activityApi.checkpoint).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({ activeMs: 15_000 }),
+  );
+  expect(activityApi.checkpoint).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({ activeMs: 15_000 }),
+  );
+});
+
+test("practice finishes session on back navigation", async () => {
   const activityApi = makeActivityApi();
   const onBack = vi.fn();
   const { container } = render(
@@ -546,6 +601,10 @@ test("practice finishes session on back navigation", () => {
   const backBtn = container.querySelector(".review-page__back-btn");
   expect(backBtn).not.toBeNull();
   fireEvent.click(backBtn!);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 
   expect(onBack).toHaveBeenCalledOnce();
   expect(activityApi.finish).toHaveBeenCalledWith(
@@ -568,13 +627,17 @@ test("practice finishes session when all cards are reviewed", async () => {
   expect(activityApi.finish).toHaveBeenCalledOnce();
 });
 
-test("practice finishes session on unmount", () => {
+test("practice finishes session on unmount", async () => {
   const activityApi = makeActivityApi();
   const { unmount } = render(
     <ReviewPage mode="practice" cards={[card]} activityApi={activityApi} />,
   );
 
   unmount();
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
 
   expect(activityApi.finish).toHaveBeenCalledWith(
     expect.any(String),

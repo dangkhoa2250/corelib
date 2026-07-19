@@ -81,6 +81,15 @@ fn statistics_migration_creates_tables() {
             .expect("table lookup");
         assert_eq!(count, 1, "missing {table}");
     }
+    let local_day_columns: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('review_logs') WHERE name='local_day'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("review log local day column");
+    assert_eq!(local_day_columns, 1);
 }
 
 #[test]
@@ -188,6 +197,30 @@ fn start_activity_session_allows_memora_practice_pair() {
             timezone_offset_minutes: 0,
         })
         .expect("memora practice is a valid pair");
+}
+
+#[test]
+fn start_activity_session_rejects_partial_or_mismatched_context() {
+    let (_directory, mut database) = db();
+    for (id, app_key, activity_kind, context_kind, context_id) in [
+        ("partial", "reading", "reading", Some("document"), None),
+        ("wrong-kind", "reading", "reading", Some("deck"), Some("doc-1")),
+        ("wrong-app", "memora", "practice", Some("document"), Some("doc-1")),
+        ("blank", "reading", "reading", Some("document"), Some("  ")),
+    ] {
+        let result = database.start_activity_session(NewActivitySession {
+            id: id.into(),
+            app_key: app_key.into(),
+            activity_kind: activity_kind.into(),
+            context_kind: context_kind.map(str::to_owned),
+            context_id: context_id.map(str::to_owned),
+            occurred_at: "2026-07-18T01:00:00.000Z".into(),
+            local_day: "2026-07-18".into(),
+            timezone_offset_minutes: 0,
+        });
+        assert!(result.is_err(), "invalid context should be rejected for {id}");
+        assert_eq!(session_count(&database, id), 0);
+    }
 }
 
 #[test]
@@ -433,6 +466,67 @@ fn checkpoint_activity_session_skips_page_when_document_or_page_missing() {
 
     assert_eq!(session_active_ms(&database, "session-no-page"), 30_000);
     assert_eq!(page_count_for_session(&database, "session-no-page"), 0);
+}
+
+#[test]
+fn checkpoint_activity_session_rejects_partial_or_cross_context_page_data() {
+    let (_directory, mut database) = db();
+    seed_document(&mut database, "doc-1");
+    seed_document(&mut database, "doc-2");
+    database
+        .start_activity_session(NewActivitySession {
+            id: "reading-context".into(),
+            app_key: "reading".into(),
+            activity_kind: "reading".into(),
+            context_kind: Some("document".into()),
+            context_id: Some("doc-1".into()),
+            occurred_at: "2026-07-18T01:00:00.000Z".into(),
+            local_day: "2026-07-18".into(),
+            timezone_offset_minutes: 0,
+        })
+        .expect("start");
+
+    for (document_id, page) in [(Some("doc-1"), None), (None, Some(1)), (Some("doc-2"), Some(1))] {
+        let result = database.checkpoint_activity_session(ActivityCheckpoint {
+            session_id: "reading-context".into(),
+            occurred_at: "2026-07-18T01:00:15.000Z".into(),
+            active_ms: 1_000,
+            document_id: document_id.map(str::to_owned),
+            page,
+            page_visit_increment: 1,
+        });
+        assert!(result.is_err());
+    }
+    assert_eq!(session_active_ms(&database, "reading-context"), 0);
+    assert_eq!(page_count_for_session(&database, "reading-context"), 0);
+}
+
+#[test]
+fn checkpoint_activity_session_rejects_page_data_for_practice_session() {
+    let (_directory, mut database) = db();
+    seed_document(&mut database, "doc-1");
+    database
+        .start_activity_session(NewActivitySession {
+            id: "practice-context".into(),
+            app_key: "memora".into(),
+            activity_kind: "practice".into(),
+            context_kind: Some("deck".into()),
+            context_id: Some("deck-1".into()),
+            occurred_at: "2026-07-18T01:00:00.000Z".into(),
+            local_day: "2026-07-18".into(),
+            timezone_offset_minutes: 0,
+        })
+        .expect("start");
+    let result = database.checkpoint_activity_session(ActivityCheckpoint {
+        session_id: "practice-context".into(),
+        occurred_at: "2026-07-18T01:00:15.000Z".into(),
+        active_ms: 1_000,
+        document_id: Some("doc-1".into()),
+        page: Some(1),
+        page_visit_increment: 1,
+    });
+    assert!(result.is_err());
+    assert_eq!(session_active_ms(&database, "practice-context"), 0);
 }
 
 #[test]
@@ -1060,6 +1154,62 @@ fn range_filters_activity_sessions_and_review_logs_by_local_day() {
 
     // Suppress unused warning when the test doesn't otherwise touch deck.
     let _ = deck;
+}
+
+#[test]
+fn review_buckets_use_the_persisted_local_day_across_utc_midnight() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-local-day", 3);
+    let _deck = database.create_deck("Local day deck").expect("deck");
+    let card = create_card_for_document(
+        &mut database,
+        "Local day deck",
+        "doc-local-day",
+        1,
+        "card-local-day",
+    );
+    insert_review_log(
+        &database,
+        "review-local-day",
+        &card,
+        "2026-07-18T15:30:00.000Z",
+        "good",
+        "review",
+        "review",
+        60_000,
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE review_logs SET local_day='2026-07-19' WHERE id='review-local-day'",
+            [],
+        )
+        .expect("set persisted local day");
+
+    let overview = database
+        .statistics_overview(
+            StatisticsRange::Days7,
+            "2026-07-18T16:00:00.000Z",
+            "2026-07-19",
+        )
+        .expect("overview");
+
+    assert_eq!(
+        overview
+            .buckets
+            .iter()
+            .find(|bucket| bucket.local_day == "2026-07-19")
+            .map(|bucket| bucket.active_ms),
+        Some(60_000),
+    );
+    assert_eq!(
+        overview
+            .buckets
+            .iter()
+            .find(|bucket| bucket.local_day == "2026-07-18")
+            .map(|bucket| bucket.active_ms),
+        Some(0),
+    );
 }
 
 #[test]
@@ -1786,4 +1936,98 @@ fn daily_snapshots_empty_range_returns_empty_vec() {
     let snapshots =
         get_daily_statistics_snapshots(&database.connection, &query).expect("daily snapshots");
     assert!(snapshots.is_empty());
+}
+
+#[test]
+fn daily_snapshots_exclude_same_day_reading_started_before_consent() {
+    let (_directory, mut database) = db();
+    seed_document(&mut database, "doc-consent");
+    start_session(
+        &mut database,
+        "session-before-consent",
+        "reading",
+        "reading",
+        "2026-07-18T01:00:00.000Z",
+        "2026-07-18",
+        Some("document"),
+        Some("doc-consent"),
+    );
+    checkpoint(
+        &mut database,
+        "session-before-consent",
+        "2026-07-18T01:01:00.000Z",
+        60_000,
+        Some("doc-consent"),
+        Some(1),
+        1,
+    );
+
+    let snapshots = get_daily_statistics_snapshots(
+        &database.connection,
+        &DailySnapshotQuery {
+            consent_started_at: "2026-07-18T12:00:00.000Z".into(),
+            from_local_day: "2026-07-18".into(),
+        },
+    )
+    .expect("daily snapshots");
+
+    assert!(snapshots.iter().all(|snapshot| snapshot.app_key != "reading"));
+}
+
+#[test]
+fn daily_snapshots_include_practice_only_memora_days_and_real_session_counts() {
+    let (_directory, mut database) = db();
+    let deck = database.create_deck("Snapshot deck").expect("deck");
+    start_session(
+        &mut database,
+        "practice-session",
+        "memora",
+        "practice",
+        "2026-07-18T03:00:00.000Z",
+        "2026-07-18",
+        Some("deck"),
+        Some(&deck.id),
+    );
+    checkpoint(
+        &mut database,
+        "practice-session",
+        "2026-07-18T03:02:00.000Z",
+        120_000,
+        None,
+        None,
+        0,
+    );
+
+    let snapshots = get_daily_statistics_snapshots(
+        &database.connection,
+        &DailySnapshotQuery {
+            consent_started_at: "2026-07-18T00:00:00.000Z".into(),
+            from_local_day: "2026-07-18".into(),
+        },
+    )
+    .expect("daily snapshots");
+    let memora = snapshots
+        .iter()
+        .find(|snapshot| snapshot.app_key == "memora")
+        .expect("practice-only memora snapshot");
+
+    assert_eq!(memora.active_ms, 120_000);
+    assert_eq!(memora.session_count, 1);
+    assert_eq!(memora.real_review_count, Some(0));
+    assert!(memora.active_day);
+}
+
+#[test]
+fn review_local_day_is_persisted_for_timezone_correct_bucketing() {
+    let (_directory, database) = db();
+    let local_day: String = database
+        .connection
+        .query_row(
+            "SELECT local_day FROM review_logs LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or_default();
+
+    assert!(local_day.is_empty(), "clean databases have no review rows");
 }

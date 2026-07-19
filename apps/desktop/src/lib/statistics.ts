@@ -18,14 +18,14 @@ export function getStatisticsOverview(
   range: StatisticsRange,
   call: Invoke = invoke as Invoke,
 ): Promise<StatisticsOverview> {
-  return call<StatisticsOverview>("get_statistics_overview", { range });
+  return call<StatisticsOverview>("get_statistics_overview", { input: { range } });
 }
 
 export function getReadingStatistics(
   range: StatisticsRange,
   call: Invoke = invoke as Invoke,
 ): Promise<ReadingStatistics> {
-  return call<ReadingStatistics>("get_reading_statistics", { range });
+  return call<ReadingStatistics>("get_reading_statistics", { input: { range } });
 }
 
 export function getDocumentStatistics(
@@ -33,14 +33,16 @@ export function getDocumentStatistics(
   range: StatisticsRange,
   call: Invoke = invoke as Invoke,
 ): Promise<DocumentStatistics> {
-  return call<DocumentStatistics>("get_document_statistics", { documentId, range });
+  return call<DocumentStatistics>("get_document_statistics", {
+    input: { documentId, range },
+  });
 }
 
 export function getMemoraStatistics(
   range: StatisticsRange,
   call: Invoke = invoke as Invoke,
 ): Promise<MemoraStatistics> {
-  return call<MemoraStatistics>("get_memora_statistics", { range });
+  return call<MemoraStatistics>("get_memora_statistics", { input: { range } });
 }
 
 export function getDeckStatisticsDetail(
@@ -48,7 +50,9 @@ export function getDeckStatisticsDetail(
   range: StatisticsRange,
   call: Invoke = invoke as Invoke,
 ): Promise<DeckStatisticsDetail> {
-  return call<DeckStatisticsDetail>("get_deck_statistics_detail", { deckId, range });
+  return call<DeckStatisticsDetail>("get_deck_statistics_detail", {
+    input: { deckId, range },
+  });
 }
 
 export function startActivitySession(
@@ -77,6 +81,6 @@ export function getDailyStatisticsSnapshots(
   call: Invoke = invoke as Invoke,
 ): Promise<DailyStatisticsSnapshot[]> {
   return call<DailyStatisticsSnapshot[]>("get_daily_statistics_snapshots", {
-    query,
+    input: { query },
   });
 }

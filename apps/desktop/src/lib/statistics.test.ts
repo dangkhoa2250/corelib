@@ -2,6 +2,10 @@ import { expect, test, vi } from "vitest";
 import {
   checkpointActivitySession,
   getDailyStatisticsSnapshots,
+  getDeckStatisticsDetail,
+  getDocumentStatistics,
+  getMemoraStatistics,
+  getReadingStatistics,
   getStatisticsOverview,
 } from "./statistics";
 
@@ -15,6 +19,10 @@ test("uses the typed Tauri statistics contract", async () => {
     buckets: [],
   });
   await getStatisticsOverview("30d", call);
+  await getReadingStatistics("30d", call);
+  await getDocumentStatistics("doc-1", "30d", call);
+  await getMemoraStatistics("30d", call);
+  await getDeckStatisticsDetail("deck-1", "30d", call);
   await checkpointActivitySession(
     {
       sessionId: "s1",
@@ -27,9 +35,21 @@ test("uses the typed Tauri statistics contract", async () => {
     call,
   );
   expect(call).toHaveBeenNthCalledWith(1, "get_statistics_overview", {
-    range: "30d",
+    input: { range: "30d" },
   });
-  expect(call).toHaveBeenNthCalledWith(2, "checkpoint_activity_session", {
+  expect(call).toHaveBeenNthCalledWith(2, "get_reading_statistics", {
+    input: { range: "30d" },
+  });
+  expect(call).toHaveBeenNthCalledWith(3, "get_document_statistics", {
+    input: { documentId: "doc-1", range: "30d" },
+  });
+  expect(call).toHaveBeenNthCalledWith(4, "get_memora_statistics", {
+    input: { range: "30d" },
+  });
+  expect(call).toHaveBeenNthCalledWith(5, "get_deck_statistics_detail", {
+    input: { deckId: "deck-1", range: "30d" },
+  });
+  expect(call).toHaveBeenNthCalledWith(6, "checkpoint_activity_session", {
     input: expect.objectContaining({ sessionId: "s1", activeMs: 15000 }),
   });
 });
@@ -52,7 +72,9 @@ test("getDailyStatisticsSnapshots calls the Tauri command with the query", async
     call,
   );
   expect(call).toHaveBeenCalledWith("get_daily_statistics_snapshots", {
-    query: { consentStartedAt: "2026-07-01T00:00:00Z", fromLocalDay: "2026-07-18" },
+    input: {
+      query: { consentStartedAt: "2026-07-01T00:00:00Z", fromLocalDay: "2026-07-18" },
+    },
   });
   expect(result).toHaveLength(1);
   expect(result[0].appKey).toBe("reading");

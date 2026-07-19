@@ -1,11 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { StatisticsColorPicker } from "./StatisticsColorPicker";
 
 test("renders preset color swatches", () => {
   render(<StatisticsColorPicker baseColor="#3778d4" onChange={vi.fn()} />);
-  expect(screen.getByText(/Chart color/i)).toBeInTheDocument();
+  expect(screen.getByText("Chart color")).toBeInTheDocument();
   expect(screen.getAllByRole("button")).toHaveLength(8);
 });
 
@@ -22,4 +22,11 @@ test("selected swatch has aria-pressed true", () => {
   expect(
     screen.getByLabelText(/Set chart color to #e84c3d/i),
   ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("accepts one custom base color", async () => {
+  const onChange = vi.fn();
+  render(<StatisticsColorPicker baseColor="#3778d4" onChange={onChange} />);
+  fireEvent.change(screen.getByLabelText("Custom chart color"), { target: { value: "#123456" } });
+  expect(onChange).toHaveBeenLastCalledWith("#123456");
 });

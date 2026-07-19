@@ -18,9 +18,11 @@ const mockAdminStats: AdminStatistics = {
   averageActiveDays: 29.0,
   appAllocation: { reading: 60.0, memora: 40.0 },
   reading: {
+    contributingUsers: 5, insufficientSample: false,
     activeUsers: 5, activeMs: 21600000, sessionCount: 30, pageVisitCount: 200, returningUserRate: 0.8,
   },
   memora: {
+    contributingUsers: 5, insufficientSample: false,
     activeUsers: 4, activeMs: 14400000, sessionCount: 20, realReviewCount: 500,
     againCount: 50, hardCount: 80, goodCount: 300, easyCount: 70, lapseCount: 30,
     recallRate: 0.9, weeklyLearningFrequency: 3.5,
@@ -34,6 +36,7 @@ test("renders analytics coverage section", async () => {
   const adminStatistics = vi.fn().mockResolvedValue(mockAdminStats);
   render(<AdminAnalyticsPage adminStatistics={adminStatistics} />);
   expect(await screen.findByText("Analytics coverage")).toBeInTheDocument();
+  expect(adminStatistics).toHaveBeenCalledWith("30d", "all");
 });
 
 test("shows opt-in coverage", async () => {
@@ -58,6 +61,16 @@ test("shows read-only Heatmap/Graph toggle", async () => {
   render(<AdminAnalyticsPage adminStatistics={adminStatistics} />);
   expect(await screen.findByRole("button", { name: /heatmap/i })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /graph/i })).toBeInTheDocument();
+});
+
+test("does not expose app metrics below the privacy threshold", async () => {
+  const adminStatistics = vi.fn().mockResolvedValue({
+    ...mockAdminStats,
+    reading: { contributingUsers: 4, insufficientSample: true },
+  });
+  render(<AdminAnalyticsPage adminStatistics={adminStatistics} />);
+  expect(await screen.findByText("Reading sample too small")).toBeInTheDocument();
+  expect(screen.queryByText("200")).not.toBeInTheDocument();
 });
 
 test("does not render any user email", async () => {

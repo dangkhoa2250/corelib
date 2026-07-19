@@ -3,7 +3,7 @@ import type { ReadingStatistics, StatisticsRange } from "../../../domain/statist
 import { getReadingStatistics } from "../../../lib/statistics";
 import { KpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
-import { StatisticsShell } from "../components/StatisticsShell";
+import { ActivityChartCard } from "../components/ActivityChartCard";
 
 function formatMs(ms: number): string {
   const hours = Math.floor(ms / 3600000);
@@ -27,7 +27,6 @@ export interface ReadingStatisticsPageProps {
 export function ReadingStatisticsPage({
   range,
   getReadingStats = getReadingStatistics,
-  onBack,
 }: ReadingStatisticsPageProps) {
   const [stats, setStats] = useState<ReadingStatistics | null>(null);
   const [state, setState] = useState<"loading" | "error" | "loaded">("loading");
@@ -47,7 +46,7 @@ export function ReadingStatisticsPage({
   }, [load]);
 
   return (
-    <StatisticsShell title="Reading" onBack={onBack}>
+    <div className="statistics-page">
       <MetricSection
         title="Overview"
         state={state}
@@ -63,9 +62,10 @@ export function ReadingStatisticsPage({
               <KpiCard label="Unique pages" value={String(stats.uniquePages)} />
               <KpiCard label="Revisits" value={String(stats.revisits)} />
             </div>
+            <ActivityChartCard range={range} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
           </>
         )}
       </MetricSection>
-    </StatisticsShell>
+    </div>
   );
 }

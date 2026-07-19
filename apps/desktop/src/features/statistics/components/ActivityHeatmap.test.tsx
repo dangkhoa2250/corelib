@@ -44,7 +44,7 @@ test("arrow keys move focus through cells", async () => {
 
 test("renders hidden summary with active days", () => {
   render(<ActivityHeatmap data={mockData} range="30d" palette={mockPalette} />);
-  expect(screen.getByText(/active days/)).toBeInTheDocument();
+  expect(screen.getAllByText(/active days/)).toHaveLength(2);
 });
 
 test("all-time range renders at most 3 grids for 5 years of data", () => {
@@ -56,4 +56,20 @@ test("all-time range renders at most 3 grids for 5 years of data", () => {
   }
   render(<ActivityHeatmap data={bigData} range="all" palette={mockPalette} />);
   expect(screen.getAllByRole("grid", { name: "Daily activity" })).toHaveLength(3);
+  expect(screen.getByText("2025")).toBeInTheDocument();
+  expect(screen.getByText("2024")).toBeInTheDocument();
+  expect(screen.getByText("2023")).toBeInTheDocument();
+  expect(screen.queryByText("2026")).not.toBeInTheDocument();
+});
+
+test("uses the shared horizontal ScrollArea and reserves its thumb inset", () => {
+  render(<ActivityHeatmap data={mockData} range="30d" palette={mockPalette} />);
+  expect(screen.getByTestId("statistics-heatmap-scroll")).toHaveStyle({ overflow: "hidden" });
+  expect(screen.getByTestId("statistics-heatmap-scroll-content")).toHaveStyle({ paddingBottom: "20px" });
+});
+
+test("shows an understandable activity summary", () => {
+  render(<ActivityHeatmap data={mockData} range="30d" palette={mockPalette} />);
+  expect(screen.getByText(/172 minutes across 2 active days/i)).toBeInTheDocument();
+  expect(screen.getByText(/Highest day: July 19, 2025/i)).toBeInTheDocument();
 });

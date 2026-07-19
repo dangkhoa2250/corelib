@@ -36,6 +36,15 @@ export function StatisticsColorPicker({
             />
           );
         })}
+        <label className="statistics-color-picker__custom">
+          <span className="sr-only">Custom chart color</span>
+          <input
+            aria-label="Custom chart color"
+            type="color"
+            value={baseColor}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </label>
       </div>
     </div>
   );

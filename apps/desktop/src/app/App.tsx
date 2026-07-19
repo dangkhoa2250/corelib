@@ -753,20 +753,6 @@ export function App({
     );
   }
 
-  if (route.name === "statistics") {
-    return (
-      <StatisticsPage
-        target={route.target}
-        origin={route.origin}
-        onBack={() => {
-          if (route.origin === "library") setRoute({ name: "library" });
-          else if (route.origin === "memora") setRoute({ name: "memora" });
-          else setRoute({ name: "library" });
-        }}
-      />
-    );
-  }
-
   const activeSection: AppSection =
     route.name === "memora" || route.name === "deckDetail"
       ? "memora"
@@ -776,6 +762,8 @@ export function App({
       ? "trash"
       : route.name === "admin"
       ? "admin"
+      : route.name === "statistics"
+      ? "statistics"
       : "library";
 
   return (
@@ -804,8 +792,17 @@ export function App({
         onSettingsClick={() => setRoute({ name: "settings" })}
         onAdminClick={() => setRoute({ name: "admin" })}
       />
-      <div className="app-shell__content">
-        {route.name === "memora" ? (
+      <div className={`app-shell__content ${route.name === "statistics" || route.name === "admin" ? "app-shell__content--managed-scroll" : ""}`}>
+        {route.name === "statistics" ? (
+          <StatisticsPage
+            target={route.target}
+            origin={route.origin}
+            onBack={() => {
+              if (route.origin === "memora") setRoute({ name: "memora" });
+              else setRoute({ name: "library" });
+            }}
+          />
+        ) : route.name === "memora" ? (
           <MemoraPage
             listDecks={learning.listDecks}
             getStudyReadyCounts={learning.getStudyReadyCounts}

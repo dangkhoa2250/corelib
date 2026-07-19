@@ -2,15 +2,20 @@ import { useCallback, useEffect, useState } from "react";
 import type { StatisticsOverview, StatisticsRange } from "../../../domain/statistics";
 import { getStatisticsOverview } from "../../../lib/statistics";
 import { ActivityChartCard } from "../components/ActivityChartCard";
+import { AppInsightCard } from "../components/AppInsightCard";
 import { KpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
-import { StatisticsRangePicker } from "../components/StatisticsRangePicker";
+import type { AppStatisticsSummary, StatisticsAppDefinition } from "../registry";
 
 interface StatisticsOverviewPageProps {
   range: StatisticsRange;
   onRangeChange(range: StatisticsRange): void;
   getOverview?: typeof getStatisticsOverview;
+  apps?: StatisticsAppDefinition[];
+  onOpenApp?(appKey: string): void;
 }
+
+const NO_APPS: StatisticsAppDefinition[] = [];
 
 function convertBuckets(
   buckets: { localDay: string; activeMs: number }[],
@@ -30,12 +35,16 @@ function formatMs(ms: number): string {
 
 export function StatisticsOverviewPage({
   range,
-  onRangeChange,
   getOverview = getStatisticsOverview,
+  apps = NO_APPS,
+  onOpenApp,
 }: StatisticsOverviewPageProps) {
   const [data, setData] = useState<StatisticsOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [appSummaries, setAppSummaries] = useState<Record<string, AppStatisticsSummary>>({});
+  const [appErrors, setAppErrors] = useState<Set<string>>(new Set());
+  const [appsLoading, setAppsLoading] = useState(apps.length > 0);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -53,14 +62,33 @@ export function StatisticsOverviewPage({
     load();
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setAppsLoading(apps.length > 0);
+    setAppSummaries({});
+    setAppErrors(new Set());
+    void Promise.allSettled(apps.map((app) => app.loadSummary(range))).then((results) => {
+      if (cancelled) return;
+      const summaries: Record<string, AppStatisticsSummary> = {};
+      const failures = new Set<string>();
+      results.forEach((result, index) => {
+        const app = apps[index];
+        if (result.status === "fulfilled") summaries[app.key] = result.value;
+        else failures.add(app.key);
+      });
+      setAppSummaries(summaries);
+      setAppErrors(failures);
+      setAppsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [apps, range]);
+
   const handleRetry = useCallback(() => {
     load();
   }, [load]);
 
   return (
     <div>
-      <StatisticsRangePicker range={range} onChange={onRangeChange} />
-
       {loading && <MetricSection title="Overview" state="loading" />}
       {error && (
         <MetricSection
@@ -85,8 +113,30 @@ export function StatisticsOverviewPage({
           <ActivityChartCard
             range={range}
             totalBuckets={convertBuckets(data.buckets)}
-            series={[]}
+            series={apps.flatMap((app) => {
+              const summary = appSummaries[app.key];
+              return summary ? [{ appKey: app.key, title: app.title, buckets: summary.buckets }] : [];
+            })}
           />
+
+          {apps.length > 0 && (
+            <section className="statistics-section" aria-labelledby="statistics-app-insights">
+              <div className="statistics-section__header">
+                <h2 id="statistics-app-insights" className="statistics-section__title">App insights</h2>
+              </div>
+              <div className="statistics-app-grid">
+                {apps.map((app) => (
+                  <AppInsightCard
+                    key={app.key}
+                    app={app}
+                    summary={appSummaries[app.key] ?? null}
+                    state={appsLoading ? "loading" : appErrors.has(app.key) ? "error" : "loaded"}
+                    onOpen={onOpenApp ? () => onOpenApp(app.key) : undefined}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
         </>
       )}
     </div>

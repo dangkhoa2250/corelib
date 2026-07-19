@@ -1,25 +1,53 @@
 import type { ReactNode } from "react";
 import { ScrollArea } from "../../../components/ScrollArea";
+import type { StatisticsRange } from "../../../domain/statistics";
+import { StatisticsRangePicker } from "./StatisticsRangePicker";
 
 interface StatisticsShellProps {
   title: string;
   onBack?: () => void;
+  breadcrumb?: string;
+  range?: StatisticsRange;
+  onRangeChange?: (range: StatisticsRange) => void;
   children?: ReactNode;
 }
 
-export function StatisticsShell({ title, onBack, children }: StatisticsShellProps) {
+export function StatisticsShell({
+  title,
+  onBack,
+  breadcrumb,
+  range,
+  onRangeChange,
+  children,
+}: StatisticsShellProps) {
   return (
     <div className="statistics-shell">
-      {onBack && (
-        <button onClick={onBack}>Back</button>
-      )}
-      <h1>{title}</h1>
       <ScrollArea data-testid="statistics-scroll-area">
         <div
           data-testid="statistics-scroll-content"
           className="statistics-shell__content"
           style={{ padding: "28px 20px 40px 28px" }}
         >
+          <header className="statistics-shell__header">
+            <div className="statistics-shell__heading">
+              {onBack ? (
+                <button
+                  aria-label="Back"
+                  className="statistics-back-button"
+                  onClick={onBack}
+                  type="button"
+                >
+                  <span aria-hidden="true">←</span>
+                  Back
+                </button>
+              ) : null}
+              {breadcrumb ? <p className="statistics-breadcrumb">{breadcrumb}</p> : null}
+              <h1>{title}</h1>
+            </div>
+            {range && onRangeChange ? (
+              <StatisticsRangePicker range={range} onChange={onRangeChange} />
+            ) : null}
+          </header>
           {children}
         </div>
       </ScrollArea>

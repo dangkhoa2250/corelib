@@ -285,6 +285,10 @@ textarea::placeholder {
   background: var(--main-bg);
 }
 
+.app-shell__content--managed-scroll {
+  overflow: hidden;
+}
+
 .app-sidebar {
   position: relative;
   display: flex;

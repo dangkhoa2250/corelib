@@ -798,7 +798,7 @@ fn write_review_in_tx(
 
         let review_log_id = Uuid::new_v4().to_string();
         tx.execute(
-            "INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            "INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version,local_day) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)",
             params![
                 review_log_id,
                 rating.card_id,
@@ -811,6 +811,7 @@ fn write_review_in_tx(
                 scheduled.interval_seconds,
                 rating.elapsed_ms,
                 SCHEDULER_VERSION,
+                rating.study_day,
             ],
         )?;
         Ok(review_log_id)

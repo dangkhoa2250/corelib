@@ -3,7 +3,7 @@ import type { DocumentStatistics, StatisticsRange } from "../../../domain/statis
 import { getDocumentStatistics } from "../../../lib/statistics";
 import { KpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
-import { StatisticsShell } from "../components/StatisticsShell";
+import { ActivityChartCard } from "../components/ActivityChartCard";
 
 function formatMs(ms: number): string {
   const hours = Math.floor(ms / 3600000);
@@ -34,7 +34,6 @@ export function DocumentStatisticsPage({
   documentId,
   range,
   getDocStats = getDocumentStatistics,
-  onBack,
 }: DocumentStatisticsPageProps) {
   const [stats, setStats] = useState<DocumentStatistics | null>(null);
   const [state, setState] = useState<"loading" | "error" | "loaded">("loading");
@@ -54,7 +53,7 @@ export function DocumentStatisticsPage({
   }, [load]);
 
   return (
-    <StatisticsShell title="Document" onBack={onBack}>
+    <div className="statistics-page">
       <MetricSection
         title="Overview"
         state={state}
@@ -85,9 +84,10 @@ export function DocumentStatisticsPage({
                 <KpiCard label="Lapses" value={String(stats.lapses)} />
               </div>
             </MetricSection>
+            <ActivityChartCard range={range} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
           </>
         )}
       </MetricSection>
-    </StatisticsShell>
+    </div>
   );
 }

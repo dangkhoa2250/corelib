@@ -74,8 +74,8 @@ const mockAdminStats: AdminStatistics = {
   averageActiveMs: 7200000,
   averageActiveDays: 29.0,
   appAllocation: { reading: 60.0, memora: 40.0 },
-  reading: { activeUsers: 5, activeMs: 21600000, sessionCount: 30, pageVisitCount: 200, returningUserRate: 0.8 },
-  memora: { activeUsers: 4, activeMs: 14400000, sessionCount: 20, realReviewCount: 500, againCount: 50, hardCount: 80, goodCount: 300, easyCount: 70, lapseCount: 30, recallRate: 0.9, weeklyLearningFrequency: 3.5 },
+  reading: { contributingUsers: 5, insufficientSample: false, activeUsers: 5, activeMs: 21600000, sessionCount: 30, pageVisitCount: 200, returningUserRate: 0.8 },
+  memora: { contributingUsers: 5, insufficientSample: false, activeUsers: 4, activeMs: 14400000, sessionCount: 20, realReviewCount: 500, againCount: 50, hardCount: 80, goodCount: 300, easyCount: 70, lapseCount: 30, recallRate: 0.9, weeklyLearningFrequency: 3.5 },
   buckets: [{ localDay: "2026-07-18", contributingUsers: 5, insufficientSample: false, activeMs: 3600000 }],
 };
 
@@ -85,6 +85,8 @@ describe("AdminPage Dashboard", () => {
     render(<AdminPage api={api} />);
     expect(await screen.findByRole("button", { name: "Management" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Analytics" })).toBeInTheDocument();
+    expect(screen.getByTestId("admin-scroll-area")).toHaveStyle({ overflow: "hidden" });
+    expect(screen.getByTestId("admin-scroll-content")).toHaveStyle({ paddingRight: "20px", paddingBottom: "20px" });
   });
 
   it("switches to Analytics view when Analytics button clicked", async () => {

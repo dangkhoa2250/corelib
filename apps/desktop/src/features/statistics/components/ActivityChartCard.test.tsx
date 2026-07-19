@@ -5,6 +5,7 @@ import { ActivityChartCard } from "./ActivityChartCard";
 import type { ActivityChartSeries } from "../registry";
 
 beforeEach(() => {
+  localStorage.clear();
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2025-07-19T12:00:00Z"));
 });
@@ -53,4 +54,12 @@ test("app filter dropdown renders with all apps option", () => {
   expect(screen.getByLabelText(/Statistics app/i)).toBeInTheDocument();
   expect(screen.getByRole("option", { name: /all apps/i })).toBeInTheDocument();
   expect(screen.getByRole("option", { name: /reading/i })).toBeInTheDocument();
+});
+
+test("derives chart shades from the data-theme attribute", async () => {
+  document.documentElement.dataset.theme = "dark";
+  const { container } = render(<ActivityChartCard range="30d" totalBuckets={[]} series={[]} />);
+  const heatmap = container.querySelector<HTMLElement>(".statistics-heatmap-wrapper");
+  expect(heatmap?.style.getPropertyValue("--statistics-level-1")).toContain("28%");
+  document.documentElement.dataset.theme = "light";
 });
