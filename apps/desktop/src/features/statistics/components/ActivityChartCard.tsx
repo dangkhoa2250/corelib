@@ -11,27 +11,31 @@ import { ActivityGraph, type GraphMode } from "./ActivityGraph";
 import { StatisticsColorPicker } from "./StatisticsColorPicker";
 
 interface ActivityChartCardProps {
-  period: StatisticsPeriod;
+  period?: StatisticsPeriod;
   totalBuckets: { date: string; value: number }[];
   series: ActivityChartSeries[];
+  heatmapEnabled?: boolean;
+  defaultGraphMode?: GraphMode;
 }
 
-function rangeDefaultGraphMode(period: StatisticsPeriod): GraphMode {
-  return period.unit === "year" ? "weekly" : "daily";
+function rangeDefaultGraphMode(period?: StatisticsPeriod): GraphMode {
+  return period?.unit === "year" ? "weekly" : "daily";
 }
 
 export function ActivityChartCard({
   period,
   totalBuckets,
   series,
+  heatmapEnabled = true,
+  defaultGraphMode,
 }: ActivityChartCardProps) {
   const prefs = useMemo(() => loadStatisticsPreferences(), []);
 
-  const initialView = prefs.chartView;
+  const initialView = heatmapEnabled ? prefs.chartView : "graph";
 
   const [view, setView] = useState<"heatmap" | "graph">(initialView);
   const [graphMode, setGraphMode] = useState<GraphMode>(
-    rangeDefaultGraphMode(period),
+    defaultGraphMode ?? rangeDefaultGraphMode(period),
   );
   const [selectedApp, setSelectedApp] = useState("all");
   const [baseColor, setBaseColor] = useState(prefs.baseColor);
@@ -40,8 +44,8 @@ export function ActivityChartCard({
   );
 
   useEffect(() => {
-    setGraphMode(rangeDefaultGraphMode(period));
-  }, [period]);
+    setGraphMode(defaultGraphMode ?? rangeDefaultGraphMode(period));
+  }, [defaultGraphMode, period]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -107,22 +111,28 @@ export function ActivityChartCard({
       <div className="statistics-section__header">
         <h2 className="statistics-section__title">Activity</h2>
         <div className="statistics-chart-card__toggle">
-          <button
-            type="button"
-            className="statistics-control"
-            aria-pressed={view === "heatmap"}
-            onClick={() => handleViewChange("heatmap")}
-          >
-            Heatmap
-          </button>
-          <button
-            type="button"
-            className="statistics-control"
-            aria-pressed={view === "graph"}
-            onClick={() => handleViewChange("graph")}
-          >
-            Graph
-          </button>
+          {heatmapEnabled ? (
+            <>
+              <button
+                type="button"
+                className="statistics-control"
+                aria-pressed={view === "heatmap"}
+                onClick={() => handleViewChange("heatmap")}
+              >
+                Heatmap
+              </button>
+              <button
+                type="button"
+                className="statistics-control"
+                aria-pressed={view === "graph"}
+                onClick={() => handleViewChange("graph")}
+              >
+                Graph
+              </button>
+            </>
+          ) : (
+            <button type="button" className="statistics-control" aria-pressed="true">Graph</button>
+          )}
         </div>
       </div>
       <div className="statistics-chart-card__controls">
@@ -139,7 +149,7 @@ export function ActivityChartCard({
           ))}
         </select>
       </div>
-      {view === "heatmap" && (
+      {heatmapEnabled && view === "heatmap" && period && (
         <ActivityHeatmap
           data={heatmapData}
           period={period}

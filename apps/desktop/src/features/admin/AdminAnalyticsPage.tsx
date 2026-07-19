@@ -240,7 +240,12 @@ export function AdminAnalyticsPage({
           )}
 
           {buckets.length > 0 && (
-            <ActivityChartCard period={{ unit: range === "1y" || range === "all" ? "year" : range === "7d" ? "week" : "month", anchorLocalDay: "2000-01-01" }} totalBuckets={buckets} series={[]} />
+            <ActivityChartCard
+              heatmapEnabled={false}
+              defaultGraphMode={range === "1y" || range === "all" ? "weekly" : "daily"}
+              totalBuckets={buckets}
+              series={[]}
+            />
           )}
         </>
       )}

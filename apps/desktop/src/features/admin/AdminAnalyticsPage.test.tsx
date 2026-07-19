@@ -56,11 +56,13 @@ test("shows insufficient sample when < 5 contributors", async () => {
   expect(screen.getByText(/4 contributors/)).toBeInTheDocument();
 });
 
-test("shows read-only Heatmap/Graph toggle", async () => {
+test("shows admin daily buckets in a graph without a personal heatmap", async () => {
   const adminStatistics = vi.fn().mockResolvedValue(mockAdminStats);
   render(<AdminAnalyticsPage adminStatistics={adminStatistics} />);
-  expect(await screen.findByRole("button", { name: /heatmap/i })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /graph/i })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Graph" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.queryByRole("button", { name: "Heatmap" })).not.toBeInTheDocument();
+  expect(screen.getByLabelText("2026-07-18: 60 Active time")).toBeInTheDocument();
+  expect(screen.queryByText("2000")).not.toBeInTheDocument();
 });
 
 test("does not expose app metrics below the privacy threshold", async () => {
