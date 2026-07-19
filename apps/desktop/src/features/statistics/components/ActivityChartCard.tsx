@@ -32,6 +32,28 @@ export function periodDefaultGraphMode(period?: StatisticsPeriod): GraphMode {
   return period?.unit === "year" ? "weekly" : "daily";
 }
 
+/**
+ * Produces the selected app's daily graph series from the same hourly source
+ * as the heatmap. The authoritative all-apps daily series remains separate.
+ */
+export function dailyBucketsFromTimeBuckets(
+  calendarDays: { date: string; value: number }[],
+  buckets: StatisticsTimeBucket[],
+): { date: string; value: number }[] {
+  const activeMsByDay = new Map<string, number>();
+  for (const bucket of buckets) {
+    if (bucket.isFuture) continue;
+    activeMsByDay.set(
+      bucket.localDay,
+      (activeMsByDay.get(bucket.localDay) ?? 0) + bucket.activeMs,
+    );
+  }
+  return calendarDays.map(({ date }) => ({
+    date,
+    value: Math.round((activeMsByDay.get(date) ?? 0) / 60_000),
+  }));
+}
+
 export function ActivityChartCard({
   period,
   totalBuckets,
@@ -118,9 +140,12 @@ export function ActivityChartCard({
       };
     }
     const appSeries = series.find((s) => s.appKey === selectedApp);
+    const selectedTimeBuckets = (timeBuckets ?? []).filter((bucket) => bucket.appKey === selectedApp);
     return {
-      dailyBuckets: appSeries?.buckets ?? [],
-      timeBuckets: (timeBuckets ?? []).filter((bucket) => bucket.appKey === selectedApp),
+      dailyBuckets: timeBuckets === undefined
+        ? appSeries?.buckets ?? []
+        : dailyBucketsFromTimeBuckets(totalBuckets, selectedTimeBuckets),
+      timeBuckets: selectedTimeBuckets,
     };
   }, [selectedApp, series, timeBuckets, totalBuckets]);
 
