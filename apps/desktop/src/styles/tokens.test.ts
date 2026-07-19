@@ -32,6 +32,15 @@ test("uses a dark-theme-safe compact surface for the import trigger", () => {
   expect(css).toContain(".library-import-menu__trigger:hover:not(:disabled) {");
 });
 
+test("uses a semantic flat hover surface for shared comboboxes", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const hover = css.match(/\.combobox__trigger:hover\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(hover).toContain("background: var(--interactive-hover);");
+  expect(hover).not.toMatch(/gradient|#[0-9a-fA-F]{3,8}\b/);
+});
+
 test("keeps the native window transparent for the sidebar glass surface", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const config = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.conf.json"), "utf8"));
