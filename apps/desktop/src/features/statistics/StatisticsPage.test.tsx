@@ -26,6 +26,24 @@ test("passes a calendar period to overview loading", async () => {
   expect(getOverview).toHaveBeenCalledWith(period);
 });
 
+test("wires local time buckets from overview data into the activity heatmap", async () => {
+  const getOverview = vi.fn().mockResolvedValue({
+    ...overview,
+    activeMs: 15 * 60_000,
+    activeDays: 1,
+    timeBuckets: [{
+      localDay: "2026-07-13",
+      bucketStartHour: 12,
+      activeMs: 15 * 60_000,
+      appKey: "reading",
+      isFuture: false,
+    }],
+  });
+  render(<StatisticsOverviewPage period={{ unit: "week", anchorLocalDay: "2026-07-13" }} onPeriodChange={vi.fn()} getOverview={getOverview} />);
+
+  expect(await screen.findByRole("gridcell", { name: /July 13, 2026, 12:00–16:00: 15 minutes/ })).toBeInTheDocument();
+});
+
 test("renders backend previous-period comparisons without comparing the lifetime streak", async () => {
   const getOverview = vi.fn().mockResolvedValue({
     ...overview,

@@ -138,6 +138,7 @@ export function StatisticsOverviewPage({
           <ActivityChartCard
             period={period}
             totalBuckets={convertBuckets(data.buckets)}
+            timeBuckets={data.timeBuckets}
             series={apps.flatMap((app) => {
               const summary = appSummaries[app.key];
               return summary ? [{ appKey: app.key, title: app.title, buckets: summary.buckets }] : [];

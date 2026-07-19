@@ -72,9 +72,10 @@ function formatAxisDate(day: string): string {
   });
 }
 
-function formatWeekRange(monday: string): string {
-  const start = parseLocalDay(monday);
-  const end = parseLocalDay(addDays(monday, 6));
+function formatIncludedRange(localDays: string[]): string {
+  if (localDays.length === 1) return formatDate(localDays[0]);
+  const start = parseLocalDay(localDays[0]);
+  const end = parseLocalDay(localDays[localDays.length - 1]);
   const startText = start.toLocaleDateString("en-US", { month: "long", day: "numeric" });
   const endText = end.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   return `${startText}–${endText}`;
@@ -150,7 +151,7 @@ export function buildHeatmapColumns(
     return {
       key,
       label: isYear ? formatAxisDate(key) : formatAxisDate(localDays[0]),
-      ariaLabel: isYear ? `Week of ${formatWeekRange(key)}` : formatDate(localDays[0]),
+      ariaLabel: isYear ? `Week of ${formatIncludedRange(localDays)}` : formatDate(localDays[0]),
       localDays,
       isFuture,
       slots,
@@ -310,7 +311,10 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
     <div className={`statistics-heatmap-wrapper statistics-heatmap-wrapper--${period.unit}`} style={paletteVars}>
       <div className="statistics-heatmap__layout">
         <div className="statistics-heatmap__y-axis" aria-hidden="true">
-          {[0, 4, 8, 12, 16, 20, 24].map((hour) => <span key={hour}>{hour}h</span>)}
+          <span className="statistics-heatmap__y-axis-start">0h</span>
+          <div className="statistics-heatmap__y-axis-boundaries">
+            {[4, 8, 12, 16, 20, 24].map((hour) => <span key={hour}>{hour}h</span>)}
+          </div>
         </div>
         <div className="statistics-heatmap__plot">
           <div className="statistics-heatmap__x-axis" aria-hidden="true">

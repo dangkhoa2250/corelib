@@ -89,6 +89,11 @@ test("keeps the calendar time heatmap inside its card without horizontal scrolli
   expect(statCss).not.toContain("max-content");
   expect(statCss).not.toContain("overflow-x");
   expect(statCss).toContain("repeat(var(--column-count), minmax(0, 1fr))");
+  const yAxis = statCss.match(/\.statistics-heatmap__y-axis\s*\{([^}]*)\}/)?.[1] ?? "";
+  const boundaries = statCss.match(/\.statistics-heatmap__y-axis-boundaries\s*\{([^}]*)\}/)?.[1] ?? "";
+  expect(yAxis).toContain("grid-template-rows: 27px auto;");
+  expect(yAxis).not.toContain("padding-top");
+  expect(boundaries).toContain("grid-template-rows: repeat(6, var(--heatmap-row-height));");
 });
 
 test("loads the Statistics stylesheet from the application entry point", () => {

@@ -53,7 +53,25 @@ test("aggregates matching calendar days into ISO-week time buckets in Year view"
 
   const julyWeek = columns.find((column) => column.key === "2026-07-13");
   expect(julyWeek?.slots.find((slot) => slot.bucketStartHour === 12)?.activeMs).toBe(30 * 60_000);
-  expect(julyWeek?.ariaLabel).toMatch(/Week of July 13/);
+  expect(julyWeek?.ariaLabel).toMatch(/Week of July 13–July 19, 2026/);
+});
+
+test("labels partial first and last ISO weeks with only their included calendar-year dates", () => {
+  const columns = buildHeatmapColumns(year, [
+    bucket("2026-01-01", 0, 10 * 60_000),
+    bucket("2026-01-04", 0, 20 * 60_000),
+    bucket("2026-12-28", 20, 30 * 60_000),
+    bucket("2026-12-31", 20, 40 * 60_000),
+  ], "all", "2026-12-31");
+
+  const first = columns[0];
+  const last = columns[columns.length - 1];
+  expect(first.localDays).toEqual(["2026-01-01", "2026-01-02", "2026-01-03", "2026-01-04"]);
+  expect(first.ariaLabel).toBe("Week of January 1–January 4, 2026");
+  expect(first.slots.find((slot) => slot.bucketStartHour === 0)?.activeMs).toBe(30 * 60_000);
+  expect(last?.localDays).toEqual(["2026-12-28", "2026-12-29", "2026-12-30", "2026-12-31"]);
+  expect(last?.ariaLabel).toBe("Week of December 28–December 31, 2026");
+  expect(last?.slots.find((slot) => slot.bucketStartHour === 20)?.activeMs).toBe(70 * 60_000);
 });
 
 test("retains each contributing day for Year summaries", () => {
