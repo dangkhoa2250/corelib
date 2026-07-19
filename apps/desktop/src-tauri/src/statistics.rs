@@ -72,7 +72,7 @@ impl StatisticsPeriod {
         Self::new(PeriodUnit::parse(unit)?, anchor_local_day)
     }
 
-    pub fn window(&self) -> CalendarWindow {
+    pub fn window(&self) -> Result<CalendarWindow> {
         CalendarWindow::for_period(self.unit, self.anchor_local_day)
     }
 }
@@ -86,48 +86,52 @@ pub struct CalendarWindow {
 }
 
 impl CalendarWindow {
-    fn for_period(unit: PeriodUnit, anchor: NaiveDate) -> Self {
+    fn boundary_error() -> StatisticsError {
+        StatisticsError::Validation("statistics period is outside the supported date range".into())
+    }
+
+    fn for_period(unit: PeriodUnit, anchor: NaiveDate) -> Result<Self> {
         let start = match unit {
-            PeriodUnit::Week => anchor - Duration::days(anchor.weekday().num_days_from_monday() as i64),
-            PeriodUnit::Month => anchor.with_day(1).expect("first day of month"),
-            PeriodUnit::Year => anchor.with_month(1).and_then(|day| day.with_day(1)).expect("first day of year"),
+            PeriodUnit::Week => anchor.checked_sub_signed(Duration::days(anchor.weekday().num_days_from_monday() as i64)).ok_or_else(Self::boundary_error)?,
+            PeriodUnit::Month => anchor.with_day(1).ok_or_else(Self::boundary_error)?,
+            PeriodUnit::Year => anchor.with_month(1).and_then(|day| day.with_day(1)).ok_or_else(Self::boundary_error)?,
         };
         let end_exclusive = match unit {
-            PeriodUnit::Week => start + Duration::days(7),
+            PeriodUnit::Week => start.checked_add_signed(Duration::days(7)).ok_or_else(Self::boundary_error)?,
             PeriodUnit::Month => if start.month() == 12 {
-                NaiveDate::from_ymd_opt(start.year() + 1, 1, 1).expect("next year")
+                NaiveDate::from_ymd_opt(start.year().checked_add(1).ok_or_else(Self::boundary_error)?, 1, 1).ok_or_else(Self::boundary_error)?
             } else {
-                NaiveDate::from_ymd_opt(start.year(), start.month() + 1, 1).expect("next month")
+                NaiveDate::from_ymd_opt(start.year(), start.month() + 1, 1).ok_or_else(Self::boundary_error)?
             },
-            PeriodUnit::Year => NaiveDate::from_ymd_opt(start.year() + 1, 1, 1).expect("next year"),
+            PeriodUnit::Year => NaiveDate::from_ymd_opt(start.year().checked_add(1).ok_or_else(Self::boundary_error)?, 1, 1).ok_or_else(Self::boundary_error)?,
         };
         Self::from_dates(start, end_exclusive)
     }
 
-    fn from_dates(start: NaiveDate, end_exclusive: NaiveDate) -> Self {
-        Self {
+    fn from_dates(start: NaiveDate, end_exclusive: NaiveDate) -> Result<Self> {
+        Ok(Self {
             start,
             end_exclusive,
             start_text: format_local_day(start),
-            today: format_local_day(end_exclusive - Duration::days(1)),
-        }
+            today: format_local_day(end_exclusive.checked_sub_signed(Duration::days(1)).ok_or_else(Self::boundary_error)?),
+        })
     }
 
-    pub fn previous(&self) -> Self {
-        let unit = (self.end_exclusive - self.start).num_days();
+    pub fn previous(&self) -> Result<Self> {
+        let unit = self.end_exclusive.signed_duration_since(self.start).num_days();
         if unit == 7 {
-            Self::from_dates(self.start - Duration::days(7), self.start)
+            Self::from_dates(self.start.checked_sub_signed(Duration::days(7)).ok_or_else(Self::boundary_error)?, self.start)
         } else if self.start.month() == 1 && self.start.day() == 1 && self.end_exclusive.month() == 1 && self.end_exclusive.day() == 1 {
             Self::from_dates(
-                NaiveDate::from_ymd_opt(self.start.year() - 1, 1, 1).expect("previous year"),
+                NaiveDate::from_ymd_opt(self.start.year().checked_sub(1).ok_or_else(Self::boundary_error)?, 1, 1).ok_or_else(Self::boundary_error)?,
                 self.start,
             )
         } else {
             let previous_end = self.start;
             let previous_start = if previous_end.month() == 1 {
-                NaiveDate::from_ymd_opt(previous_end.year() - 1, 12, 1).expect("previous month")
+                NaiveDate::from_ymd_opt(previous_end.year().checked_sub(1).ok_or_else(Self::boundary_error)?, 12, 1).ok_or_else(Self::boundary_error)?
             } else {
-                NaiveDate::from_ymd_opt(previous_end.year(), previous_end.month() - 1, 1).expect("previous month")
+                NaiveDate::from_ymd_opt(previous_end.year(), previous_end.month() - 1, 1).ok_or_else(Self::boundary_error)?
             };
             Self::from_dates(previous_start, previous_end)
         }
@@ -601,7 +605,7 @@ impl LibraryDatabase {
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<StatisticsOverview> {
-        let window = period.window();
+        let window = period.window()?;
         let reading_active = query_window_activity_ms(&self.connection, "reading", &window)?;
         let practice_active = query_window_activity_ms(&self.connection, "practice", &window)?;
         let real_ms =
@@ -617,7 +621,7 @@ impl LibraryDatabase {
         let bucket_days = window.bucket_days(&self.connection, today_local_day, now_utc)?;
         let buckets = build_total_buckets(&self.connection, &bucket_days, &window, now_utc)?;
 
-        let previous = window.previous();
+        let previous = window.previous()?;
         let previous_reading = query_window_activity_ms(&self.connection, "reading", &previous)?;
         let previous_practice = query_window_activity_ms(&self.connection, "practice", &previous)?;
         let previous_real = query_capped_review_ms(&self.connection, &previous, now_utc, ReviewScope::All)?;
@@ -644,7 +648,7 @@ impl LibraryDatabase {
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<ReadingStatistics> {
-        let window = period.window();
+        let window = period.window()?;
         let active_ms =
             query_activity_active_ms(&self.connection, "reading", &window, None)?;
         let session_count =
@@ -673,7 +677,7 @@ impl LibraryDatabase {
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<DocumentStatistics> {
-        let window = period.window();
+        let window = period.window()?;
         let scope = ReviewScope::Document(document_id);
 
         let page_metrics = query_reading_page_metrics(&self.connection, &window, Some(document_id))?;
@@ -715,7 +719,7 @@ impl LibraryDatabase {
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<MemoraStatistics> {
-        let window = period.window();
+        let window = period.window()?;
         let body = build_memora_body(&self.connection, &window, now_utc, today_local_day, None)?;
         Ok(MemoraStatistics {
             active_ms: body.active_ms,
@@ -740,7 +744,7 @@ impl LibraryDatabase {
         now_utc: &str,
         today_local_day: &str,
     ) -> Result<DeckStatisticsDetail> {
-        let window = period.window();
+        let window = period.window()?;
         let body = build_memora_body(
             &self.connection,
             &window,

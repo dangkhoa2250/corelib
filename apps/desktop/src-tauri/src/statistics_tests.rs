@@ -20,21 +20,21 @@ fn july_year() -> StatisticsPeriod { period(PeriodUnit::Year, "2026-07-18") }
 
 #[test]
 fn calendar_periods_resolve_calendar_boundaries_and_previous_windows() {
-    let week = period(PeriodUnit::Week, "2026-07-19").window();
+    let week = period(PeriodUnit::Week, "2026-07-19").window().expect("week window");
     assert_eq!(week.start.to_string(), "2026-07-13");
     assert_eq!(week.end_exclusive.to_string(), "2026-07-20");
-    assert_eq!(week.previous().start.to_string(), "2026-07-06");
-    assert_eq!(week.previous().end_exclusive.to_string(), "2026-07-13");
+    assert_eq!(week.previous().expect("previous week").start.to_string(), "2026-07-06");
+    assert_eq!(week.previous().expect("previous week").end_exclusive.to_string(), "2026-07-13");
 
-    let month = period(PeriodUnit::Month, "2026-02-19").window();
+    let month = period(PeriodUnit::Month, "2026-02-19").window().expect("month window");
     assert_eq!(month.start.to_string(), "2026-02-01");
     assert_eq!(month.end_exclusive.to_string(), "2026-03-01");
-    let leap = period(PeriodUnit::Month, "2024-02-29").window();
+    let leap = period(PeriodUnit::Month, "2024-02-29").window().expect("leap window");
     assert_eq!(leap.end_exclusive.to_string(), "2024-03-01");
-    let year = period(PeriodUnit::Year, "2024-06-30").window();
+    let year = period(PeriodUnit::Year, "2024-06-30").window().expect("year window");
     assert_eq!(year.start.to_string(), "2024-01-01");
     assert_eq!(year.end_exclusive.to_string(), "2025-01-01");
-    let cross_year = period(PeriodUnit::Week, "2021-01-01").window();
+    let cross_year = period(PeriodUnit::Week, "2021-01-01").window().expect("cross-year window");
     assert_eq!(cross_year.start.to_string(), "2020-12-28");
     assert_eq!(cross_year.end_exclusive.to_string(), "2021-01-04");
 }
@@ -43,6 +43,18 @@ fn calendar_periods_resolve_calendar_boundaries_and_previous_windows() {
 fn calendar_period_validation_has_stable_errors() {
     assert_eq!(PeriodUnit::parse("days").unwrap_err().to_string(), "invalid period unit");
     assert_eq!(StatisticsPeriod::parse("week", "not-a-date").unwrap_err().to_string(), "invalid anchorLocalDay");
+}
+
+#[test]
+fn calendar_period_boundaries_return_validation_errors_without_panicking() {
+    for anchor in [chrono::NaiveDate::MIN, chrono::NaiveDate::MAX] {
+        for unit in [PeriodUnit::Week, PeriodUnit::Month, PeriodUnit::Year] {
+            let period = StatisticsPeriod::new(unit, &anchor.to_string()).expect("valid Chrono date");
+            let outcome = std::panic::catch_unwind(|| period.window().and_then(|window| window.previous()));
+            let result = outcome.expect("calendar boundary must not panic");
+            assert_eq!(result.unwrap_err().to_string(), "statistics period is outside the supported date range");
+        }
+    }
 }
 
 #[test]
