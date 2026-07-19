@@ -938,6 +938,46 @@ fn today_upper_bound() -> &'static str {
 // Daily bucket builders materialize only the calendar window's enumerated
 // days. Their existing query utility keeps this compatible with the
 // zero-filling path; aggregate metrics use the strict helpers below.
+//
+// Checkpoints introduced with migration 0013 are attributed to their actual
+// local bucket day. Older rows predate that table, so their immutable session
+// day is the only available attribution. The fallback is per session (not a
+// join) so a bucketed session can never contribute both its split buckets and
+// its full session total.
+const ACTIVITY_BY_DAY_CTE: &str = "
+    WITH activity_by_day AS (
+        SELECT sessions.id AS session_id,
+               sessions.app_key,
+               sessions.activity_kind,
+               sessions.context_kind,
+               sessions.context_id,
+               sessions.started_at,
+               sessions.local_day AS session_local_day,
+               buckets.local_day,
+               buckets.raw_active_ms AS active_ms
+        FROM activity_session_time_buckets buckets
+        JOIN activity_sessions sessions ON sessions.id = buckets.session_id
+
+        UNION ALL
+
+        SELECT sessions.id AS session_id,
+               sessions.app_key,
+               sessions.activity_kind,
+               sessions.context_kind,
+               sessions.context_id,
+               sessions.started_at,
+               sessions.local_day AS session_local_day,
+               sessions.local_day,
+               sessions.raw_active_ms AS active_ms
+        FROM activity_sessions sessions
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM activity_session_time_buckets buckets
+            WHERE buckets.session_id = sessions.id
+        )
+    )
+";
+
 fn activity_window_clause(start: Option<&str>) -> &'static str {
     if start.is_some() {
         "local_day <= ? AND local_day >= ?"
@@ -957,7 +997,8 @@ fn query_activity_active_ms(
         _ => "",
     };
     let sql = format!(
-        "SELECT COALESCE(SUM(raw_active_ms), 0) FROM activity_sessions
+        "{ACTIVITY_BY_DAY_CTE}
+         SELECT COALESCE(SUM(active_ms), 0) FROM activity_by_day
          WHERE activity_kind = ?1 AND local_day >= ?2 AND local_day < ?3 {deck_clause}",
         deck_clause = deck_clause,
     );
@@ -972,9 +1013,13 @@ fn query_window_activity_ms(
     activity_kind: &str,
     window: &CalendarWindow,
 ) -> Result<i64> {
-    Ok(connection.query_row(
-        "SELECT COALESCE(SUM(raw_active_ms), 0) FROM activity_sessions
+    let sql = format!(
+        "{ACTIVITY_BY_DAY_CTE}
+         SELECT COALESCE(SUM(active_ms), 0) FROM activity_by_day
          WHERE activity_kind = ?1 AND local_day >= ?2 AND local_day < ?3",
+    );
+    Ok(connection.query_row(
+        &sql,
         params![activity_kind, format_local_day(window.start), format_local_day(window.end_exclusive)],
         |row| row.get(0),
     )?)
@@ -1067,13 +1112,14 @@ fn query_document_active_ms(
     window: &CalendarWindow,
     document_id: &str,
 ) -> Result<i64> {
-    let sql =
-        "SELECT COALESCE(SUM(reading_session_pages.raw_active_ms), 0)
-         FROM reading_session_pages
-         JOIN activity_sessions ON activity_sessions.id = reading_session_pages.session_id
-         WHERE reading_session_pages.document_id = ?1
-           AND activity_sessions.local_day >= ?2 AND activity_sessions.local_day < ?3";
-    Ok(connection.query_row(sql, params![document_id, format_local_day(window.start), format_local_day(window.end_exclusive)], |row| row.get(0))?)
+    let sql = format!(
+        "{ACTIVITY_BY_DAY_CTE}
+         SELECT COALESCE(SUM(active_ms), 0)
+         FROM activity_by_day
+         WHERE context_kind = 'document' AND context_id = ?1
+           AND local_day >= ?2 AND local_day < ?3"
+    );
+    Ok(connection.query_row(&sql, params![document_id, format_local_day(window.start), format_local_day(window.end_exclusive)], |row| row.get(0))?)
 }
 
 fn query_document_coverage(
@@ -1399,12 +1445,14 @@ fn query_lifetime_active_days(
 ) -> Result<HashSet<String>> {
     let mut days: HashSet<String> = HashSet::new();
 
-    let mut stmt = connection.prepare(
-        "SELECT local_day, SUM(raw_active_ms) AS total
-         FROM activity_sessions
+    let sql = format!(
+        "{ACTIVITY_BY_DAY_CTE}
+         SELECT local_day, SUM(active_ms) AS total
+         FROM activity_by_day
          WHERE local_day <= ?1
-         GROUP BY local_day",
-    )?;
+         GROUP BY local_day"
+    );
+    let mut stmt = connection.prepare(&sql)?;
     let rows: Vec<(String, i64)> = stmt
         .query_map(params![today_local_day], |row| {
             Ok((row.get(0)?, row.get(1)?))
@@ -1475,15 +1523,17 @@ fn query_deck_active_days(
         days.insert(day);
     }
 
-    let mut activity_stmt = connection.prepare(
-        "SELECT local_day, SUM(raw_active_ms) AS total
-         FROM activity_sessions
+    let activity_sql = format!(
+        "{ACTIVITY_BY_DAY_CTE}
+         SELECT local_day, SUM(active_ms) AS total
+         FROM activity_by_day
          WHERE activity_kind = 'practice'
            AND context_kind = 'deck'
            AND context_id = ?1
            AND local_day <= ?2
-         GROUP BY local_day",
-    )?;
+         GROUP BY local_day"
+    );
+    let mut activity_stmt = connection.prepare(&activity_sql)?;
     let activity_rows: Vec<(String, i64)> = activity_stmt
         .query_map(params![deck_id, window.today], |row| {
             Ok((row.get(0)?, row.get(1)?))
@@ -1541,10 +1591,11 @@ fn build_total_buckets(
 ) -> Result<Vec<ActivityBucket>> {
     let mut daily: HashMap<String, i64> = HashMap::new();
 
-    // All activity_sessions.raw_active_ms per day (Reading + Practice).
+    // All bucket-attributed activity per day (Reading + Practice).
     let activity_sql = format!(
-        "SELECT local_day, COALESCE(SUM(raw_active_ms), 0)
-         FROM activity_sessions
+        "{ACTIVITY_BY_DAY_CTE}
+         SELECT local_day, COALESCE(SUM(active_ms), 0)
+         FROM activity_by_day
          WHERE {window}
          GROUP BY local_day",
         window = activity_window_clause(window.start()),
@@ -1578,13 +1629,11 @@ fn build_reading_buckets(
     let rows: Vec<(String, i64)> = match document_id {
         Some(id) => {
             let sql = format!(
-                "SELECT activity_sessions.local_day,
-                        COALESCE(SUM(reading_session_pages.raw_active_ms), 0)
-                 FROM reading_session_pages
-                 JOIN activity_sessions
-                   ON activity_sessions.id = reading_session_pages.session_id
-                 WHERE {window} AND reading_session_pages.document_id = ?
-                 GROUP BY activity_sessions.local_day",
+                "{ACTIVITY_BY_DAY_CTE}
+                 SELECT local_day, COALESCE(SUM(active_ms), 0)
+                 FROM activity_by_day
+                 WHERE {window} AND context_kind = 'document' AND context_id = ?
+                 GROUP BY local_day",
                 window = activity_window_clause(window.start()),
             );
             let mut stmt = connection.prepare(&sql)?;
@@ -1604,8 +1653,9 @@ fn build_reading_buckets(
         }
         None => {
             let sql = format!(
-                "SELECT local_day, COALESCE(SUM(raw_active_ms), 0)
-                 FROM activity_sessions
+                "{ACTIVITY_BY_DAY_CTE}
+                 SELECT local_day, COALESCE(SUM(active_ms), 0)
+                 FROM activity_by_day
                  WHERE activity_kind = 'reading' AND {window}
                  GROUP BY local_day",
                 window = activity_window_clause(window.start()),
@@ -1634,8 +1684,9 @@ fn build_memora_buckets(
         None => "",
     };
     let practice_sql = format!(
-        "SELECT local_day, COALESCE(SUM(raw_active_ms), 0)
-         FROM activity_sessions
+        "{ACTIVITY_BY_DAY_CTE}
+         SELECT local_day, COALESCE(SUM(active_ms), 0)
+         FROM activity_by_day
          WHERE activity_kind = 'practice' {deck_filter_practice} AND {window}
          GROUP BY local_day",
         deck_filter_practice = deck_filter_practice,
@@ -1846,15 +1897,23 @@ pub fn get_daily_statistics_snapshots(
 ) -> Result<Vec<DailyStatisticsSnapshot>> {
     let mut snapshots: Vec<DailyStatisticsSnapshot> = Vec::new();
 
-    // Reading snapshots: aggregate by local_day from activity_sessions +
-    // reading_session_pages. Only numeric fields are exposed — no IDs, pages,
-    // titles, or text content.
-    // Use CTEs to avoid duplication from the LEFT JOIN on pages.
-    let reading_sql = "
-        WITH session_agg AS (
-            SELECT local_day,
-                   SUM(raw_active_ms) AS active_ms,
-                   COUNT(DISTINCT id) AS session_count
+    // Reading snapshots use bucket days for active time, while session and
+    // visit counts deliberately retain their session-start-day semantics.
+    // This avoids leaking pre-consent sessions whose later bucket spills past
+    // the consent boundary, and avoids double-counting bucketed sessions.
+    let reading_sql = format!(
+        "{ACTIVITY_BY_DAY_CTE},
+        activity_agg AS (
+            SELECT local_day, SUM(active_ms) AS active_ms
+            FROM activity_by_day
+            WHERE app_key = 'reading'
+              AND local_day >= ?1
+              AND local_day <= ?2
+              AND started_at >= ?3
+            GROUP BY local_day
+        ),
+        session_agg AS (
+            SELECT local_day, COUNT(DISTINCT id) AS session_count
             FROM activity_sessions
             WHERE app_key = 'reading'
               AND local_day >= ?1
@@ -1873,15 +1932,25 @@ pub fn get_daily_statistics_snapshots(
               AND a.local_day <= ?2
               AND a.started_at >= ?3
             GROUP BY a.local_day
+        ),
+        snapshot_days AS (
+            SELECT local_day FROM activity_agg
+            UNION
+            SELECT local_day FROM session_agg
+            UNION
+            SELECT local_day FROM page_agg
         )
-        SELECT s.local_day, s.active_ms, s.session_count,
-               COALESCE(p.page_visits, 0), COALESCE(p.unique_pages, 0)
-        FROM session_agg s
-        LEFT JOIN page_agg p ON p.local_day = s.local_day
-        ORDER BY s.local_day
-    ";
+        SELECT days.local_day, COALESCE(activity.active_ms, 0),
+               COALESCE(sessions.session_count, 0),
+               COALESCE(pages.page_visits, 0), COALESCE(pages.unique_pages, 0)
+        FROM snapshot_days days
+        LEFT JOIN activity_agg activity ON activity.local_day = days.local_day
+        LEFT JOIN session_agg sessions ON sessions.local_day = days.local_day
+        LEFT JOIN page_agg pages ON pages.local_day = days.local_day
+        ORDER BY days.local_day"
+    );
     {
-        let mut stmt = conn.prepare(reading_sql)?;
+        let mut stmt = conn.prepare(&reading_sql)?;
         let rows = stmt
             .query_map(params![query.from_local_day, today_upper_bound(), query.consent_started_at], |row| {
                 Ok((
@@ -1915,20 +1984,41 @@ pub fn get_daily_statistics_snapshots(
 
     // Practice contributes both active time and sessions. Sessions with no
     // acknowledged active time are not learning sessions.
-    let practice_sql = "
-        SELECT local_day,
-               COALESCE(SUM(raw_active_ms), 0),
-               COUNT(DISTINCT CASE WHEN raw_active_ms > 0 THEN id END)
-        FROM activity_sessions
-        WHERE activity_kind = 'practice'
-          AND local_day >= ?1
-          AND local_day <= ?2
-          AND started_at >= ?3
-        GROUP BY local_day
-    ";
+    let practice_sql = format!(
+        "{ACTIVITY_BY_DAY_CTE},
+        activity_agg AS (
+            SELECT local_day, COALESCE(SUM(active_ms), 0) AS active_ms
+            FROM activity_by_day
+            WHERE activity_kind = 'practice'
+              AND local_day >= ?1
+              AND local_day <= ?2
+              AND started_at >= ?3
+            GROUP BY local_day
+        ),
+        session_agg AS (
+            SELECT local_day,
+                   COUNT(DISTINCT CASE WHEN raw_active_ms > 0 THEN id END) AS session_count
+            FROM activity_sessions
+            WHERE activity_kind = 'practice'
+              AND local_day >= ?1
+              AND local_day <= ?2
+              AND started_at >= ?3
+            GROUP BY local_day
+        ),
+        snapshot_days AS (
+            SELECT local_day FROM activity_agg
+            UNION
+            SELECT local_day FROM session_agg
+        )
+        SELECT days.local_day, COALESCE(activity.active_ms, 0),
+               COALESCE(sessions.session_count, 0)
+        FROM snapshot_days days
+        LEFT JOIN activity_agg activity ON activity.local_day = days.local_day
+        LEFT JOIN session_agg sessions ON sessions.local_day = days.local_day"
+    );
     let mut practice_by_day: HashMap<String, (i64, i64)> = HashMap::new();
     {
-        let mut stmt = conn.prepare(practice_sql)?;
+        let mut stmt = conn.prepare(&practice_sql)?;
         let rows = stmt
             .query_map(params![query.from_local_day, today_upper_bound(), query.consent_started_at], |row| {
                 Ok((

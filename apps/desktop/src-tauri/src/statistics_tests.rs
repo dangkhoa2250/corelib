@@ -95,6 +95,187 @@ fn overview_previous_period_uses_only_the_immediately_preceding_calendar_month()
     assert_eq!((overview.previous_active_ms, overview.previous_active_days), (60_000, 1));
 }
 
+#[test]
+fn cross_midnight_activity_uses_bucket_days_for_overview_details_and_daily_upload() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "midnight-doc", 2);
+    start_session(
+        &mut database,
+        "midnight-reading",
+        "reading",
+        "reading",
+        "2026-06-30T23:58:00.000Z",
+        "2026-06-30",
+        Some("document"),
+        Some("midnight-doc"),
+    );
+    checkpoint(
+        &mut database,
+        "midnight-reading",
+        "2026-07-01T00:10:00.000Z",
+        720_000,
+        Some("midnight-doc"),
+        Some(1),
+        1,
+    );
+
+    let july = period(PeriodUnit::Month, "2026-07-18");
+    let overview = database
+        .statistics_overview(&july, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("July overview");
+    assert_eq!(overview.active_ms, 600_000);
+    assert_eq!(overview.reading_active_ms, 600_000);
+    assert_eq!(overview.previous_active_ms, 120_000);
+    assert_eq!(
+        overview
+            .buckets
+            .iter()
+            .find(|bucket| bucket.local_day == "2026-07-01")
+            .map(|bucket| bucket.active_ms),
+        Some(600_000)
+    );
+
+    let reading = database
+        .reading_statistics(&july, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("July reading");
+    assert_eq!(reading.active_ms, 600_000);
+    assert_eq!(reading.session_count, 0, "sessions remain attributed to their start day");
+    assert_eq!(
+        reading
+            .buckets
+            .iter()
+            .find(|bucket| bucket.local_day == "2026-07-01")
+            .map(|bucket| bucket.active_ms),
+        Some(600_000)
+    );
+
+    let document = database
+        .document_statistics("midnight-doc", &july, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("July document detail");
+    assert_eq!(document.active_ms, 600_000);
+    assert_eq!(document.session_count, 0, "sessions remain attributed to their start day");
+    assert_eq!(document.page_visits, 0, "visits remain attributed to their start day");
+    assert_eq!(
+        document
+            .buckets
+            .iter()
+            .find(|bucket| bucket.local_day == "2026-07-01")
+            .map(|bucket| bucket.active_ms),
+        Some(600_000)
+    );
+
+    let snapshots = get_daily_statistics_snapshots(
+        &database.connection,
+        &DailySnapshotQuery {
+            consent_started_at: "2026-06-30T00:00:00.000Z".into(),
+            from_local_day: "2026-06-30".into(),
+        },
+    )
+    .expect("daily upload snapshots");
+    let reading_snapshots: Vec<_> = snapshots
+        .iter()
+        .filter(|snapshot| snapshot.app_key == "reading")
+        .collect();
+    assert_eq!(reading_snapshots.len(), 2);
+    assert_eq!(
+        (reading_snapshots[0].local_day.as_str(), reading_snapshots[0].active_ms, reading_snapshots[0].session_count, reading_snapshots[0].page_visit_count),
+        ("2026-06-30", 120_000, 1, Some(1))
+    );
+    assert_eq!(
+        (reading_snapshots[1].local_day.as_str(), reading_snapshots[1].active_ms, reading_snapshots[1].session_count, reading_snapshots[1].page_visit_count),
+        ("2026-07-01", 600_000, 0, Some(0))
+    );
+    assert_eq!(
+        reading_snapshots.iter().map(|snapshot| snapshot.active_ms).sum::<i64>(),
+        720_000,
+        "bucketed sessions must contribute their checkpoint total exactly once"
+    );
+}
+
+#[test]
+fn activity_without_time_buckets_falls_back_once_to_the_session_day() {
+    let (_directory, mut database) = db();
+    start_session(
+        &mut database,
+        "legacy-reading",
+        "reading",
+        "reading",
+        "2026-07-02T01:00:00.000Z",
+        "2026-07-02",
+        None,
+        None,
+    );
+    database
+        .connection
+        .execute(
+            "UPDATE activity_sessions SET raw_active_ms = 42_000 WHERE id = 'legacy-reading'",
+            [],
+        )
+        .expect("seed pre-bucket legacy activity");
+
+    let overview = database
+        .statistics_overview(&period(PeriodUnit::Month, "2026-07-18"), FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("overview");
+    assert_eq!(overview.reading_active_ms, 42_000);
+    assert_eq!(
+        overview
+            .buckets
+            .iter()
+            .find(|bucket| bucket.local_day == "2026-07-02")
+            .map(|bucket| bucket.active_ms),
+        Some(42_000)
+    );
+    let snapshots = get_daily_statistics_snapshots(
+        &database.connection,
+        &DailySnapshotQuery {
+            consent_started_at: "2026-07-01T00:00:00.000Z".into(),
+            from_local_day: "2026-07-01".into(),
+        },
+    )
+    .expect("daily upload snapshots");
+    assert_eq!(
+        snapshots
+            .iter()
+            .find(|snapshot| snapshot.app_key == "reading")
+            .map(|snapshot| (snapshot.local_day.as_str(), snapshot.active_ms)),
+        Some(("2026-07-02", 42_000))
+    );
+}
+
+#[test]
+fn daily_upload_keeps_consent_bound_to_the_session_start_when_bucket_activity_spills_later() {
+    let (_directory, mut database) = db();
+    start_session(
+        &mut database,
+        "before-consent",
+        "reading",
+        "reading",
+        "2026-06-30T23:58:00.000Z",
+        "2026-06-30",
+        None,
+        None,
+    );
+    checkpoint(
+        &mut database,
+        "before-consent",
+        "2026-07-01T00:10:00.000Z",
+        720_000,
+        None,
+        None,
+        0,
+    );
+
+    let snapshots = get_daily_statistics_snapshots(
+        &database.connection,
+        &DailySnapshotQuery {
+            consent_started_at: "2026-07-01T00:00:00.000Z".into(),
+            from_local_day: "2026-07-01".into(),
+        },
+    )
+    .expect("daily upload snapshots");
+    assert!(snapshots.iter().all(|snapshot| snapshot.app_key != "reading"));
+}
+
 fn db() -> (TempDir, LibraryDatabase) {
     let directory = TempDir::new().expect("temporary statistics database");
     let database = LibraryDatabase::open(directory.path()).expect("open statistics database");
