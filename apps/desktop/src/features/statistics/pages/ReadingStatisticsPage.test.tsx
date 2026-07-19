@@ -1,4 +1,36 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { expect, test, vi } from "vitest";
 import { ReadingStatisticsPage } from "./ReadingStatisticsPage";
-test("loads reading data for its calendar period", async () => { render(<ReadingStatisticsPage period={{ unit: "month", anchorLocalDay: "2026-07-01" }} getReadingStats={vi.fn().mockResolvedValue({ activeMs: 0, sessionCount: 0, averageSessionMs: null, pageVisits: 0, uniquePages: 0, revisits: 0, buckets: [] })} />); expect(await screen.findByText("0m")).toBeInTheDocument(); });
+
+const readingStats = {
+  activeMs: 0,
+  sessionCount: 0,
+  averageSessionMs: null,
+  pageVisits: 0,
+  uniquePages: 0,
+  revisits: 0,
+  buckets: [],
+};
+
+test("loads reading data for the supplied calendar period and refetches on period change", async () => {
+  const july = { unit: "month" as const, anchorLocalDay: "2026-07-01" };
+  const followingWeek = { unit: "week" as const, anchorLocalDay: "2026-07-13" };
+  const getReadingStats = vi.fn().mockResolvedValue(readingStats);
+  const { rerender } = render(
+    <ReadingStatisticsPage period={july} getReadingStats={getReadingStats} />,
+  );
+
+  expect(await screen.findByText("0m")).toBeInTheDocument();
+  await waitFor(() => expect(getReadingStats).toHaveBeenCalledWith(july));
+
+  rerender(
+    <ReadingStatisticsPage
+      period={followingWeek}
+      getReadingStats={getReadingStats}
+    />,
+  );
+
+  await waitFor(() =>
+    expect(getReadingStats).toHaveBeenLastCalledWith(followingWeek),
+  );
+});
