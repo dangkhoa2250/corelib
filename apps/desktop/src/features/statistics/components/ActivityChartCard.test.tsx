@@ -37,6 +37,7 @@ test("filters activity with the shared non-searchable app combobox", async () =>
 
   expect(container.querySelector("select")).toBeNull();
   const filter = screen.getByRole("combobox", { name: "Statistics app" });
+  expect(filter.parentElement).toHaveClass("statistics-app-filter");
   await user.click(filter);
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   expect(screen.getByRole("option", { name: "All apps" })).toBeInTheDocument();

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { IconCheck, IconChevronDown, IconSearch } from "../app/icons";
 
 export interface ComboboxOption<T extends string> {
@@ -17,6 +17,7 @@ export interface ComboboxProps<T extends string> {
   disabled?: boolean;
   ariaLabel?: string;
   searchable?: boolean;
+  className?: string;
 }
 
 export function Combobox<T extends string>({
@@ -29,6 +30,7 @@ export function Combobox<T extends string>({
   disabled = false,
   ariaLabel,
   searchable = true,
+  className,
 }: ComboboxProps<T>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -37,6 +39,7 @@ export function Combobox<T extends string>({
   const panelRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const listboxId = useId();
 
   const selected = options.find((o) => o.value === value);
 
@@ -63,8 +66,11 @@ export function Combobox<T extends string>({
         setQuery("");
       }
       searchRef.current?.focus();
-      const idx = filtered.findIndex((o) => o.value === value);
-      setHighlightedIndex(idx >= 0 ? idx : 0);
+      setHighlightedIndex((currentIndex) => {
+        if (currentIndex >= 0) return currentIndex;
+        const selectedIndex = filtered.findIndex((o) => o.value === value);
+        return selectedIndex >= 0 ? selectedIndex : 0;
+      });
     }
   }, [open, filtered, value, searchable]);
 
@@ -75,6 +81,10 @@ export function Combobox<T extends string>({
         e.preventDefault();
         setOpen(false);
         triggerRef.current?.focus();
+        return;
+      }
+      if (e.key === "Tab") {
+        setOpen(false);
         return;
       }
       if (e.key === "ArrowDown") {
@@ -130,15 +140,34 @@ export function Combobox<T extends string>({
   }, [open, highlightedIndex]);
 
   return (
-    <div className="combobox">
+    <div className={`combobox${className ? ` ${className}` : ""}`}>
       <button
         ref={triggerRef}
         type="button"
         role="combobox"
         className="combobox__trigger"
         onClick={() => !disabled && setOpen((prev) => !prev)}
+        onKeyDown={(event) => {
+          if (disabled || (event.key !== "ArrowDown" && event.key !== "ArrowUp")) return;
+          event.preventDefault();
+          const selectedIndex = filtered.findIndex((option) => option.value === value);
+          setHighlightedIndex(
+            selectedIndex >= 0
+              ? selectedIndex
+              : event.key === "ArrowDown"
+                ? 0
+                : filtered.length - 1,
+          );
+          setOpen(true);
+        }}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        aria-activedescendant={
+          open && highlightedIndex >= 0
+            ? `${listboxId}-option-${filtered[highlightedIndex]?.value}`
+            : undefined
+        }
         aria-label={ariaLabel}
         disabled={disabled}
       >
@@ -149,7 +178,7 @@ export function Combobox<T extends string>({
       </button>
 
       {open && (
-        <div ref={panelRef} className="combobox__panel" role="listbox">
+        <div ref={panelRef} id={listboxId} className="combobox__panel" role="listbox">
           {searchable && (
             <div className="combobox__search">
               <IconSearch size={14} />
@@ -171,8 +200,10 @@ export function Combobox<T extends string>({
               filtered.map((option, idx) => (
                 <button
                   key={option.value}
+                  id={`${listboxId}-option-${option.value}`}
                   type="button"
                   role="option"
+                  tabIndex={-1}
                   aria-selected={option.value === value}
                   className={`combobox__option ${idx === highlightedIndex ? "combobox__option--highlighted" : ""} ${option.value === value ? "combobox__option--selected" : ""}`}
                   onMouseEnter={() => setHighlightedIndex(idx)}

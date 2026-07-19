@@ -67,6 +67,47 @@ test("keeps search enabled and focused by default", async () => {
   expect(screen.getByPlaceholderText("Search...")).toHaveFocus();
 });
 
+test("opens from a focused trigger with ArrowDown and selects by keyboard", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+  render(<ComboboxTest onChange={onChange} ariaLabel="Fruit picker" searchable={false} />);
+
+  const trigger = screen.getByRole("combobox", { name: "Fruit picker" });
+  trigger.focus();
+  await user.keyboard("{ArrowDown}");
+  expect(screen.getByRole("listbox")).toBeInTheDocument();
+  expect(trigger).toHaveAttribute(
+    "aria-activedescendant",
+    screen.getByRole("option", { name: "Apple" }).id,
+  );
+
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(onChange).toHaveBeenCalledWith("banana");
+  expect(trigger).toHaveFocus();
+});
+
+test("keeps non-searchable options out of tab order and tabs past the popup", async () => {
+  const user = userEvent.setup();
+  render(
+    <>
+      <ComboboxTest ariaLabel="Fruit picker" searchable={false} />
+      <button type="button">Next control</button>
+    </>,
+  );
+
+  const trigger = screen.getByRole("combobox", { name: "Fruit picker" });
+  trigger.focus();
+  await user.keyboard("{ArrowDown}");
+  const options = screen.getAllByRole("option");
+  expect(options).toHaveLength(4);
+  expect(options[0]).toHaveAttribute("id");
+  options.forEach((option) => expect(option).toHaveAttribute("tabindex", "-1"));
+
+  await user.tab();
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Next control" })).toHaveFocus();
+});
+
 test("supports keyboard selection without a search field when not searchable", async () => {
   const user = userEvent.setup();
   const onChange = vi.fn();

@@ -89,7 +89,9 @@ test("reloads admin statistics when selecting an app from the shared combobox", 
 
   await screen.findByText("Analytics coverage");
   expect(container.querySelector("select")).toBeNull();
-  await user.click(screen.getByRole("combobox", { name: "Admin statistics app" }));
+  const filter = screen.getByRole("combobox", { name: "Admin statistics app" });
+  expect(filter.parentElement).toHaveClass("statistics-app-filter");
+  await user.click(filter);
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   await user.click(screen.getByRole("option", { name: "Reading" }));
   expect(adminStatistics).toHaveBeenLastCalledWith("30d", "reading");

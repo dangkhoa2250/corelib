@@ -143,6 +143,7 @@ export function ActivityChartCard({
           options={appOptions}
           ariaLabel="Statistics app"
           searchable={false}
+          className="statistics-app-filter"
         />
       </div>
       {heatmapEnabled && view === "heatmap" && period && (

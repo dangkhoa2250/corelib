@@ -133,6 +133,7 @@
 
 .statistics-chart-card__toggle, .statistics-chart-card__controls, .statistics-graph__mode-bar { display: flex; flex-wrap: wrap; gap: 6px; }
 .statistics-chart-card__controls { margin-bottom: 14px; }
+.statistics-app-filter { flex: 0 0 auto; min-width: 180px; width: 220px; }
 .statistics-graph { width: 100%; min-width: 0; }
 .statistics-graph svg { display: block; width: 100%; min-height: 210px; }
 .statistics-graph__mode-bar { margin-bottom: 10px; }

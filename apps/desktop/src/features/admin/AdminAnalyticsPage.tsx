@@ -128,6 +128,7 @@ export function AdminAnalyticsPage({
           options={[...appOptions]}
           ariaLabel="Admin statistics app"
           searchable={false}
+          className="statistics-app-filter"
         />
       </div>
 
