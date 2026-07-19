@@ -11,7 +11,7 @@ use std::{
 
 #[cfg(test)]
 use chrono::DateTime;
-use chrono::Utc;
+use chrono::{Timelike, Utc};
 use serde::Deserialize;
 
 use tauri::State;
@@ -1254,7 +1254,9 @@ pub fn rate_study_card(
         return Err("elapsedMs must be nonnegative".to_owned());
     }
     let now = Utc::now();
-    let study_day = chrono::Local::now().date_naive().to_string();
+    let local_now = chrono::Local::now();
+    let study_day = local_now.date_naive().to_string();
+    let local_minute_of_day = i64::from(local_now.hour() * 60 + local_now.minute());
     learning_lock(&state)?
         .rate_study_card(StudyRating {
             session_id: payload.session_id,
@@ -1266,6 +1268,7 @@ pub fn rate_study_card(
             elapsed_ms: payload.elapsed_ms,
             now,
             study_day,
+            local_minute_of_day,
         })
         .map_err(|e| e.to_string())
 }

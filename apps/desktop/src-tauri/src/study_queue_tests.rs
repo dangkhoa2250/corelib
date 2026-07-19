@@ -100,6 +100,7 @@ fn rating_from(grant: &StudyGrant, session: &StudySession, now: DateTime<Utc>) -
         elapsed_ms: 1000,
         now,
         study_day: "2026-07-16".into(),
+        local_minute_of_day: 13 * 60 + 15,
     }
 }
 
@@ -429,12 +430,79 @@ fn rating_consumes_one_grant_and_writes_one_review_atomically() {
         elapsed_ms: 1200,
         now,
         study_day: "2026-07-16".into(),
+        local_minute_of_day: 13 * 60 + 15,
     };
 
     let first = database.rate_study_card(rating.clone()).expect("rate card");
     let second = database.rate_study_card(rating).expect("idempotent retry");
     assert_eq!(second.review_log_id, first.review_log_id);
     assert_eq!(review_log_count(&database, "review-1"), 1);
+}
+
+#[test]
+fn review_log_persists_local_minute_of_day() {
+    let (_directory, mut database) = seeded_learning_database();
+    insert_due_review(&mut database, "review-1", "deck-1");
+    let now = utc("2026-07-16T09:00:00.000Z");
+    let session = database
+        .start_study_session(StudyScope::Deck("deck-1".into()), now, "2026-07-16")
+        .expect("start session");
+
+    let result = database
+        .rate_study_card(rating_from(&session.cards[0], &session, now))
+        .expect("rate card");
+    let local_minute_of_day: i64 = database
+        .connection
+        .query_row(
+            "SELECT local_minute_of_day FROM review_logs WHERE id = ?1",
+            rusqlite::params![result.review_log_id],
+            |row| row.get(0),
+        )
+        .expect("read local review minute");
+
+    assert_eq!(local_minute_of_day, 13 * 60 + 15);
+}
+
+#[test]
+fn rate_study_card_rejects_invalid_local_minute() {
+    for local_minute_of_day in [-1, 1440] {
+        let (_directory, mut database) = seeded_learning_database();
+        insert_due_review(&mut database, "review-1", "deck-1");
+        let now = utc("2026-07-16T09:00:00.000Z");
+        let session = database
+            .start_study_session(StudyScope::Deck("deck-1".into()), now, "2026-07-16")
+            .expect("start session");
+        let grant = &session.cards[0];
+        let card_before: (String, String, i64) = database
+            .connection
+            .query_row(
+                "SELECT state, due_at, reps FROM cards WHERE id = ?1",
+                rusqlite::params![grant.card.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read card before rating");
+        let mut rating = rating_from(grant, &session, now);
+        rating.local_minute_of_day = local_minute_of_day;
+
+        let error = database
+            .rate_study_card(rating)
+            .expect_err("reject invalid local review minute");
+
+        assert_eq!(
+            error.to_string(),
+            "local review minute must be between 0 and 1439"
+        );
+        assert_eq!(review_log_count(&database, "review-1"), 0);
+        let card_after: (String, String, i64) = database
+            .connection
+            .query_row(
+                "SELECT state, due_at, reps FROM cards WHERE id = ?1",
+                rusqlite::params![grant.card.id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("read card after rating");
+        assert_eq!(card_after, card_before);
+    }
 }
 
 #[test]
