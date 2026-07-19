@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { StatisticsPeriod } from "../../../domain/statistics";
+import type { StatisticsPeriod, StatisticsTimeBucket } from "../../../domain/statistics";
 import {
   deriveStatisticsPalette,
   loadStatisticsPreferences,
@@ -15,6 +15,7 @@ interface ActivityChartCardProps {
   period?: StatisticsPeriod;
   totalBuckets: { date: string; value: number }[];
   series: ActivityChartSeries[];
+  timeBuckets?: StatisticsTimeBucket[];
   heatmapEnabled?: boolean;
   defaultGraphMode?: GraphMode;
 }
@@ -27,6 +28,7 @@ export function ActivityChartCard({
   period,
   totalBuckets,
   series,
+  timeBuckets = [],
   heatmapEnabled = true,
   defaultGraphMode,
 }: ActivityChartCardProps) {
@@ -99,14 +101,6 @@ export function ActivityChartCard({
     return appSeries?.buckets ?? [];
   }, [selectedApp, totalBuckets, series]);
 
-  const heatmapData = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const b of filteredData) {
-      map[b.date] = (map[b.date] || 0) + b.value;
-    }
-    return map;
-  }, [filteredData]);
-
   return (
     <section className="statistics-section">
       <div className="statistics-section__header">
@@ -148,8 +142,9 @@ export function ActivityChartCard({
       </div>
       {heatmapEnabled && view === "heatmap" && period && (
         <ActivityHeatmap
-          data={heatmapData}
           period={period}
+          buckets={timeBuckets}
+          selectedApp={selectedApp}
           palette={palette}
         />
       )}

@@ -77,6 +77,20 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
   expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,6};/);
 });
 
+test("keeps the calendar time heatmap inside its card without horizontal scrolling", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const heatmap = readFileSync(join(currentDir, "../features/statistics/components/ActivityHeatmap.tsx"), "utf8");
+
+  expect(heatmap).not.toContain("ScrollArea");
+  expect(heatmap).not.toContain("overflow-x");
+  expect(heatmap).not.toContain("max-content");
+  expect(statCss).not.toContain("statistics-heatmap-scroll");
+  expect(statCss).not.toContain("max-content");
+  expect(statCss).not.toContain("overflow-x");
+  expect(statCss).toContain("repeat(var(--column-count), minmax(0, 1fr))");
+});
+
 test("loads the Statistics stylesheet from the application entry point", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const entry = readFileSync(join(currentDir, "../main.tsx"), "utf8");
