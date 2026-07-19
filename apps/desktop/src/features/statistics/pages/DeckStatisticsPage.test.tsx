@@ -29,6 +29,8 @@ test("loads deck data with its deck ID and supplied calendar period", async () =
   );
 
   expect(await screen.findByText("Ratings")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Heatmap" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Graph" })).toHaveAttribute("aria-pressed", "true");
   await waitFor(() =>
     expect(getDeckStats).toHaveBeenCalledWith("deck-123", period),
   );

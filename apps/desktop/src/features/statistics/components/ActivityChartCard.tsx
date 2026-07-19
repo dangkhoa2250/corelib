@@ -28,13 +28,14 @@ export function ActivityChartCard({
   period,
   totalBuckets,
   series,
-  timeBuckets = [],
+  timeBuckets,
   heatmapEnabled = true,
   defaultGraphMode,
 }: ActivityChartCardProps) {
   const prefs = useMemo(() => loadStatisticsPreferences(), []);
+  const canShowHeatmap = heatmapEnabled && timeBuckets !== undefined;
 
-  const initialView = heatmapEnabled ? prefs.chartView : "graph";
+  const initialView = canShowHeatmap ? prefs.chartView : "graph";
 
   const [view, setView] = useState<"heatmap" | "graph">(initialView);
   const [graphMode, setGraphMode] = useState<GraphMode>(
@@ -49,6 +50,10 @@ export function ActivityChartCard({
   useEffect(() => {
     setGraphMode(defaultGraphMode ?? rangeDefaultGraphMode(period));
   }, [defaultGraphMode, period]);
+
+  useEffect(() => {
+    if (!canShowHeatmap) setView("graph");
+  }, [canShowHeatmap]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -106,7 +111,7 @@ export function ActivityChartCard({
       <div className="statistics-section__header">
         <h2 className="statistics-section__title">Activity</h2>
         <div className="statistics-chart-card__toggle">
-          {heatmapEnabled ? (
+          {canShowHeatmap ? (
             <>
               <button
                 type="button"
@@ -140,10 +145,10 @@ export function ActivityChartCard({
           className="statistics-app-filter"
         />
       </div>
-      {heatmapEnabled && view === "heatmap" && period && (
+      {canShowHeatmap && view === "heatmap" && period && (
         <ActivityHeatmap
           period={period}
-          buckets={timeBuckets}
+          buckets={timeBuckets ?? []}
           selectedApp={selectedApp}
           palette={palette}
         />

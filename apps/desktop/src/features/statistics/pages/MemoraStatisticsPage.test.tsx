@@ -24,5 +24,7 @@ test("loads Memora data for the supplied calendar period", async () => {
   render(<MemoraStatisticsPage period={period} getMemoraStats={getMemoraStats} />);
 
   expect(await screen.findByText("Ratings")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Heatmap" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Graph" })).toHaveAttribute("aria-pressed", "true");
   await waitFor(() => expect(getMemoraStats).toHaveBeenCalledWith(period));
 });

@@ -21,6 +21,8 @@ test("loads reading data for the supplied calendar period and refetches on perio
   );
 
   expect(await screen.findByText("0m")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Heatmap" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Graph" })).toHaveAttribute("aria-pressed", "true");
   await waitFor(() => expect(getReadingStats).toHaveBeenCalledWith(july));
 
   rerender(
