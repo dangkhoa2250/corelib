@@ -701,10 +701,11 @@ cd apps/desktop && npm run build
 Expected: TypeScript and Vite build PASS. Inspect built CSS with:
 
 ```bash
-rg -n "statistics-period-control|statistics-heatmap--year|statistics-app-card" dist/assets/*.css
+rg -n "statistics-range-picker|statistics-heatmap-wrapper--year|statistics-app-card" dist/assets/*.css
 ```
 
-Expected: all three selectors are present.
+Expected: all three selectors are present. These are the implementation's stable
+selector names for the period control, year heatmap, and app insight card.
 
 - [ ] **Step 4: Run Rust verification from the dependent plan**
 
