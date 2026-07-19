@@ -93,6 +93,40 @@ fn statistics_migration_creates_tables() {
 }
 
 #[test]
+fn statistics_time_bucket_migration_creates_local_only_storage() {
+    let (_directory, database) = db();
+    let id: String = database
+        .connection
+        .query_row(
+            "SELECT id FROM schema_migrations WHERE id='0013_statistics_time_buckets'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("statistics time bucket migration");
+    assert_eq!(id, "0013_statistics_time_buckets");
+
+    let bucket_tables: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='activity_session_time_buckets'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("activity session time buckets table");
+    assert_eq!(bucket_tables, 1);
+
+    let local_minute_columns: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('review_logs') WHERE name='local_minute_of_day'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("review log local minute column");
+    assert_eq!(local_minute_columns, 1);
+}
+
+#[test]
 fn start_and_checkpoint_activity_session_persists_active_ms_and_visit_atomically() {
     let (_directory, mut database) = db();
     seed_document(&mut database, "doc-1");
