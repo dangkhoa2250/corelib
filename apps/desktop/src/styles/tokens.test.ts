@@ -69,7 +69,10 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
   const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
 
   const shellContent = statCss.match(/\.statistics-shell__content\s*\{([^}]*)\}/)?.[1] ?? "";
+  const decreaseComparison = statCss.match(/\.statistics-kpi-card__comparison\[data-kind="decrease"\]\s*\{([^}]*)\}/)?.[1] ?? "";
   expect(shellContent).toContain("padding: 28px 20px 40px 28px;");
+  expect(decreaseComparison).toContain("color: var(--text-secondary);");
+  expect(decreaseComparison).not.toContain("var(--error)");
   expect(statCss).not.toContain("overflow: auto;");
   expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,6};/);
 });
