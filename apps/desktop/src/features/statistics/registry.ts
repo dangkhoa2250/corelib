@@ -37,6 +37,7 @@ export interface ActivityChartSeries {
 export interface StatisticsAppDefinition {
   key: string;
   title: string;
+  tagline: string;
   icon: ComponentType;
   loadSummary(period: StatisticsPeriod): Promise<AppStatisticsSummary>;
   loadDetail(period: StatisticsPeriod): Promise<AppStatisticsDetail>;
@@ -49,6 +50,7 @@ export const DEFAULT_STATISTICS_APPS: StatisticsAppDefinition[] = [
   {
     key: "reading",
     title: "Reading",
+    tagline: "Stay curious. Keep reading.",
     icon: ReadingIcon,
     async loadSummary(period) {
       const data = await getReadingStatistics(period);
@@ -78,6 +80,7 @@ export const DEFAULT_STATISTICS_APPS: StatisticsAppDefinition[] = [
   {
     key: "memora",
     title: "Memora",
+    tagline: "Review. Remember. Grow.",
     icon: MemoraIcon,
     async loadSummary(period) {
       const data = await getMemoraStatistics(period);

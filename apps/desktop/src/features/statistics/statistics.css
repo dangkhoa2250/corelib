@@ -140,6 +140,16 @@
 .statistics-app-card__icon { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 9px; background: var(--surface-3); color: var(--text-primary); }
 .statistics-app-card__metrics { display: grid; gap: 7px; color: var(--text-secondary); font-size: 13px; }
 .statistics-app-card__metrics strong { color: var(--text-primary); font-size: 16px; }
+.statistics-app-card__heading h3, .statistics-app-card__heading p { margin: 0; }
+.statistics-app-card__heading h3 { color: var(--text-primary); font-size: 16px; }
+.statistics-app-card__heading p { margin-top: 3px; color: var(--text-secondary); font-size: 13px; font-weight: 400; }
+.statistics-app-card__metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.statistics-app-card__metrics > div { display: grid; gap: 3px; }
+.statistics-app-card__metrics span { color: var(--text-secondary); }
+.statistics-app-card__open { align-self: end; display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--border-subtle); border-radius: 50%; background: var(--surface-2); color: var(--text-secondary); cursor: pointer; }
+.statistics-app-card__open:hover { background: var(--interactive-hover); color: var(--text-primary); }
+.statistics-app-card__open:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.statistics-app-card .statistics-mini-sparkline { width: 96px; height: 36px; align-self: end; }
 
 .statistics-chart-card__toggle, .statistics-chart-card__controls, .statistics-graph__mode-bar { display: flex; flex-wrap: wrap; gap: 6px; }
 .statistics-chart-card__controls { margin-bottom: 14px; }

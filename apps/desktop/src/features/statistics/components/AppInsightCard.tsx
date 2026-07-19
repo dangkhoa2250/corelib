@@ -1,4 +1,6 @@
 import type { AppStatisticsSummary, StatisticsAppDefinition } from "../registry";
+import { IconChevronRight } from "@tabler/icons-react";
+import { MiniSparkline } from "./MiniSparkline";
 
 interface AppInsightCardProps {
   app: StatisticsAppDefinition;
@@ -19,19 +21,37 @@ export function formatMetric(value: number | null, unit: "milliseconds" | "count
 export function AppInsightCard({ app, summary, state, onOpen }: AppInsightCardProps) {
   const Icon = app.icon;
   return (
-    <button className="statistics-app-card" type="button" onClick={onOpen} disabled={!onOpen}>
-      <span className="statistics-app-card__heading">
+    <article className="statistics-app-card" aria-label={`${app.title} statistics`}>
+      <div className="statistics-app-card__heading">
         <span className="statistics-app-card__icon"><Icon /></span>
-        <span>{app.title}</span>
-      </span>
-      {state === "loading" && <span className="statistics-muted">Loading…</span>}
-      {state === "error" && <span className="statistics-muted">Statistics unavailable</span>}
+        <div>
+          <h3>{app.title}</h3>
+          <p>{app.tagline}</p>
+        </div>
+      </div>
+      {state === "loading" && <p className="statistics-muted">Loading…</p>}
+      {state === "error" && <p className="statistics-muted">Statistics unavailable</p>}
       {state === "loaded" && summary && (
-        <span className="statistics-app-card__metrics">
-          <span><strong>{formatMetric(summary.primary.value, summary.primary.unit)}</strong> {summary.primary.label}</span>
-          <span><strong>{formatMetric(summary.secondary.value, summary.secondary.unit)}</strong> {summary.secondary.label}</span>
-        </span>
+        <>
+          <div className="statistics-app-card__metrics">
+            <div><strong>{formatMetric(summary.primary.value, summary.primary.unit)}</strong><span>{summary.primary.label}</span></div>
+            <div><strong>{formatMetric(summary.secondary.value, summary.secondary.unit)}</strong><span>{summary.secondary.label}</span></div>
+          </div>
+          <MiniSparkline label={`${app.title} trend`} points={summary.buckets.map((bucket) => bucket.value)} />
+        </>
       )}
-    </button>
+      {state === "loaded" && !summary && <p className="statistics-muted">No activity in this period</p>}
+      {onOpen && (
+        <button
+          className="statistics-app-card__open"
+          type="button"
+          onClick={onOpen}
+          aria-label={`Open ${app.title} statistics`}
+          title={`Open ${app.title} statistics`}
+        >
+          <IconChevronRight aria-hidden="true" />
+        </button>
+      )}
+    </article>
   );
 }

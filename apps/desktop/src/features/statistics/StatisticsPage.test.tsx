@@ -85,6 +85,7 @@ test("keeps every registered app available in the activity filter when its summa
   const failedApp = {
     key: "reading",
     title: "Reading",
+    tagline: "Stay curious. Keep reading.",
     icon: () => null,
     loadSummary: vi.fn().mockRejectedValue(new Error("unavailable")),
     loadDetail: vi.fn(),
