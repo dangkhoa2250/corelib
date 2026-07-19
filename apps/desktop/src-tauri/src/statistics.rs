@@ -153,6 +153,13 @@ pub struct ActivityBucket {
 
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ActiveDayBucket {
+    pub local_day: String,
+    pub is_active_day: bool,
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StatisticsOverview {
     pub active_ms: i64,
     pub reading_active_ms: i64,
@@ -162,6 +169,7 @@ pub struct StatisticsOverview {
     pub previous_active_ms: i64,
     pub previous_active_days: i64,
     pub buckets: Vec<ActivityBucket>,
+    pub active_day_buckets: Vec<ActiveDayBucket>,
     pub time_buckets: Vec<StatisticsTimeBucket>,
 }
 
@@ -620,6 +628,7 @@ impl LibraryDatabase {
 
         let bucket_days = window.bucket_days(&self.connection, today_local_day, now_utc)?;
         let buckets = build_total_buckets(&self.connection, &bucket_days, &window, now_utc)?;
+        let active_day_buckets = build_active_day_buckets(&bucket_days, &lifetime_active_days);
 
         let previous = window.previous()?;
         let previous_reading = query_window_activity_ms(&self.connection, "reading", &previous)?;
@@ -638,6 +647,7 @@ impl LibraryDatabase {
             previous_active_ms,
             previous_active_days,
             buckets,
+            active_day_buckets,
             time_buckets,
         })
     }
@@ -1426,6 +1436,19 @@ fn count_active_days_in_window(days: &HashSet<String>, window: &CalendarWindow) 
     days.iter()
         .filter(|day| day.as_str() >= start_date && day.as_str() <= window.today.as_str())
         .count() as i64
+}
+
+fn build_active_day_buckets(
+    bucket_days: &[String],
+    active_days: &HashSet<String>,
+) -> Vec<ActiveDayBucket> {
+    bucket_days
+        .iter()
+        .map(|local_day| ActiveDayBucket {
+            local_day: local_day.clone(),
+            is_active_day: active_days.contains(local_day),
+        })
+        .collect()
 }
 
 fn query_deck_active_days(

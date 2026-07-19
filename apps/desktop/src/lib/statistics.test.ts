@@ -16,7 +16,11 @@ test("uses the typed Tauri statistics contract", async () => {
     memoraActiveMs: 0,
     currentStreak: 0,
     activeDays: 0,
+    previousActiveMs: 0,
+    previousActiveDays: 0,
     buckets: [],
+    activeDayBuckets: [],
+    timeBuckets: [],
   });
   const period = { unit: "month" as const, anchorLocalDay: "2026-07-01" };
   await getStatisticsOverview(period, call);

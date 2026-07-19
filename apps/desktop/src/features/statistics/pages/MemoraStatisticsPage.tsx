@@ -1,9 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentProps } from "react";
+import { IconChartBar } from "@tabler/icons-react";
 import type { MemoraStatistics, StatisticsPeriod } from "../../../domain/statistics";
 import { getMemoraStatistics } from "../../../lib/statistics";
-import { KpiCard } from "../components/KpiCard";
+import { KpiCard as BaseKpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
 import { ActivityChartCard } from "../components/ActivityChartCard";
+
+type KpiCardProps = Omit<ComponentProps<typeof BaseKpiCard>, "icon">;
+
+function KpiCard(props: KpiCardProps) {
+  return <BaseKpiCard icon={<IconChartBar />} {...props} />;
+}
 
 function formatMs(ms: number): string {
   const hours = Math.floor(ms / 3600000);

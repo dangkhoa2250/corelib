@@ -1,10 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ComponentProps } from "react";
+import { IconChartBar } from "@tabler/icons-react";
 import type { StatisticsPeriod } from "../../../domain/statistics";
 import type { AppStatisticsDetail, StatisticsAppDefinition } from "../registry";
 import { ActivityChartCard } from "../components/ActivityChartCard";
 import { formatMetric } from "../components/AppInsightCard";
-import { KpiCard } from "../components/KpiCard";
+import { KpiCard as BaseKpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
+
+type KpiCardProps = Omit<ComponentProps<typeof BaseKpiCard>, "icon">;
+
+function KpiCard(props: KpiCardProps) {
+  return <BaseKpiCard icon={<IconChartBar />} {...props} />;
+}
 
 interface RegisteredAppStatisticsPageProps {
   app: StatisticsAppDefinition;

@@ -12,6 +12,11 @@ export interface ActivityBucket {
   activeMs: number;
 }
 
+export interface ActiveDayBucket {
+  localDay: string;
+  isActiveDay: boolean;
+}
+
 export interface StatisticsOverview {
   activeMs: number;
   readingActiveMs: number;
@@ -21,6 +26,7 @@ export interface StatisticsOverview {
   previousActiveMs: number;
   previousActiveDays: number;
   buckets: ActivityBucket[];
+  activeDayBuckets: ActiveDayBucket[];
   timeBuckets: StatisticsTimeBucket[];
 }
 

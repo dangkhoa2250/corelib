@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
+import { IconChartBar } from "@tabler/icons-react";
 import type { AdminAnalyticsRange, AdminStatistics, AdminStatisticsBucket } from "../../domain/account";
-import { KpiCard } from "../statistics/components/KpiCard";
+import { KpiCard as BaseKpiCard } from "../statistics/components/KpiCard";
 import { MetricSection } from "../statistics/components/MetricSection";
 import { AdminAnalyticsRangePicker } from "./AdminAnalyticsRangePicker";
 import { StatisticsSkeleton } from "../statistics/components/StatisticsStates";
@@ -8,6 +9,12 @@ import { ActivityChartCard } from "../statistics/components/ActivityChartCard";
 import { Combobox } from "../../components/Combobox";
 
 const CACHE_KEY = "library.admin-statistics.cache.v1";
+
+type KpiCardProps = Omit<ComponentProps<typeof BaseKpiCard>, "icon">;
+
+function KpiCard(props: KpiCardProps) {
+  return <BaseKpiCard icon={<IconChartBar />} {...props} />;
+}
 
 const appOptions = [
   { value: "all", label: "All apps" },

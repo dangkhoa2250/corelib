@@ -21,8 +21,13 @@ test("renders icon, value, comparison and accessible sparkline", () => {
 });
 
 test("renders help text when provided", () => {
-  render(<KpiCard label="Streak" value="5 days" help="Current streak" />);
+  render(<KpiCard icon={<IconClock />} label="Streak" value="5 days" help="Current streak" />);
   expect(screen.getByText("Current streak")).toBeInTheDocument();
+});
+
+test("does not render a sparkline for an all-zero trend", () => {
+  render(<KpiCard icon={<IconClock />} label="Active days" value="0" trend={[0, 0, 0]} />);
+  expect(screen.queryByRole("img", { name: "Active days trend" })).not.toBeInTheDocument();
 });
 
 test("formats zero baselines without infinity", () => {
@@ -35,6 +40,6 @@ test("formats declines against the previous calendar period", () => {
 });
 
 test("applies the statistics-card class", () => {
-  const { container } = render(<KpiCard label="Test" value="123" />);
+  const { container } = render(<KpiCard icon={<IconClock />} label="Test" value="123" />);
   expect(container.firstElementChild).toHaveClass("statistics-card");
 });

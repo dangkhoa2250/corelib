@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { IconCalendarStats, IconClock, IconFlame } from "@tabler/icons-react";
-import type { StatisticsOverview, StatisticsPeriod } from "../../../domain/statistics";
+import type { ActiveDayBucket, StatisticsOverview, StatisticsPeriod } from "../../../domain/statistics";
 import { getStatisticsOverview } from "../../../lib/statistics";
 import { ActivityChartCard } from "../components/ActivityChartCard";
 import { AppInsightCard } from "../components/AppInsightCard";
@@ -38,8 +38,8 @@ function bucketTrend(buckets: { activeMs: number }[]): number[] {
   return buckets.map((bucket) => bucket.activeMs);
 }
 
-function activeDayTrend(buckets: { activeMs: number }[]): number[] {
-  return buckets.map((bucket) => (bucket.activeMs > 0 ? 1 : 0));
+export function activeDayTrend(buckets: ActiveDayBucket[]): number[] {
+  return buckets.map((bucket) => (bucket.isActiveDay ? 1 : 0));
 }
 
 export function StatisticsOverviewPage({
@@ -131,7 +131,7 @@ export function StatisticsOverviewPage({
               label="Active days"
               value={`${data.activeDays}`}
               comparison={formatPeriodComparison(data.activeDays, data.previousActiveDays, period.unit)}
-              trend={activeDayTrend(data.buckets)}
+              trend={activeDayTrend(data.activeDayBuckets)}
             />
           </div>
 

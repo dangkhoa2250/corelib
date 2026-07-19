@@ -1530,6 +1530,23 @@ fn active_day_threshold_requires_min_activity_or_real_review() {
         .statistics_overview(&july_month(), FIXED_NOW, TODAY_LOCAL_DAY)
         .expect("overview");
     assert_eq!(overview.active_days, 2); // days 1 and 3 only
+    assert_eq!(
+        overview
+            .active_day_buckets
+            .iter()
+            .filter(|bucket| bucket.is_active_day)
+            .map(|bucket| bucket.local_day.as_str())
+            .collect::<Vec<_>>(),
+        vec!["2026-07-16", "2026-07-18"],
+    );
+    assert_eq!(
+        overview
+            .active_day_buckets
+            .iter()
+            .find(|bucket| bucket.local_day == "2026-07-17")
+            .map(|bucket| bucket.is_active_day),
+        Some(false),
+    );
 }
 
 #[test]

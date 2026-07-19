@@ -8,7 +8,7 @@ export interface KpiComparison {
 }
 
 interface KpiCardProps {
-  icon?: ReactNode;
+  icon: ReactNode;
   label: string;
   value: string;
   help?: string;
@@ -42,15 +42,17 @@ export function formatPeriodComparison(
 }
 
 export function KpiCard({ icon, label, value, help, comparison, trend }: KpiCardProps) {
+  const hasMeaningfulTrend = trend?.some((point) => Number.isFinite(point) && point > 0);
+
   return (
     <div className="statistics-card statistics-kpi-card">
       <div className="statistics-kpi-card__header">
-        {icon && <span className="statistics-kpi-card__icon" aria-hidden="true">{icon}</span>}
+        <span className="statistics-kpi-card__icon" aria-hidden="true">{icon}</span>
         <span className="statistics-card__label">{label}</span>
       </div>
       <div className="statistics-kpi-card__value-row">
         <span className="statistics-card__value">{value}</span>
-        {trend && <MiniSparkline label={`${label} trend`} points={trend} />}
+        {trend && hasMeaningfulTrend && <MiniSparkline label={`${label} trend`} points={trend} />}
       </div>
       {help && <span className="statistics-muted">{help}</span>}
       {comparison && (
