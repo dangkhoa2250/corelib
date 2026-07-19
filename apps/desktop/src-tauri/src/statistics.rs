@@ -921,6 +921,9 @@ fn today_upper_bound() -> &'static str {
 // Activity session helpers
 // ---------------------------------------------------------------------------
 
+// Daily bucket builders materialize only the calendar window's enumerated
+// days. Their existing query utility keeps this compatible with the
+// zero-filling path; aggregate metrics use the strict helpers below.
 fn activity_window_clause(start: Option<&str>) -> &'static str {
     if start.is_some() {
         "local_day <= ? AND local_day >= ?"
@@ -1010,36 +1013,19 @@ fn query_reading_page_metrics(
     document_id: Option<&str>,
 ) -> Result<PageMetrics> {
     let document_clause = match document_id {
-        Some(_) => "AND reading_session_pages.document_id = ?",
+        Some(_) => "AND reading_session_pages.document_id = ?3",
         None => "",
     };
     let sql = format!(
         "SELECT COALESCE(SUM(visit_count), 0), COUNT(DISTINCT page)
          FROM reading_session_pages
          JOIN activity_sessions ON activity_sessions.id = reading_session_pages.session_id
-         WHERE {window} {document_clause}",
-        window = activity_window_clause(window.start()),
+         WHERE activity_sessions.local_day >= ?1 AND activity_sessions.local_day < ?2 {document_clause}",
         document_clause = document_clause,
     );
-    let (page_visits, unique_pages): (i64, i64) = match (document_id, window.start()) {
-        (Some(id), Some(start)) => connection.query_row(
-            &sql,
-            params![today_upper_bound(), start, id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?,
-        (Some(id), None) => connection.query_row(
-            &sql,
-            params![today_upper_bound(), id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?,
-        (None, Some(start)) => connection.query_row(
-            &sql,
-            params![today_upper_bound(), start],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?,
-        (None, None) => connection.query_row(&sql, params![today_upper_bound()], |row| {
-            Ok((row.get(0)?, row.get(1)?))
-        })?,
+    let (page_visits, unique_pages): (i64, i64) = match document_id {
+        Some(id) => connection.query_row(&sql, params![format_local_day(window.start), format_local_day(window.end_exclusive), id], |row| Ok((row.get(0)?, row.get(1)?)))?,
+        None => connection.query_row(&sql, params![format_local_day(window.start), format_local_day(window.end_exclusive)], |row| Ok((row.get(0)?, row.get(1)?)))?,
     };
     Ok(PageMetrics {
         page_visits,
@@ -1053,24 +1039,13 @@ fn query_document_session_count(
     window: &CalendarWindow,
     document_id: &str,
 ) -> Result<i64> {
-    let sql = format!(
+    let sql =
         "SELECT COUNT(DISTINCT reading_session_pages.session_id)
          FROM reading_session_pages
          JOIN activity_sessions ON activity_sessions.id = reading_session_pages.session_id
-         WHERE reading_session_pages.document_id = ?1 AND {window}",
-        window = activity_window_clause(window.start()),
-    );
-    Ok(if let Some(start) = window.start() {
-        connection.query_row(
-            &sql,
-            params![document_id, today_upper_bound(), start],
-            |row| row.get(0),
-        )?
-    } else {
-        connection.query_row(&sql, params![document_id, today_upper_bound()], |row| {
-            row.get(0)
-        })?
-    })
+         WHERE reading_session_pages.document_id = ?1
+           AND activity_sessions.local_day >= ?2 AND activity_sessions.local_day < ?3";
+    Ok(connection.query_row(sql, params![document_id, format_local_day(window.start), format_local_day(window.end_exclusive)], |row| row.get(0))?)
 }
 
 fn query_document_active_ms(
@@ -1078,24 +1053,13 @@ fn query_document_active_ms(
     window: &CalendarWindow,
     document_id: &str,
 ) -> Result<i64> {
-    let sql = format!(
+    let sql =
         "SELECT COALESCE(SUM(reading_session_pages.raw_active_ms), 0)
          FROM reading_session_pages
          JOIN activity_sessions ON activity_sessions.id = reading_session_pages.session_id
-         WHERE reading_session_pages.document_id = ?1 AND {window}",
-        window = activity_window_clause(window.start()),
-    );
-    Ok(if let Some(start) = window.start() {
-        connection.query_row(
-            &sql,
-            params![document_id, today_upper_bound(), start],
-            |row| row.get(0),
-        )?
-    } else {
-        connection.query_row(&sql, params![document_id, today_upper_bound()], |row| {
-            row.get(0)
-        })?
-    })
+         WHERE reading_session_pages.document_id = ?1
+           AND activity_sessions.local_day >= ?2 AND activity_sessions.local_day < ?3";
+    Ok(connection.query_row(sql, params![document_id, format_local_day(window.start), format_local_day(window.end_exclusive)], |row| row.get(0))?)
 }
 
 fn query_document_coverage(
@@ -1536,30 +1500,6 @@ fn compute_current_streak(active_days: &HashSet<String>, today_local_day: &str) 
         }
     }
     Ok(streak)
-}
-
-fn earliest_activity_day(
-    connection: &rusqlite::Connection,
-    today_local_day: &str,
-    _now_utc: &str,
-) -> Result<Option<String>> {
-    let activity_day: Option<String> = connection
-        .query_row(
-            "SELECT MIN(local_day) FROM activity_sessions WHERE local_day <= ?1",
-            params![today_local_day],
-            |row| row.get(0),
-        )
-        .optional()?
-        .flatten();
-    let review_day: Option<String> = connection
-        .query_row(
-            "SELECT MIN(COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)))
-             FROM review_logs
-             WHERE COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)) <= ?1",
-            params![today_local_day],
-            |row| row.get::<_, Option<String>>(0),
-        )?;
-    Ok(activity_day.into_iter().chain(review_day).min())
 }
 
 // ---------------------------------------------------------------------------

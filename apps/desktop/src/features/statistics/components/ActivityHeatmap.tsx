@@ -41,6 +41,11 @@ function dateStr(d: Date): string {
   return `${d.getFullYear()}-${fmt(d.getMonth() + 1)}-${fmt(d.getDate())}`;
 }
 
+function parseLocalDay(day: string): Date {
+  const [year, month, date] = day.split("-").map(Number);
+  return new Date(year, month - 1, date);
+}
+
 function isLeapYear(y: number): boolean {
   return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 }
@@ -65,10 +70,8 @@ function buildYearDays(year: number, data: Record<string, number>): DayInfo[] {
   return result;
 }
 
-function buildRecentDays(count: number, data: Record<string, number>): DayInfo[] {
-  const today = new Date();
+function buildPeriodDays(first: Date, count: number, data: Record<string, number>): DayInfo[] {
   const result: DayInfo[] = [];
-  const first = new Date(today.getFullYear(), today.getMonth(), today.getDate() - (count - 1));
   const firstDow = first.getDay();
   for (let i = 0; i < count; i++) {
     const date = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i);
@@ -123,21 +126,14 @@ function computeSummary(days: DayInfo[]) {
 export function ActivityHeatmap({ data, period, palette }: ActivityHeatmapProps) {
   const grids: YearGrid[] = useMemo(() => {
     if (period.unit === "year") {
-      const currentYear = new Date().getFullYear();
-      const dataYears = Array.from(new Set(
-        Object.keys(data)
-          .map((key) => Number(key.slice(0, 4)))
-          .filter((year) => Number.isInteger(year) && year <= currentYear),
-      )).sort((a, b) => b - a);
-      const years = (dataYears.length > 0 ? dataYears : [currentYear]).slice(0, 3);
-      return years.map((year) => {
-        const days = buildYearDays(year, data);
-        return { year, days, maxColumn: maxColumn(days) };
-      });
+      const year = parseLocalDay(period.anchorLocalDay).getFullYear();
+      const days = buildYearDays(year, data);
+      return [{ year, days, maxColumn: maxColumn(days) }];
     }
-    const count = period.unit === "week" ? 7 : 31;
-    const days = buildRecentDays(count, data);
-    return [{ year: new Date().getFullYear(), days, maxColumn: maxColumn(days) }];
+    const first = parseLocalDay(period.anchorLocalDay);
+    const count = period.unit === "week" ? 7 : new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    const days = buildPeriodDays(first, count, data);
+    return [{ year: first.getFullYear(), days, maxColumn: maxColumn(days) }];
   }, [data, period]);
 
   const allDays = useMemo(() => grids.flatMap((g) => g.days), [grids]);

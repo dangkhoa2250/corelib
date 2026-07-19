@@ -27,8 +27,7 @@ export function ActivityChartCard({
 }: ActivityChartCardProps) {
   const prefs = useMemo(() => loadStatisticsPreferences(), []);
 
-  const initialView =
-    period.unit === "year" ? "graph" : prefs.chartView;
+  const initialView = prefs.chartView;
 
   const [view, setView] = useState<"heatmap" | "graph">(initialView);
   const [graphMode, setGraphMode] = useState<GraphMode>(

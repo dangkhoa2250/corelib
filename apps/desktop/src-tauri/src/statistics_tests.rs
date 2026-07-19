@@ -56,6 +56,33 @@ fn week_overview_zero_fills_local_time_buckets_and_marks_future_days() {
     assert!(overview.time_buckets.iter().filter(|bucket| bucket.local_day.as_str() > TODAY_LOCAL_DAY).all(|bucket| bucket.is_future && bucket.active_ms == 0));
 }
 
+#[test]
+fn selected_calendar_month_excludes_later_reading_and_document_activity() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "window-doc", 10);
+    for (id, day, page) in [("inside", "2026-07-18", 2), ("later", "2026-08-01", 3)] {
+        start_session(&mut database, id, "reading", "reading", &format!("{day}T01:00:00.000Z"), day, Some("document"), Some("window-doc"));
+        checkpoint(&mut database, id, &format!("{day}T01:01:00.000Z"), 60_000, Some("window-doc"), Some(page), 1);
+    }
+    let selected = period(PeriodUnit::Month, "2026-07-18");
+    let reading = database.reading_statistics(&selected, FIXED_NOW, TODAY_LOCAL_DAY).expect("reading");
+    let document = database.document_statistics("window-doc", &selected, FIXED_NOW, TODAY_LOCAL_DAY).expect("document");
+    assert_eq!((reading.active_ms, reading.session_count, reading.page_visits), (60_000, 1, 1));
+    assert_eq!((document.active_ms, document.session_count, document.page_visits), (60_000, 1, 1));
+}
+
+#[test]
+fn overview_previous_period_uses_only_the_immediately_preceding_calendar_month() {
+    let (_directory, mut database) = db();
+    for (id, day) in [("previous", "2026-06-30"), ("current", "2026-07-01"), ("later", "2026-08-01")] {
+        start_session(&mut database, id, "reading", "reading", &format!("{day}T01:00:00.000Z"), day, None, None);
+        checkpoint(&mut database, id, &format!("{day}T01:01:00.000Z"), 60_000, None, None, 0);
+    }
+    let overview = database.statistics_overview(&period(PeriodUnit::Month, "2026-07-18"), FIXED_NOW, TODAY_LOCAL_DAY).expect("overview");
+    assert_eq!((overview.active_ms, overview.active_days), (60_000, 1));
+    assert_eq!((overview.previous_active_ms, overview.previous_active_days), (60_000, 1));
+}
+
 fn db() -> (TempDir, LibraryDatabase) {
     let directory = TempDir::new().expect("temporary statistics database");
     let database = LibraryDatabase::open(directory.path()).expect("open statistics database");
