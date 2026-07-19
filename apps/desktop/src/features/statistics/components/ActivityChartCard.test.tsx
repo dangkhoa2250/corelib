@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
 import { ActivityChartCard } from "./ActivityChartCard";
 
@@ -20,4 +21,26 @@ test("can render graph-only data without changing personal heatmap preferences",
   expect(screen.queryByRole("button", { name: "Heatmap" })).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Graph" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByLabelText("2026-07-18: 60 Active time")).toBeInTheDocument();
+});
+
+test("filters activity with the shared non-searchable app combobox", async () => {
+  const user = userEvent.setup();
+  const { container } = render(
+    <ActivityChartCard
+      heatmapEnabled={false}
+      totalBuckets={[{ date: "2026-07-18", value: 60 }]}
+      series={[
+        { appKey: "reading", title: "Reading", buckets: [{ date: "2026-07-18", value: 30 }] },
+      ]}
+    />,
+  );
+
+  expect(container.querySelector("select")).toBeNull();
+  const filter = screen.getByRole("combobox", { name: "Statistics app" });
+  await user.click(filter);
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(screen.getByRole("option", { name: "All apps" })).toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: "Reading" }));
+  expect(screen.getByLabelText("2026-07-18: 30 Active time")).toBeInTheDocument();
+  expect(screen.queryByLabelText("2026-07-18: 60 Active time")).not.toBeInTheDocument();
 });

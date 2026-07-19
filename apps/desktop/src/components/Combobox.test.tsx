@@ -15,10 +15,12 @@ function ComboboxTest({
   initial,
   onChange,
   ariaLabel,
+  searchable = true,
 }: {
   initial?: string;
   onChange?: (v: string) => void;
   ariaLabel?: string;
+  searchable?: boolean;
 }) {
   const [value, setValue] = useState<string | null>(initial ?? null);
   return (
@@ -31,6 +33,7 @@ function ComboboxTest({
       options={options}
       placeholder="Pick a fruit"
       ariaLabel={ariaLabel}
+      searchable={searchable}
     />
   );
 }
@@ -55,6 +58,42 @@ test("opens panel on click", async () => {
   await user.click(screen.getByRole("combobox", { name: "Fruit picker" }));
   expect(screen.getByRole("listbox")).toBeDefined();
   expect(screen.getByPlaceholderText("Search...")).toBeDefined();
+});
+
+test("keeps search enabled and focused by default", async () => {
+  const user = userEvent.setup();
+  render(<ComboboxTest ariaLabel="Fruit picker" />);
+  await user.click(screen.getByRole("combobox", { name: "Fruit picker" }));
+  expect(screen.getByPlaceholderText("Search...")).toHaveFocus();
+});
+
+test("supports keyboard selection without a search field when not searchable", async () => {
+  const user = userEvent.setup();
+  const onChange = vi.fn();
+  render(
+    <ComboboxTest
+      initial="banana"
+      onChange={onChange}
+      ariaLabel="Fruit picker"
+      searchable={false}
+    />,
+  );
+
+  await user.click(screen.getByRole("combobox", { name: "Fruit picker" }));
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  expect(screen.queryByText("Search...")).not.toBeInTheDocument();
+  expect(screen.getAllByRole("option")).toHaveLength(options.length);
+  expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Banana");
+
+  await user.keyboard("{ArrowDown}{Enter}");
+  expect(onChange).toHaveBeenCalledWith("cherry");
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Fruit picker" })).toHaveFocus();
+
+  await user.click(screen.getByRole("combobox", { name: "Fruit picker" }));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Fruit picker" })).toHaveFocus();
 });
 
 test("closes panel on outside click", async () => {

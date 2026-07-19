@@ -9,6 +9,7 @@ import type { ActivityChartSeries } from "../registry";
 import { ActivityHeatmap } from "./ActivityHeatmap";
 import { ActivityGraph, type GraphMode } from "./ActivityGraph";
 import { StatisticsColorPicker } from "./StatisticsColorPicker";
+import { Combobox } from "../../../components/Combobox";
 
 interface ActivityChartCardProps {
   period?: StatisticsPeriod;
@@ -136,18 +137,13 @@ export function ActivityChartCard({
         </div>
       </div>
       <div className="statistics-chart-card__controls">
-        <select
-          className="statistics-control"
-          aria-label="Statistics app"
+        <Combobox
           value={selectedApp}
-          onChange={(e) => setSelectedApp(e.target.value)}
-        >
-          {appOptions.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          onChange={setSelectedApp}
+          options={appOptions}
+          ariaLabel="Statistics app"
+          searchable={false}
+        />
       </div>
       {heatmapEnabled && view === "heatmap" && period && (
         <ActivityHeatmap

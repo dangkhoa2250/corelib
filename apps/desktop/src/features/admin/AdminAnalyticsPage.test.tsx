@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { AdminAnalyticsPage } from "./AdminAnalyticsPage";
 import type { AdminStatistics } from "../../domain/account";
@@ -79,4 +80,17 @@ test("does not render any user email", async () => {
   const adminStatistics = vi.fn().mockResolvedValue(mockAdminStats);
   render(<AdminAnalyticsPage adminStatistics={adminStatistics} />);
   expect(screen.queryByText(/@example/)).not.toBeInTheDocument();
+});
+
+test("reloads admin statistics when selecting an app from the shared combobox", async () => {
+  const user = userEvent.setup();
+  const adminStatistics = vi.fn().mockResolvedValue(mockAdminStats);
+  const { container } = render(<AdminAnalyticsPage adminStatistics={adminStatistics} />);
+
+  await screen.findByText("Analytics coverage");
+  expect(container.querySelector("select")).toBeNull();
+  await user.click(screen.getByRole("combobox", { name: "Admin statistics app" }));
+  expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("option", { name: "Reading" }));
+  expect(adminStatistics).toHaveBeenLastCalledWith("30d", "reading");
 });

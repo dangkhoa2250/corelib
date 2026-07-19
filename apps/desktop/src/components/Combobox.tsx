@@ -16,6 +16,7 @@ export interface ComboboxProps<T extends string> {
   noOptionsMessage?: string;
   disabled?: boolean;
   ariaLabel?: string;
+  searchable?: boolean;
 }
 
 export function Combobox<T extends string>({
@@ -27,6 +28,7 @@ export function Combobox<T extends string>({
   noOptionsMessage = "No options found",
   disabled = false,
   ariaLabel,
+  searchable = true,
 }: ComboboxProps<T>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -57,11 +59,14 @@ export function Combobox<T extends string>({
 
   useEffect(() => {
     if (open) {
+      if (!searchable) {
+        setQuery("");
+      }
       searchRef.current?.focus();
       const idx = filtered.findIndex((o) => o.value === value);
       setHighlightedIndex(idx >= 0 ? idx : 0);
     }
-  }, [open, filtered, value]);
+  }, [open, filtered, value, searchable]);
 
   useEffect(() => {
     if (!open) return;
@@ -145,17 +150,19 @@ export function Combobox<T extends string>({
 
       {open && (
         <div ref={panelRef} className="combobox__panel" role="listbox">
-          <div className="combobox__search">
-            <IconSearch size={14} />
-            <input
-              ref={searchRef}
-              type="text"
-              className="combobox__search-input"
-              placeholder={searchPlaceholder}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </div>
+          {searchable && (
+            <div className="combobox__search">
+              <IconSearch size={14} />
+              <input
+                ref={searchRef}
+                type="text"
+                className="combobox__search-input"
+                placeholder={searchPlaceholder}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+          )}
 
           <div ref={listRef} className="combobox__list">
             {filtered.length === 0 ? (

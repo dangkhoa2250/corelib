@@ -5,8 +5,15 @@ import { MetricSection } from "../statistics/components/MetricSection";
 import { AdminAnalyticsRangePicker } from "./AdminAnalyticsRangePicker";
 import { StatisticsSkeleton } from "../statistics/components/StatisticsStates";
 import { ActivityChartCard } from "../statistics/components/ActivityChartCard";
+import { Combobox } from "../../components/Combobox";
 
 const CACHE_KEY = "library.admin-statistics.cache.v1";
+
+const appOptions = [
+  { value: "all", label: "All apps" },
+  { value: "reading", label: "Reading" },
+  { value: "memora", label: "Memora" },
+] as const;
 
 interface CacheEntry {
   data: AdminStatistics;
@@ -115,11 +122,13 @@ export function AdminAnalyticsPage({
     <div className="statistics-shell__content" style={{ padding: "28px 20px 40px 28px" }}>
       <div className="statistics-range-picker" style={{ marginBottom: 24 }}>
         <AdminAnalyticsRangePicker range={range} onChange={setRange} />
-        <select className="statistics-control" aria-label="Admin statistics app" value={appKey} onChange={(event) => setAppKey(event.target.value)}>
-          <option value="all">All apps</option>
-          <option value="reading">Reading</option>
-          <option value="memora">Memora</option>
-        </select>
+        <Combobox
+          value={appKey}
+          onChange={setAppKey}
+          options={[...appOptions]}
+          ariaLabel="Admin statistics app"
+          searchable={false}
+        />
       </div>
 
       {cachedAt && (
