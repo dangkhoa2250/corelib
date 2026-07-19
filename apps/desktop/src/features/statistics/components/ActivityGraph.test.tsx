@@ -21,6 +21,22 @@ test("mode buttons call onModeChange", async () => {
   expect(onModeChange).toHaveBeenCalledWith("weekly");
 });
 
+test("renders only the modes supported by the selected period", () => {
+  render(
+    <ActivityGraph
+      buckets={dailyBuckets}
+      mode="daily"
+      onModeChange={vi.fn()}
+      valueLabel="Active time"
+      allowedModes={["daily", "cumulative"]}
+    />,
+  );
+
+  expect(screen.getByRole("button", { name: "Daily" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Weekly" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Cumulative" })).toBeInTheDocument();
+});
+
 test("renders Week-of label in weekly mode", () => {
   render(<ActivityGraph buckets={dailyBuckets} mode="weekly" onModeChange={vi.fn()} valueLabel="Active time" />);
   expect(screen.getAllByText(/Week of/).length).toBeGreaterThan(0);

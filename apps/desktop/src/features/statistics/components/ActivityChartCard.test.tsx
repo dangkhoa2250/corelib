@@ -1,7 +1,24 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test } from "vitest";
-import { ActivityChartCard } from "./ActivityChartCard";
+import { ActivityChartCard, graphModesForPeriod } from "./ActivityChartCard";
+
+test("derives graph modes that are meaningful for each calendar period", () => {
+  expect(graphModesForPeriod({ unit: "week", anchorLocalDay: "2026-06-15" })).toEqual([
+    "daily",
+    "cumulative",
+  ]);
+  expect(graphModesForPeriod({ unit: "month", anchorLocalDay: "2026-06-01" })).toEqual([
+    "daily",
+    "weekly",
+    "cumulative",
+  ]);
+  expect(graphModesForPeriod({ unit: "year", anchorLocalDay: "2026-01-01" })).toEqual([
+    "daily",
+    "weekly",
+    "cumulative",
+  ]);
+});
 
 test("keeps an available-but-empty heatmap view when switching to a year period", () => {
   render(<ActivityChartCard period={{ unit: "year", anchorLocalDay: "2026-01-01" }} totalBuckets={[]} timeBuckets={[]} series={[]} />);
@@ -107,6 +124,73 @@ test("uses weekly as the Year default and daily as the Week and Month default", 
     />,
   );
   expect(screen.getByRole("button", { name: "Daily" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("resets an invalid weekly choice to the Week default", async () => {
+  const user = userEvent.setup();
+  const { rerender } = render(
+    <ActivityChartCard
+      period={{ unit: "month", anchorLocalDay: "2026-06-01" }}
+      totalBuckets={[{ date: "2026-06-18", value: 60 }]}
+      timeBuckets={[]}
+      series={[]}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Graph" }));
+  await user.click(screen.getByRole("button", { name: "Weekly" }));
+
+  rerender(
+    <ActivityChartCard
+      period={{ unit: "week", anchorLocalDay: "2026-06-15" }}
+      totalBuckets={[{ date: "2026-06-18", value: 60 }]}
+      timeBuckets={[]}
+      series={[]}
+    />,
+  );
+
+  expect(screen.queryByRole("button", { name: "Weekly" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Daily" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("keeps an explicit cumulative choice when it remains valid after a period change", async () => {
+  const user = userEvent.setup();
+  const { rerender } = render(
+    <ActivityChartCard
+      period={{ unit: "month", anchorLocalDay: "2026-06-01" }}
+      totalBuckets={[{ date: "2026-06-18", value: 60 }]}
+      timeBuckets={[]}
+      series={[]}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Graph" }));
+  await user.click(screen.getByRole("button", { name: "Cumulative" }));
+
+  rerender(
+    <ActivityChartCard
+      period={{ unit: "week", anchorLocalDay: "2026-06-15" }}
+      totalBuckets={[{ date: "2026-06-18", value: 60 }]}
+      timeBuckets={[]}
+      series={[]}
+    />,
+  );
+
+  expect(screen.getByRole("button", { name: "Cumulative" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("keeps graph-only detail routes without a period on their supplied default", () => {
+  render(
+    <ActivityChartCard
+      defaultGraphMode="weekly"
+      totalBuckets={[{ date: "2026-06-18", value: 60 }]}
+      series={[]}
+    />,
+  );
+
+  expect(screen.getByRole("button", { name: "Weekly" })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByRole("button", { name: "Daily" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Cumulative" })).toBeInTheDocument();
 });
 
 test("uses icon-plus-label view controls", () => {

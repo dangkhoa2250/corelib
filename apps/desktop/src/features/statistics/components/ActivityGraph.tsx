@@ -13,6 +13,7 @@ export interface ActivityGraphProps {
   onModeChange(mode: GraphMode): void;
   valueLabel: string;
   palette?: string[];
+  allowedModes?: GraphMode[];
 }
 
 const VB_W = 600;
@@ -71,7 +72,14 @@ function formatShortDate(dateStr: string): string {
 
 const MODES: GraphMode[] = ["daily", "weekly", "cumulative"];
 
-export function ActivityGraph({ buckets, mode, onModeChange, valueLabel, palette }: ActivityGraphProps) {
+export function ActivityGraph({
+  buckets,
+  mode,
+  onModeChange,
+  valueLabel,
+  palette,
+  allowedModes = MODES,
+}: ActivityGraphProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [focusedIdx, setFocusedIdx] = useState(0);
@@ -236,7 +244,7 @@ export function ActivityGraph({ buckets, mode, onModeChange, valueLabel, palette
 
   const modeButtons = (
     <div className="statistics-graph__mode-bar">
-      {MODES.map((m) => (
+      {allowedModes.map((m) => (
         <button
           key={m}
           className="statistics-graph__mode-btn"

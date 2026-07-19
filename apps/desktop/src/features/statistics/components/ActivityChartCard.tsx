@@ -32,6 +32,13 @@ export function periodDefaultGraphMode(period?: StatisticsPeriod): GraphMode {
   return period?.unit === "year" ? "weekly" : "daily";
 }
 
+export function graphModesForPeriod(period?: StatisticsPeriod): GraphMode[] {
+  if (period?.unit === "week") {
+    return ["daily", "cumulative"];
+  }
+  return ["daily", "weekly", "cumulative"];
+}
+
 /**
  * Produces the selected app's daily graph series from the same hourly source
  * as the heatmap. The authoritative all-apps daily series remains separate.
@@ -79,11 +86,34 @@ export function ActivityChartCard({
     document.documentElement.dataset.theme === "dark" ? "dark" : "light",
   );
 
+  const allowedGraphModes = useMemo(
+    () => graphModesForPeriod(period),
+    [period?.unit],
+  );
+  const defaultAllowedGraphMode = useMemo(() => {
+    const preferred = defaultGraphMode ?? periodDefaultGraphMode(period);
+    return allowedGraphModes.includes(preferred)
+      ? preferred
+      : periodDefaultGraphMode(period);
+  }, [allowedGraphModes, defaultGraphMode, period]);
+  const displayedGraphMode =
+    hasExplicitGraphMode && allowedGraphModes.includes(graphMode)
+      ? graphMode
+      : defaultAllowedGraphMode;
+
   useEffect(() => {
-    if (!hasExplicitGraphMode) {
-      setGraphMode(defaultGraphMode ?? periodDefaultGraphMode(period));
+    if (!hasExplicitGraphMode || !allowedGraphModes.includes(graphMode)) {
+      setGraphMode(defaultAllowedGraphMode);
+      if (hasExplicitGraphMode) {
+        setHasExplicitGraphMode(false);
+      }
     }
-  }, [defaultGraphMode, hasExplicitGraphMode, period]);
+  }, [
+    allowedGraphModes,
+    defaultAllowedGraphMode,
+    graphMode,
+    hasExplicitGraphMode,
+  ]);
 
   useEffect(() => {
     if (!canShowHeatmap) setView("graph");
@@ -209,10 +239,11 @@ export function ActivityChartCard({
       {view === "graph" && (
         <ActivityGraph
           buckets={selectedData.dailyBuckets}
-          mode={graphMode}
+          mode={displayedGraphMode}
           onModeChange={handleGraphModeChange}
           valueLabel="Active time"
           palette={palette}
+          allowedModes={allowedGraphModes}
         />
       )}
       <StatisticsColorPicker
