@@ -67,6 +67,24 @@ test("keeps search enabled and focused by default", async () => {
   expect(screen.getByPlaceholderText("Search...")).toHaveFocus();
 });
 
+test("gives the focused search input ownership of the searchable listbox", async () => {
+  const user = userEvent.setup();
+  render(<ComboboxTest ariaLabel="Fruit picker" />);
+
+  await user.click(screen.getByRole("combobox", { name: "Fruit picker" }));
+  const search = screen.getByRole("combobox", { name: "Fruit picker" });
+  const listbox = screen.getByRole("listbox");
+
+  expect(search).toHaveFocus();
+  expect(screen.getAllByRole("combobox")).toHaveLength(1);
+  expect(search).toHaveAttribute("aria-controls", listbox.id);
+  expect(search).toHaveAttribute(
+    "aria-activedescendant",
+    screen.getByRole("option", { name: "Apple" }).id,
+  );
+  expect(listbox).not.toContainElement(search);
+});
+
 test("opens from a focused trigger with ArrowDown and selects by keyboard", async () => {
   const user = userEvent.setup();
   const onChange = vi.fn();
@@ -76,6 +94,7 @@ test("opens from a focused trigger with ArrowDown and selects by keyboard", asyn
   trigger.focus();
   await user.keyboard("{ArrowDown}");
   expect(screen.getByRole("listbox")).toBeInTheDocument();
+  expect(trigger).toHaveAttribute("aria-controls", screen.getByRole("listbox").id);
   expect(trigger).toHaveAttribute(
     "aria-activedescendant",
     screen.getByRole("option", { name: "Apple" }).id,
@@ -197,7 +216,10 @@ test("resets the active option to a filtered result", async () => {
   await user.type(screen.getByPlaceholderText("Search..."), "ban");
 
   const banana = screen.getByRole("option", { name: "Banana" });
-  expect(trigger).toHaveAttribute("aria-activedescendant", banana.id);
+  expect(screen.getByRole("combobox", { name: "Fruit picker" })).toHaveAttribute(
+    "aria-activedescendant",
+    banana.id,
+  );
   await user.keyboard("{Enter}");
   expect(onChange).toHaveBeenCalledWith("banana");
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();

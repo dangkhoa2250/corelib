@@ -145,12 +145,18 @@ export function Combobox<T extends string>({
     item?.scrollIntoView({ block: "nearest" });
   }, [open, highlightedIndex]);
 
+  const activeOptionId =
+    open && highlightedIndex >= 0 && filtered[highlightedIndex]
+      ? `${listboxId}-option-${filtered[highlightedIndex].value}`
+      : undefined;
+  const searchablePopupOpen = open && searchable;
+
   return (
     <div className={`combobox${className ? ` ${className}` : ""}`}>
       <button
         ref={triggerRef}
         type="button"
-        role="combobox"
+        role={searchablePopupOpen ? undefined : "combobox"}
         className="combobox__trigger"
         onClick={() => !disabled && setOpen((prev) => !prev)}
         onKeyDown={(event) => {
@@ -168,12 +174,8 @@ export function Combobox<T extends string>({
         }}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-controls={open ? listboxId : undefined}
-        aria-activedescendant={
-          open && highlightedIndex >= 0
-            ? `${listboxId}-option-${filtered[highlightedIndex]?.value}`
-            : undefined
-        }
+        aria-controls={open && !searchable ? listboxId : undefined}
+        aria-activedescendant={open && !searchable ? activeOptionId : undefined}
         aria-label={ariaLabel}
         disabled={disabled}
       >
@@ -184,22 +186,28 @@ export function Combobox<T extends string>({
       </button>
 
       {open && (
-        <div ref={panelRef} id={listboxId} className="combobox__panel" role="listbox">
+        <div ref={panelRef} className="combobox__panel">
           {searchable && (
             <div className="combobox__search">
               <IconSearch size={14} />
               <input
                 ref={searchRef}
                 type="text"
+                role="combobox"
                 className="combobox__search-input"
                 placeholder={searchPlaceholder}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
+                aria-label={ariaLabel ?? searchPlaceholder}
+                aria-expanded="true"
+                aria-controls={listboxId}
+                aria-activedescendant={activeOptionId}
+                aria-autocomplete="list"
               />
             </div>
           )}
 
-          <div ref={listRef} className="combobox__list">
+          <div ref={listRef} id={listboxId} className="combobox__list" role="listbox">
             {filtered.length === 0 ? (
               <div className="combobox__empty">{noOptionsMessage}</div>
             ) : (
