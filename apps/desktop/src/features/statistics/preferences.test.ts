@@ -65,6 +65,17 @@ test("returns defaults when storage contains malformed JSON", () => {
   });
 });
 
+test("falls back to the current defaults for invalid persisted view and color", () => {
+  vi.stubGlobal("localStorage", {
+    ...mockStorage,
+    getItem: () => JSON.stringify({ baseColor: "purple", chartView: "radar" }),
+  });
+  expect(loadStatisticsPreferences()).toEqual({
+    baseColor: "#3778d4",
+    chartView: "heatmap",
+  });
+});
+
 test("returns defaults for invalid hex input", () => {
   vi.stubGlobal("localStorage", mockStorage);
   saveStatisticsPreferences({ baseColor: "invalid", chartView: "graph" });

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { IconChartLine, IconLayoutGrid } from "@tabler/icons-react";
 import type { StatisticsPeriod, StatisticsTimeBucket } from "../../../domain/statistics";
 import {
   deriveStatisticsPalette,
@@ -20,7 +21,7 @@ interface ActivityChartCardProps {
   defaultGraphMode?: GraphMode;
 }
 
-function rangeDefaultGraphMode(period?: StatisticsPeriod): GraphMode {
+export function periodDefaultGraphMode(period?: StatisticsPeriod): GraphMode {
   return period?.unit === "year" ? "weekly" : "daily";
 }
 
@@ -39,8 +40,9 @@ export function ActivityChartCard({
 
   const [view, setView] = useState<"heatmap" | "graph">(initialView);
   const [graphMode, setGraphMode] = useState<GraphMode>(
-    defaultGraphMode ?? rangeDefaultGraphMode(period),
+    defaultGraphMode ?? periodDefaultGraphMode(period),
   );
+  const [hasExplicitGraphMode, setHasExplicitGraphMode] = useState(false);
   const [selectedApp, setSelectedApp] = useState("all");
   const [baseColor, setBaseColor] = useState(prefs.baseColor);
   const [theme, setTheme] = useState<"light" | "dark">(
@@ -48,8 +50,10 @@ export function ActivityChartCard({
   );
 
   useEffect(() => {
-    setGraphMode(defaultGraphMode ?? rangeDefaultGraphMode(period));
-  }, [defaultGraphMode, period]);
+    if (!hasExplicitGraphMode) {
+      setGraphMode(defaultGraphMode ?? periodDefaultGraphMode(period));
+    }
+  }, [defaultGraphMode, hasExplicitGraphMode, period]);
 
   useEffect(() => {
     if (!canShowHeatmap) setView("graph");
@@ -106,6 +110,11 @@ export function ActivityChartCard({
     return appSeries?.buckets ?? [];
   }, [selectedApp, totalBuckets, series]);
 
+  const handleGraphModeChange = useCallback((mode: GraphMode) => {
+    setHasExplicitGraphMode(true);
+    setGraphMode(mode);
+  }, []);
+
   return (
     <section className="statistics-section">
       <div className="statistics-section__header">
@@ -119,7 +128,8 @@ export function ActivityChartCard({
                 aria-pressed={view === "heatmap"}
                 onClick={() => handleViewChange("heatmap")}
               >
-                Heatmap
+                <IconLayoutGrid aria-hidden="true" size={16} />
+                <span>Heatmap</span>
               </button>
               <button
                 type="button"
@@ -127,11 +137,15 @@ export function ActivityChartCard({
                 aria-pressed={view === "graph"}
                 onClick={() => handleViewChange("graph")}
               >
-                Graph
+                <IconChartLine aria-hidden="true" size={16} />
+                <span>Graph</span>
               </button>
             </>
           ) : (
-            <button type="button" className="statistics-control" aria-pressed="true">Graph</button>
+            <button type="button" className="statistics-control" aria-pressed="true">
+              <IconChartLine aria-hidden="true" size={16} />
+              <span>Graph</span>
+            </button>
           )}
         </div>
       </div>
@@ -157,7 +171,7 @@ export function ActivityChartCard({
         <ActivityGraph
           buckets={filteredData}
           mode={graphMode}
-          onModeChange={setGraphMode}
+          onModeChange={handleGraphModeChange}
           valueLabel="Active time"
           palette={palette}
         />
