@@ -26,7 +26,6 @@ export function StatisticsShell({
         <div
           data-testid="statistics-scroll-content"
           className="statistics-shell__content"
-          style={{ padding: "28px 20px 40px 28px" }}
         >
           <header className="statistics-shell__header">
             <div className="statistics-shell__heading">

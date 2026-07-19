@@ -26,5 +26,6 @@ test("calls onBack when back button is clicked", async () => {
 test("content has correct padding for thumb inset", () => {
   render(<StatisticsShell title="Test"><span>child</span></StatisticsShell>);
   const content = screen.getByTestId("statistics-scroll-content");
-  expect(content).toHaveStyle({ padding: "28px 20px 40px 28px" });
+  expect(content).not.toHaveAttribute("style");
+  expect(content).toHaveClass("statistics-shell__content");
 });

@@ -70,11 +70,35 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
 
   const shellContent = statCss.match(/\.statistics-shell__content\s*\{([^}]*)\}/)?.[1] ?? "";
   const decreaseComparison = statCss.match(/\.statistics-kpi-card__comparison\[data-kind="decrease"\]\s*\{([^}]*)\}/)?.[1] ?? "";
-  expect(shellContent).toContain("padding: 28px 20px 40px 28px;");
+  expect(shellContent).toContain("padding: 32px 20px 44px 32px;");
   expect(decreaseComparison).toContain("color: var(--text-secondary);");
   expect(decreaseComparison).not.toContain("var(--error)");
   expect(statCss).not.toContain("overflow: auto;");
   expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,6};/);
+});
+
+test("keeps the statistics dashboard flat, responsive, and token-correct", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const kpiGrid = statCss.match(/\.statistics-kpi-grid\s*\{([^}]*)\}/)?.[1] ?? "";
+  const appGrid = statCss.match(/\.statistics-app-grid\s*\{([^}]*)\}/)?.[1] ?? "";
+  const emptyCell = statCss.match(/\.statistics-heatmap__cell\s*\{([^}]*)\}/)?.[1] ?? "";
+
+  expect(statCss).not.toMatch(/linear-gradient|radial-gradient|conic-gradient/);
+  expect(statCss).not.toMatch(/overflow-x\s*:\s*(auto|scroll)/);
+  expect(statCss).not.toContain("width: max-content");
+  expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  expect(kpiGrid).toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
+  expect(appGrid).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
+  expect(emptyCell).toContain("background: var(--surface-3);");
+  expect(statCss).toContain("color: var(--text-primary);");
+  expect(statCss).toContain("color: var(--text-secondary);");
+  expect(statCss).toContain("color: var(--success);");
+  expect(statCss).toContain("outline: 2px solid var(--focus-ring);");
+  expect(statCss).toContain("@media (max-width: 900px)");
+  expect(statCss).toContain("@media (max-width: 720px)");
+  expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-kpi-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
+  expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-kpi-grid,\s*\.statistics-app-grid \{ grid-template-columns: minmax\(0, 1fr\);/);
 });
 
 test("keeps non-interactive Statistics insight cards free of clickable affordances", () => {
