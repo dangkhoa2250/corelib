@@ -71,6 +71,16 @@
 .statistics-card__label { color: var(--text-secondary); font-size: 13px; }
 .statistics-card__value { color: var(--text-primary); font-size: 28px; font-weight: 650; letter-spacing: -0.025em; }
 .statistics-muted, .statistics-hint { color: var(--text-secondary); }
+.statistics-kpi-card { gap: 12px; }
+.statistics-kpi-card__header, .statistics-kpi-card__value-row { display: flex; align-items: center; min-width: 0; }
+.statistics-kpi-card__header { gap: 10px; }
+.statistics-kpi-card__value-row { justify-content: space-between; gap: 12px; }
+.statistics-kpi-card__icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 9px; background: var(--surface-3); color: var(--text-primary); }
+.statistics-kpi-card__icon svg { width: 19px; height: 19px; }
+.statistics-kpi-card__comparison { color: var(--text-secondary); font-size: 13px; }
+.statistics-kpi-card__comparison[data-kind="increase"] { color: var(--success); }
+.statistics-kpi-card__comparison[data-kind="decrease"] { color: var(--error); }
+.statistics-mini-sparkline { width: min(118px, 38%); height: 36px; flex: 0 1 118px; overflow: visible; }
 
 .statistics-control {
   min-height: 34px;

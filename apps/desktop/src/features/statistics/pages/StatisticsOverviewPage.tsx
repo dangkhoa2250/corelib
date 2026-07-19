@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
+import { IconCalendarStats, IconClock, IconFlame } from "@tabler/icons-react";
 import type { StatisticsOverview, StatisticsPeriod } from "../../../domain/statistics";
 import { getStatisticsOverview } from "../../../lib/statistics";
 import { ActivityChartCard } from "../components/ActivityChartCard";
 import { AppInsightCard } from "../components/AppInsightCard";
-import { KpiCard } from "../components/KpiCard";
+import { formatPeriodComparison, KpiCard } from "../components/KpiCard";
 import { MetricSection } from "../components/MetricSection";
 import type { AppStatisticsSummary, StatisticsAppDefinition } from "../registry";
 
@@ -31,6 +32,14 @@ function formatMs(ms: number): string {
   const minutes = Math.floor((ms % 3600000) / 60000);
   if (hours > 0) return `${hours}h ${minutes}m`;
   return `${minutes}m`;
+}
+
+function bucketTrend(buckets: { activeMs: number }[]): number[] {
+  return buckets.map((bucket) => bucket.activeMs);
+}
+
+function activeDayTrend(buckets: { activeMs: number }[]): number[] {
+  return buckets.map((bucket) => (bucket.activeMs > 0 ? 1 : 0));
 }
 
 export function StatisticsOverviewPage({
@@ -105,9 +114,25 @@ export function StatisticsOverviewPage({
       {data && (
         <>
           <div className="statistics-kpi-grid">
-            <KpiCard label="Active time" value={formatMs(data.activeMs)} />
-            <KpiCard label="Current streak" value={`${data.currentStreak} days`} />
-            <KpiCard label="Active days" value={`${data.activeDays}`} />
+            <KpiCard
+              icon={<IconClock />}
+              label="Active time"
+              value={formatMs(data.activeMs)}
+              comparison={formatPeriodComparison(data.activeMs, data.previousActiveMs, period.unit)}
+              trend={bucketTrend(data.buckets)}
+            />
+            <KpiCard
+              icon={<IconFlame />}
+              label="Current streak"
+              value={`${data.currentStreak} days`}
+            />
+            <KpiCard
+              icon={<IconCalendarStats />}
+              label="Active days"
+              value={`${data.activeDays}`}
+              comparison={formatPeriodComparison(data.activeDays, data.previousActiveDays, period.unit)}
+              trend={activeDayTrend(data.buckets)}
+            />
           </div>
 
           <ActivityChartCard
