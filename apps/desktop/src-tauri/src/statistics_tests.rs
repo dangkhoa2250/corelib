@@ -58,6 +58,19 @@ fn page_count_for_session(database: &LibraryDatabase, session_id: &str) -> i64 {
         .expect("page count")
 }
 
+fn time_buckets_for_session(database: &LibraryDatabase, session_id: &str) -> Vec<(String, i64, i64)> {
+    let mut statement = database.connection.prepare(
+        "SELECT local_day, bucket_start_hour, raw_active_ms
+         FROM activity_session_time_buckets
+         WHERE session_id = ?1
+         ORDER BY local_day, bucket_start_hour",
+    ).expect("prepare time bucket query");
+    let rows = statement.query_map(params![session_id], |row| {
+        Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+    }).expect("query time buckets");
+    rows.map(|row| row.expect("time bucket row")).collect()
+}
+
 #[test]
 fn statistics_migration_creates_tables() {
     let (_directory, database) = db();
@@ -176,6 +189,46 @@ fn start_and_checkpoint_activity_session_persists_active_ms_and_visit_atomically
         )
         .expect("ended_at");
     assert_eq!(ended_at, "2026-07-18T01:00:15.000Z");
+}
+
+#[test]
+fn checkpoint_splits_active_time_across_four_hour_boundaries() {
+    let (_directory, mut database) = db();
+    seed_document(&mut database, "doc-bucket-split");
+    database.start_activity_session(NewActivitySession {
+        id: "session-bucket-split".into(), app_key: "reading".into(), activity_kind: "reading".into(),
+        context_kind: Some("document".into()), context_id: Some("doc-bucket-split".into()),
+        occurred_at: "2026-07-19T03:55:00.000Z".into(), local_day: "2026-07-19".into(), timezone_offset_minutes: 0,
+    }).expect("start");
+    database.checkpoint_activity_session(ActivityCheckpoint {
+        session_id: "session-bucket-split".into(), occurred_at: "2026-07-19T04:05:00.000Z".into(),
+        active_ms: 600_000, document_id: None, page: None, page_visit_increment: 0,
+    }).expect("checkpoint");
+
+    assert_eq!(time_buckets_for_session(&database, "session-bucket-split"), vec![
+        ("2026-07-19".into(), 0, 300_000),
+        ("2026-07-19".into(), 4, 300_000),
+    ]);
+}
+
+#[test]
+fn checkpoint_time_buckets_use_session_timezone_offset() {
+    let (_directory, mut database) = db();
+    seed_document(&mut database, "doc-bucket-timezone");
+    database.start_activity_session(NewActivitySession {
+        id: "session-bucket-timezone".into(), app_key: "reading".into(), activity_kind: "reading".into(),
+        context_kind: Some("document".into()), context_id: Some("doc-bucket-timezone".into()),
+        occurred_at: "2026-07-19T14:55:00.000Z".into(), local_day: "2026-07-19".into(), timezone_offset_minutes: -540,
+    }).expect("start");
+    database.checkpoint_activity_session(ActivityCheckpoint {
+        session_id: "session-bucket-timezone".into(), occurred_at: "2026-07-19T15:05:00.000Z".into(),
+        active_ms: 600_000, document_id: None, page: None, page_visit_increment: 0,
+    }).expect("checkpoint");
+
+    assert_eq!(time_buckets_for_session(&database, "session-bucket-timezone"), vec![
+        ("2026-07-19".into(), 20, 300_000),
+        ("2026-07-20".into(), 0, 300_000),
+    ]);
 }
 
 #[test]
@@ -395,6 +448,26 @@ fn checkpoint_activity_session_rejects_page_zero_without_writes() {
     assert!(result.is_err());
     assert_eq!(session_active_ms(&database, "session-page-zero"), 0);
     assert_eq!(page_count_for_session(&database, "session-page-zero"), 0);
+}
+
+#[test]
+fn checkpoint_activity_session_rejects_invalid_page_without_session_or_bucket_writes() {
+    let (_directory, mut database) = db();
+    seed_document(&mut database, "doc-invalid-page-bucket");
+    database.start_activity_session(NewActivitySession {
+        id: "session-invalid-page-bucket".into(), app_key: "reading".into(), activity_kind: "reading".into(),
+        context_kind: Some("document".into()), context_id: Some("doc-invalid-page-bucket".into()),
+        occurred_at: "2026-07-19T03:55:00.000Z".into(), local_day: "2026-07-19".into(), timezone_offset_minutes: 0,
+    }).expect("start");
+
+    let result = database.checkpoint_activity_session(ActivityCheckpoint {
+        session_id: "session-invalid-page-bucket".into(), occurred_at: "2026-07-19T04:05:00.000Z".into(),
+        active_ms: 600_000, document_id: Some("doc-invalid-page-bucket".into()), page: Some(0), page_visit_increment: 1,
+    });
+
+    assert!(result.is_err());
+    assert_eq!(session_active_ms(&database, "session-invalid-page-bucket"), 0);
+    assert!(time_buckets_for_session(&database, "session-invalid-page-bucket").is_empty());
 }
 
 #[test]

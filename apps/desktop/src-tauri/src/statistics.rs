@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 
-use chrono::{DateTime, FixedOffset, NaiveDate, Utc};
+use chrono::{DateTime, Duration, FixedOffset, NaiveDate, TimeZone, Timelike, Utc};
 use rusqlite::{params, OptionalExtension};
 
 use crate::library_db::LibraryDatabase;
@@ -261,6 +261,86 @@ fn validate_local_day(local_day: &str) -> Result<()> {
         .map_err(|_| StatisticsError::Validation(format!("invalid local day: {local_day}")))
 }
 
+#[derive(Debug, PartialEq)]
+struct TimeBucketDelta {
+    local_day: String,
+    bucket_start_hour: i64,
+    active_ms: i64,
+}
+
+fn split_active_segment(
+    occurred_at: &str,
+    active_ms: i64,
+    timezone_offset_minutes: i64,
+) -> Result<Vec<TimeBucketDelta>> {
+    if active_ms == 0 {
+        return Ok(Vec::new());
+    }
+
+    let end = DateTime::<FixedOffset>::parse_from_rfc3339(occurred_at).map_err(|_| {
+        StatisticsError::Validation(format!("invalid RFC3339 timestamp: {occurred_at}"))
+    })?;
+    let offset_seconds = timezone_offset_minutes.checked_mul(60).ok_or_else(|| {
+        StatisticsError::Validation("timezone offset is outside the supported range".into())
+    })?;
+    let offset_seconds = i32::try_from(offset_seconds).map_err(|_| {
+        StatisticsError::Validation("timezone offset is outside the supported range".into())
+    })?;
+    let offset = FixedOffset::west_opt(offset_seconds).ok_or_else(|| {
+        StatisticsError::Validation("timezone offset is outside the supported range".into())
+    })?;
+    let end = end.with_timezone(&Utc);
+    let mut current = end.checked_sub_signed(Duration::milliseconds(active_ms)).ok_or_else(|| {
+        StatisticsError::Validation("active segment is outside the supported timestamp range".into())
+    })?;
+    let mut deltas = Vec::new();
+    let mut total_active_ms = 0_i64;
+
+    while current < end {
+        let local_current = current.with_timezone(&offset);
+        let bucket_start_hour = i64::from((local_current.hour() / 4) * 4);
+        let next_boundary_local = if bucket_start_hour == 20 {
+            local_current.date_naive().succ_opt().and_then(|day| day.and_hms_opt(0, 0, 0))
+        } else {
+            local_current.date_naive().and_hms_opt((bucket_start_hour + 4) as u32, 0, 0)
+        }
+        .ok_or_else(|| {
+            StatisticsError::Validation("active segment is outside the supported timestamp range".into())
+        })?;
+        let next_boundary = offset
+            .from_local_datetime(&next_boundary_local)
+            .single()
+            .ok_or_else(|| StatisticsError::Validation(
+                "active segment is outside the supported timestamp range".into(),
+            ))?
+            .with_timezone(&Utc);
+        let segment_end = std::cmp::min(next_boundary, end);
+        let bucket_active_ms = (segment_end - current).num_milliseconds();
+        if bucket_active_ms <= 0 {
+            return Err(StatisticsError::Validation(
+                "unable to split active segment into time buckets".into(),
+            ));
+        }
+        total_active_ms = total_active_ms.checked_add(bucket_active_ms).ok_or_else(|| {
+            StatisticsError::Validation("active segment duration is outside the supported range".into())
+        })?;
+        deltas.push(TimeBucketDelta {
+            local_day: local_current.date_naive().format("%F").to_string(),
+            bucket_start_hour,
+            active_ms: bucket_active_ms,
+        });
+        current = segment_end;
+    }
+
+    if total_active_ms != active_ms {
+        return Err(StatisticsError::Validation(
+            "active segment duration could not be conserved".into(),
+        ));
+    }
+
+    Ok(deltas)
+}
+
 impl LibraryDatabase {
     pub fn start_activity_session(&mut self, session: NewActivitySession) -> Result<()> {
         validate_app_activity(&session.app_key, &session.activity_kind)?;
@@ -320,13 +400,13 @@ impl LibraryDatabase {
         let transaction = self.connection.transaction()?;
         let session = transaction
             .query_row(
-                "SELECT app_key, activity_kind, context_kind, context_id
+                "SELECT app_key, activity_kind, context_kind, context_id, timezone_offset_minutes
                  FROM activity_sessions WHERE id = ?1",
                 params![checkpoint.session_id],
-                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, Option<String>>(3)?)),
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, Option<String>>(2)?, row.get::<_, Option<String>>(3)?, row.get::<_, i64>(4)?)),
             )
             .optional()?;
-        let Some((app_key, activity_kind, context_kind, context_id)) = session else {
+        let Some((app_key, activity_kind, context_kind, context_id, timezone_offset_minutes)) = session else {
             // Dropping the transaction rolls back any pending writes (none yet here,
             // but this guard keeps the invariant explicit).
             return Err(StatisticsError::SessionNotFound);
@@ -351,6 +431,12 @@ impl LibraryDatabase {
             }
         }
 
+        let bucket_deltas = split_active_segment(
+            &checkpoint.occurred_at,
+            checkpoint.active_ms,
+            timezone_offset_minutes,
+        )?;
+
         transaction.execute(
             "UPDATE activity_sessions
              SET raw_active_ms = raw_active_ms + ?1,
@@ -363,6 +449,22 @@ impl LibraryDatabase {
                 checkpoint.session_id,
             ],
         )?;
+
+        for delta in bucket_deltas {
+            transaction.execute(
+                "INSERT INTO activity_session_time_buckets(
+                    session_id, local_day, bucket_start_hour, raw_active_ms
+                 ) VALUES (?1, ?2, ?3, ?4)
+                 ON CONFLICT(session_id, local_day, bucket_start_hour) DO UPDATE SET
+                    raw_active_ms = raw_active_ms + excluded.raw_active_ms",
+                params![
+                    checkpoint.session_id,
+                    delta.local_day,
+                    delta.bucket_start_hour,
+                    delta.active_ms,
+                ],
+            )?;
+        }
 
         if let (Some(document_id), Some(page)) =
             (checkpoint.document_id.as_deref(), checkpoint.page)
