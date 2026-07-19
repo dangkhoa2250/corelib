@@ -4047,6 +4047,7 @@ textarea::placeholder {
 
 .combobox__trigger:disabled:hover {
   border-color: var(--border-strong);
+  background: var(--surface-1);
 }
 
 .combobox__trigger-label {

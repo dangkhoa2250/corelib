@@ -41,6 +41,29 @@ test("uses a semantic flat hover surface for shared comboboxes", () => {
   expect(hover).not.toMatch(/gradient|#[0-9a-fA-F]{3,8}\b/);
 });
 
+test("keeps disabled Statistics and shared combobox controls on their normal surfaces", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const tokensCss = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const statisticsCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const comboboxDisabledHover = tokensCss.match(/\.combobox__trigger:disabled:hover\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const statisticsDisabled = statisticsCss.match(/\.statistics-control:disabled,\s*\.statistics-control:disabled:hover,\s*\.statistics-control:disabled\[aria-pressed="true"\]\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(comboboxDisabledHover).toContain("background: var(--surface-1);");
+  expect(comboboxDisabledHover).toContain("border-color: var(--border-strong);");
+  expect(statisticsDisabled).toContain("background: var(--surface-1);");
+  expect(statisticsDisabled).toContain("color: var(--text-disabled);");
+  expect(statisticsDisabled).toContain("cursor: not-allowed;");
+});
+
+test("defines the Statistics sparkline accent through a semantic token", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const statisticsCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const sparkline = readFileSync(join(currentDir, "../features/statistics/components/MiniSparkline.tsx"), "utf8");
+
+  expect(statisticsCss).toMatch(/\.statistics-shell\s*\{[\s\S]*?--statistics-accent:\s*var\(--link\);/);
+  expect(sparkline).toContain('stroke="var(--statistics-accent)"');
+});
+
 test("keeps the native window transparent for the sidebar glass surface", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const config = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.conf.json"), "utf8"));

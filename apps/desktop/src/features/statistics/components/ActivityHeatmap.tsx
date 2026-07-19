@@ -189,13 +189,24 @@ function breakdownText(breakdown: ReadonlyMap<string, number>): string {
     : ` ${values.map(([appKey, activeMs]) => `${displayAppName(appKey)}: ${formatDuration(activeMs)}`).join(", ")}.`;
 }
 
-function sampleAxisLabels(columns: HeatmapColumn[]): Set<number> {
-  const result = new Set<number>();
-  const every = columns.length <= 7 ? 1 : Math.ceil(columns.length / 7);
-  columns.forEach((_, index) => {
-    if (index % every === 0 || index === columns.length - 1) result.add(index);
-  });
-  return result;
+export interface HeatmapAxisLabelSpan {
+  index: number;
+  span: number;
+}
+
+/**
+ * Labels use the full gap before the following sample, rather than one tiny
+ * grid track. This keeps Year labels readable at 53 or 54 week columns.
+ */
+export function sampleAxisLabelSpans(columnCount: number): HeatmapAxisLabelSpan[] {
+  if (columnCount <= 0) return [];
+  const every = columnCount <= 7 ? 1 : Math.ceil(columnCount / 7);
+  const indices = Array.from({ length: Math.ceil(columnCount / every) }, (_, index) => index * every)
+    .filter((index) => index < columnCount);
+  return indices.map((index, labelIndex) => ({
+    index,
+    span: (indices[labelIndex + 1] ?? columnCount) - index,
+  }));
 }
 
 function cellDescription(column: HeatmapColumn, slot: HeatmapSlot): string {
@@ -243,7 +254,7 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
     [buckets, currentDay, period, selectedApp],
   );
   const summary = useMemo(() => computeSummary(columns), [columns]);
-  const sampledLabels = useMemo(() => sampleAxisLabels(columns), [columns]);
+  const sampledLabels = useMemo(() => sampleAxisLabelSpans(columns.length), [columns.length]);
   const [focused, setFocused] = useState<FocusedCell>({ column: 0, row: 0 });
   const [tooltip, setTooltip] = useState<string | null>(null);
   const shouldMoveFocus = useRef(false);
@@ -320,9 +331,14 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
         </div>
         <div className="statistics-heatmap__plot">
           <div className="statistics-heatmap__x-axis" aria-hidden="true">
-            {columns.map((column, index) => sampledLabels.has(index) ? (
-              <span key={column.key} style={{ gridColumn: index + 1 }}>{column.label}</span>
-            ) : null)}
+            {sampledLabels.map(({ index, span }) => {
+              const column = columns[index];
+              return (
+                <span key={column.key} style={{ gridColumn: `${index + 1} / span ${span}` }}>
+                  {column.label}
+                </span>
+              );
+            })}
           </div>
           <div role="grid" aria-label="Activity by time" aria-describedby="activity-heatmap-summary" className="statistics-heatmap">
             {BUCKET_START_HOURS.map((bucketStartHour, row) => (

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { StatisticsTimeBucket } from "../../../domain/statistics";
-import { ActivityHeatmap, buildHeatmapColumns } from "./ActivityHeatmap";
+import { ActivityHeatmap, buildHeatmapColumns, sampleAxisLabelSpans } from "./ActivityHeatmap";
 
 const palette = ["tone-1", "tone-2", "tone-3", "tone-4", "tone-5"];
 const week = { unit: "week" as const, anchorLocalDay: "2026-07-13" };
@@ -54,6 +54,27 @@ test("renders one date column per Month day and one ISO-week column per Year wee
 
 test("keeps all 54 ISO weeks that intersect a leap year beginning on Sunday", () => {
   expect(buildHeatmapColumns({ unit: "year", anchorLocalDay: "2012-01-01" }, [], "all", "2012-12-31")).toHaveLength(54);
+});
+
+test("gives sampled Year labels room by spanning through the next label", () => {
+  expect(sampleAxisLabelSpans(54)).toEqual([
+    { index: 0, span: 8 },
+    { index: 8, span: 8 },
+    { index: 16, span: 8 },
+    { index: 24, span: 8 },
+    { index: 32, span: 8 },
+    { index: 40, span: 8 },
+    { index: 48, span: 6 },
+  ]);
+  expect(sampleAxisLabelSpans(7)).toEqual([
+    { index: 0, span: 1 },
+    { index: 1, span: 1 },
+    { index: 2, span: 1 },
+    { index: 3, span: 1 },
+    { index: 4, span: 1 },
+    { index: 5, span: 1 },
+    { index: 6, span: 1 },
+  ]);
 });
 
 test("aggregates matching calendar days into ISO-week time buckets in Year view", () => {
