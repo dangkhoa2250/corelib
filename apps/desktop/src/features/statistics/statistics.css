@@ -149,7 +149,8 @@
 .statistics-graph__mode-bar { margin-bottom: 10px; }
 .statistics-graph__mode-btn { padding: 5px 11px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-2); color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
 .statistics-graph__mode-btn[aria-pressed="true"] { background: var(--interactive-selected); color: var(--text-primary); border-color: var(--border-strong); }
-.statistics-graph__tooltip, .statistics-heatmap__tooltip { position: absolute; z-index: 10; padding: 5px 8px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-2); color: var(--text-primary); font-size: 12px; pointer-events: none; box-shadow: var(--shadow-md); }
+.statistics-graph__tooltip { position: absolute; z-index: 10; padding: 5px 8px; border: 1px solid var(--border-subtle); border-radius: 7px; background: var(--surface-2); color: var(--text-primary); font-size: 12px; pointer-events: none; box-shadow: var(--shadow-md); }
+.statistics-heatmap__tooltip { min-height: 18px; margin: 10px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 18px; }
 
 .statistics-heatmap-wrapper { position: relative; min-width: 0; --heatmap-gap: 4px; --heatmap-row-height: 30px; }
 .statistics-heatmap__layout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; min-width: 0; }

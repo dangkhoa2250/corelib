@@ -35,6 +35,13 @@ test("renders six four-hour rows, boundary labels, and seven date columns for We
   expect(screen.getByRole("grid", { name: "Activity by time" })).toBeInTheDocument();
 });
 
+test("uses truthful no-activity summaries instead of inventing a peak time", () => {
+  render(<ActivityHeatmap period={week} buckets={[]} selectedApp="all" palette={palette} />);
+  expect(screen.getByTestId("activity-heatmap-summary")).toHaveTextContent("No activity yet. No peak time yet.");
+  expect(screen.getByText(/Activity summary:/)).toHaveTextContent("No peak time yet");
+  expect(screen.getByRole("tooltip")).toHaveTextContent("Focus or hover a cell");
+});
+
 test("renders one date column per Month day and one ISO-week column per Year week", () => {
   const { rerender } = render(
     <ActivityHeatmap period={month} buckets={[]} selectedApp="all" palette={palette} />,
@@ -43,6 +50,10 @@ test("renders one date column per Month day and one ISO-week column per Year wee
 
   rerender(<ActivityHeatmap period={year} buckets={[]} selectedApp="all" palette={palette} />);
   expect(screen.getAllByRole("gridcell")).toHaveLength(53 * 6);
+});
+
+test("keeps all 54 ISO weeks that intersect a leap year beginning on Sunday", () => {
+  expect(buildHeatmapColumns({ unit: "year", anchorLocalDay: "2012-01-01" }, [], "all", "2012-12-31")).toHaveLength(54);
 });
 
 test("aggregates matching calendar days into ISO-week time buckets in Year view", () => {
@@ -144,7 +155,7 @@ test("marks future dates unavailable and excludes them from totals", () => {
   );
 
   expect(screen.getByRole("gridcell", { name: /July 17, 2026, 00:00–04:00: Unavailable/ })).toHaveAttribute("aria-disabled", "true");
-  expect(screen.getByTestId("activity-heatmap-summary")).toHaveTextContent("0 minutes across 0 active days");
+  expect(screen.getByTestId("activity-heatmap-summary")).toHaveTextContent("No activity yet. No peak time yet.");
 });
 
 test("shows exact tooltip text and a visible plus screen-reader summary", () => {

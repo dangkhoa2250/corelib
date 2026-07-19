@@ -103,7 +103,7 @@ The horizontal axis adapts to the selected period:
 
 - Week: seven date columns.
 - Month: 28–31 date columns.
-- Year: 52 or 53 ISO-week columns.
+- Year: 53, and rarely 54, calendar-year-intersecting ISO-week columns. Boundary columns include only local days from January 1 through December 31; this preserves the backend's calendar-year contract instead of fabricating adjacent-year data.
 
 In Year view, one cell is the total active time recorded in the same four-hour local-time bucket across all days of that ISO week. The tooltip names the week range, time bucket, and duration. Week and Month cells retain exact local dates.
 
@@ -233,4 +233,3 @@ Required automated verification:
 - Rust tests and Clippy with warnings denied.
 
 The user explicitly requested that Codex not run or open Library/Tauri. Therefore this work must not launch `tauri dev`, Vite, or a release app. Final handoff must state that fresh WKWebView visual verification was not performed and must not infer runtime behavior from any already-open application.
-

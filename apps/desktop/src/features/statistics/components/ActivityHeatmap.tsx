@@ -305,7 +305,9 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
   const highestLabel = summary.highest && summary.highest.activeMs > 0
     ? `${period.unit === "year" ? "Highest week" : "Highest day"}: ${summary.highest.column.ariaLabel.replace(/^Week of /, "")}`
     : "No activity yet";
-  const visibleSummary = `${formatDuration(summary.totalActiveMs)} across ${summary.activeDays} active day${summary.activeDays === 1 ? "" : "s"}. Strongest time: ${timeRange(summary.strongestBucket)}. ${highestLabel}.`;
+  const visibleSummary = summary.totalActiveMs === 0
+    ? "No activity yet. No peak time yet."
+    : `${formatDuration(summary.totalActiveMs)} across ${summary.activeDays} active day${summary.activeDays === 1 ? "" : "s"}. Strongest time: ${timeRange(summary.strongestBucket)}. ${highestLabel}.`;
 
   return (
     <div className={`statistics-heatmap-wrapper statistics-heatmap-wrapper--${period.unit}`} style={paletteVars}>
@@ -357,7 +359,7 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
           </div>
         </div>
       </div>
-      {tooltip && <p role="tooltip" className="statistics-heatmap__tooltip">{tooltip}</p>}
+      <p role="tooltip" className="statistics-heatmap__tooltip">{tooltip ?? "Focus or hover a cell for exact activity details."}</p>
       <p id="activity-heatmap-summary" data-testid="activity-heatmap-summary" className="statistics-heatmap__summary">{visibleSummary}</p>
       <p className="sr-only">Activity summary: {visibleSummary}</p>
     </div>

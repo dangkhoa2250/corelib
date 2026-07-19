@@ -94,6 +94,9 @@ test("keeps the calendar time heatmap inside its card without horizontal scrolli
   expect(yAxis).toContain("grid-template-rows: 27px auto;");
   expect(yAxis).not.toContain("padding-top");
   expect(boundaries).toContain("grid-template-rows: repeat(6, var(--heatmap-row-height));");
+  const heatmapTooltip = statCss.match(/\.statistics-heatmap__tooltip\s*\{([^}]*)\}/)?.[1] ?? "";
+  expect(heatmapTooltip).toContain("min-height: 18px;");
+  expect(heatmapTooltip).not.toContain("position: absolute;");
 });
 
 test("loads the Statistics stylesheet from the application entry point", () => {
