@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useLayoutEffect } from "react";
 import type {
   DailySnapshotQuery,
   DailyStatisticsSnapshot,
@@ -82,88 +82,107 @@ export function StatisticsAnalyticsSync({
   accountApi,
   getSnapshots = getDailyStatisticsSnapshots,
 }: StatisticsAnalyticsSyncProps) {
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const activeAccountRef = useRef<{ accountId: string | null; enabled: boolean }>({
-    accountId,
-    enabled,
+  const generationRef = useRef(0);
+  const activeSyncRef = useRef({
+    accountId: null as string | null,
+    enabled: false,
+    generation: 0,
   });
-  activeAccountRef.current = { accountId, enabled };
+  const stateAccountRef = useRef<string | null>(null);
 
-  const isActiveAccount = useCallback(
-    () =>
-      activeAccountRef.current.accountId === accountId &&
-      activeAccountRef.current.enabled &&
-      accountId !== null,
-    [accountId],
+  const isCurrentGeneration = useCallback(
+    (syncAccountId: string, generation: number) => {
+      const activeSync = activeSyncRef.current;
+      return (
+        activeSync.accountId === syncAccountId &&
+        activeSync.enabled &&
+        activeSync.generation === generation
+      );
+    },
+    [],
   );
 
-  const doSync = useCallback(async () => {
-    if (!enabled || !accountId || !isActiveAccount()) return;
+  const doSync = useCallback(
+    async (syncAccountId: string, generation: number) => {
+      if (!isCurrentGeneration(syncAccountId, generation)) return;
 
-    let state = readState(accountId);
-    if (!state) {
-      state = {
-        consentStartedAt: new Date().toISOString(),
-        lastSyncAt: null,
+      let state = readState(syncAccountId);
+      if (!state) {
+        state = {
+          consentStartedAt: new Date().toISOString(),
+          lastSyncAt: null,
+        };
+        writeState(syncAccountId, state);
+      }
+
+      const fromLocalDay = getLocalDay(
+        new Date(state.lastSyncAt ?? state.consentStartedAt),
+      );
+
+      const query: DailySnapshotQuery = {
+        consentStartedAt: state.consentStartedAt,
+        fromLocalDay,
       };
-      writeState(accountId, state);
-    }
 
-    const fromLocalDay = getLocalDay(
-      new Date(state.lastSyncAt ?? state.consentStartedAt),
-    );
-
-    const query: DailySnapshotQuery = {
-      consentStartedAt: state.consentStartedAt,
-      fromLocalDay,
-    };
-
-    try {
-      const snapshots = await getSnapshots(query);
-      for (const snapshot of snapshots) {
-        if (!isActiveAccount()) return;
-        await accountApi.upsertDailyStatistics(
-          accountId,
-          snapshot as DailyStatisticsSnapshot & { schemaVersion: 1 },
-        );
+      try {
+        const snapshots = await getSnapshots(query);
+        for (const snapshot of snapshots) {
+          if (!isCurrentGeneration(syncAccountId, generation)) return;
+          await accountApi.upsertDailyStatistics(
+            syncAccountId,
+            snapshot as DailyStatisticsSnapshot & { schemaVersion: 1 },
+          );
+        }
+        if (!isCurrentGeneration(syncAccountId, generation)) return;
+        state.lastSyncAt = new Date().toISOString();
+        writeState(syncAccountId, state);
+      } catch {
+        // Will retry on next interval
       }
-      if (!isActiveAccount()) return;
-      state.lastSyncAt = new Date().toISOString();
-      writeState(accountId, state);
-    } catch {
-      // Will retry on next interval
-    }
-  }, [accountId, enabled, accountApi, getSnapshots, isActiveAccount]);
+    },
+    [accountApi, getSnapshots, isCurrentGeneration],
+  );
+
+  useLayoutEffect(() => {
+    const generation = generationRef.current + 1;
+    generationRef.current = generation;
+    activeSyncRef.current = { accountId, enabled, generation };
+
+    return () => {
+      if (activeSyncRef.current.generation !== generation) return;
+      generationRef.current += 1;
+      activeSyncRef.current = {
+        accountId: null,
+        enabled: false,
+        generation: generationRef.current,
+      };
+    };
+  }, [accountId, enabled, doSync]);
 
   useEffect(() => {
+    const previousAccountId = stateAccountRef.current;
+    if (previousAccountId && previousAccountId !== accountId) {
+      clearState(previousAccountId);
+    }
+    if (accountId && !enabled) clearState(accountId);
     clearLegacyState();
-    return () => {
-      if (activeAccountRef.current.accountId === accountId) {
-        activeAccountRef.current = { accountId: null, enabled: false };
-      }
-      if (accountId) clearState(accountId);
+    stateAccountRef.current = accountId;
+
+    if (!enabled || !accountId) return;
+
+    const generation = activeSyncRef.current.generation;
+
+    const syncCurrentGeneration = () => {
+      void doSync(accountId, generation);
     };
-  }, [accountId]);
+    syncCurrentGeneration();
 
-  useEffect(() => {
-    if (!enabled || !accountId) {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
-      if (accountId) clearState(accountId);
-      return;
-    }
-
-    doSync();
-
-    timerRef.current = setInterval(doSync, 60000);
-
-    const handleOnline = () => doSync();
-    window.addEventListener("online", handleOnline);
+    const timer = window.setInterval(syncCurrentGeneration, 60000);
+    window.addEventListener("online", syncCurrentGeneration);
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
-      window.removeEventListener("online", handleOnline);
+      clearInterval(timer);
+      window.removeEventListener("online", syncCurrentGeneration);
     };
   }, [accountId, enabled, doSync]);
 
