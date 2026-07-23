@@ -76,8 +76,8 @@ mod tests {
     #[allow(clippy::type_complexity)]
     struct SwitchingHttpClient {
         stale_status: u16,
-        stale_upload_started: mpsc::Sender<()>,
-        release_stale_upload: Mutex<mpsc::Receiver<()>>,
+        stale_request_started: mpsc::Sender<()>,
+        release_stale_request: Mutex<mpsc::Receiver<()>>,
         requests: Mutex<Vec<(String, String, serde_json::Value, Option<String>)>>,
     }
 
@@ -90,8 +90,8 @@ mod tests {
             (
                 Self {
                     stale_status,
-                    stale_upload_started: started_tx,
-                    release_stale_upload: Mutex::new(release_rx),
+                    stale_request_started: started_tx,
+                    release_stale_request: Mutex::new(release_rx),
                     requests: Mutex::new(Vec::new()),
                 },
                 started_rx,
@@ -142,10 +142,10 @@ mod tests {
             if url.ends_with("/api/corelib/analytics/daily-statistics") {
                 return match token {
                     Some("token-account-a") => {
-                        self.stale_upload_started
+                        self.stale_request_started
                             .send(())
                             .map_err(|error| error.to_string())?;
-                        self.release_stale_upload
+                        self.release_stale_request
                             .lock()
                             .unwrap()
                             .recv()
@@ -160,7 +160,42 @@ mod tests {
             Err(format!("unexpected POST request: {url}"))
         }
 
-        fn get(&self, url: &str, _token: Option<&str>) -> Result<(u16, serde_json::Value), String> {
+        fn get(&self, url: &str, token: Option<&str>) -> Result<(u16, serde_json::Value), String> {
+            self.requests.lock().unwrap().push((
+                "GET".to_string(),
+                url.to_string(),
+                serde_json::Value::Null,
+                token.map(str::to_string),
+            ));
+
+            if url.contains("/api/corelib/admin/statistics") {
+                return match token {
+                    Some("token-account-a") => {
+                        self.stale_request_started
+                            .send(())
+                            .map_err(|error| error.to_string())?;
+                        self.release_stale_request
+                            .lock()
+                            .unwrap()
+                            .recv()
+                            .map_err(|error| error.to_string())?;
+                        Ok((self.stale_status, json!({ "message": "session_expired" })))
+                    }
+                    Some("token-account-b") => Ok((
+                        200,
+                        json!({
+                            "approvedUsers": 1,
+                            "analyticsEnabledUsers": 1,
+                            "optInPercentage": 100.0,
+                            "contributingUsers": 1,
+                            "insufficientSample": false,
+                            "buckets": []
+                        }),
+                    )),
+                    other => Err(format!("unexpected admin statistics token: {other:?}")),
+                };
+            }
+
             Err(format!("unexpected GET request: {url}"))
         }
 
@@ -467,6 +502,62 @@ mod tests {
                 .filter_map(|request| request.3.as_deref())
                 .collect();
             assert_eq!(analytics_tokens, vec!["token-account-a", "token-account-b"]);
+        }
+    }
+
+    #[test]
+    fn stale_unauthorized_admin_statistics_response_does_not_clear_the_new_active_session() {
+        for stale_status in [401, 403] {
+            let (http, request_started, release_request) = SwitchingHttpClient::new(stale_status);
+            let api = Arc::new(PocketBaseAccountApi::new_with_deps(
+                "http://localhost:8090".to_string(),
+                MemorySessionStore::new(),
+                http,
+            ));
+            api.sign_in("account-a@example.test", "password12345", true)
+                .expect("sign in account A");
+
+            let stale_api = Arc::clone(&api);
+            let stale_request = std::thread::spawn(move || {
+                stale_api.admin_statistics("7d", "reading")
+            });
+
+            if let Err(error) = request_started.recv_timeout(Duration::from_secs(2)) {
+                let _ = release_request.send(());
+                panic!("account A admin statistics request did not start: {error}");
+            }
+            api.sign_in("account-b@example.test", "password12345", true)
+                .expect("activate account B while A request is in flight");
+            assert_eq!(
+                api.store.get_token().unwrap().as_deref(),
+                Some("token-account-b")
+            );
+
+            release_request.send(()).expect("release stale A response");
+            let stale_result = stale_request.join().expect("join stale A request");
+            assert_eq!(
+                stale_result,
+                Err(if stale_status == 401 {
+                    AccountError::SessionExpired
+                } else {
+                    AccountError::AccountNotApproved
+                })
+            );
+            assert_eq!(
+                api.store.get_token().unwrap().as_deref(),
+                Some("token-account-b"),
+                "stale {stale_status} must not clear B's persisted token"
+            );
+            api.admin_statistics("7d", "reading")
+                .expect("account B remains authenticated");
+
+            let requests = api.http.requests.lock().unwrap();
+            let statistics_tokens: Vec<&str> = requests
+                .iter()
+                .filter(|request| request.1.contains("/api/corelib/admin/statistics"))
+                .filter_map(|request| request.3.as_deref())
+                .collect();
+            assert_eq!(statistics_tokens, vec!["token-account-a", "token-account-b"]);
         }
     }
 
