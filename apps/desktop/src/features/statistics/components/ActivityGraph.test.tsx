@@ -356,7 +356,7 @@ test("cumulativeSum is monotonic", () => {
   expect(cum.map(b => b.value)).toEqual([5, 15, 18]);
 });
 
-test("uses the selected chart color for its line and fill", () => {
+test("uses the derived semantic palette for line and fill", () => {
   render(
     <ActivityGraph
       buckets={dailyBuckets}
