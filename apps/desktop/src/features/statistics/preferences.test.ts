@@ -5,6 +5,7 @@ import {
   saveStatisticsPreferences,
 } from "./preferences";
 
+const STORAGE_KEY = "library.statistics.preferences.v1";
 const store: Record<string, string> = {};
 
 const mockStorage = {
@@ -12,142 +13,70 @@ const mockStorage = {
   setItem: (key: string, val: string) => {
     store[key] = val;
   },
-  removeItem: (key: string) => {
-    delete store[key];
-  },
-  clear: () => {
-    Object.keys(store).forEach((k) => delete store[k]);
-  },
 };
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  Object.keys(store).forEach((k) => delete store[k]);
+  Object.keys(store).forEach((key) => delete store[key]);
 });
 
-test("stores one normalized base color under a versioned key", () => {
+test("persists only the chart view under the versioned key", () => {
   vi.stubGlobal("localStorage", mockStorage);
-  saveStatisticsPreferences({ baseColor: "#3778D4", chartView: "graph" });
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#3778d4",
-    chartView: "graph",
-  });
+
+  saveStatisticsPreferences({ chartView: "graph" });
+
+  expect(store[STORAGE_KEY]).toBe(JSON.stringify({ chartView: "graph" }));
+  expect(loadStatisticsPreferences()).toEqual({ chartView: "graph" });
 });
 
-test("derives five ordered OKLCH color-mix expressions for dark theme", () => {
-  expect(deriveStatisticsPalette("#3778d4", "dark")).toEqual([
-    "color-mix(in oklch, #3778d4 28%, var(--surface-1))",
-    "color-mix(in oklch, #3778d4 45%, var(--surface-1))",
-    "color-mix(in oklch, #3778d4 62%, var(--surface-1))",
-    "color-mix(in oklch, #3778d4 79%, var(--surface-1))",
-    "color-mix(in oklch, #3778d4 96%, var(--surface-1))",
-  ]);
-});
-
-test("derives five ordered OKLCH color-mix expressions for light theme", () => {
-  expect(deriveStatisticsPalette("#3778d4", "light")).toEqual([
-    "color-mix(in oklch, #3778d4 18%, var(--surface-1))",
-    "color-mix(in oklch, #3778d4 36%, var(--surface-1))",
-    "color-mix(in oklch, #3778d4 55%, var(--surface-1))",
-    "color-mix(in oklch, #3778d4 76%, var(--surface-1))",
-    "color-mix(in oklch, #3778d4 96%, var(--surface-1))",
-  ]);
-});
-
-test("returns defaults when storage contains malformed JSON", () => {
+test("ignores a legacy base color while preserving the saved view", () => {
   vi.stubGlobal("localStorage", {
     ...mockStorage,
-    getItem: () => "not-json",
+    getItem: () => JSON.stringify({ baseColor: "#3778d4", chartView: "graph" }),
   });
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#3778d4",
-    chartView: "heatmap",
-  });
+
+  expect(loadStatisticsPreferences()).toEqual({ chartView: "graph" });
 });
 
-test("falls back to the current defaults for invalid persisted view and color", () => {
+test.each([null, "not-json", JSON.stringify({}), JSON.stringify({ chartView: "radar" })])(
+  "defaults malformed, missing, or invalid persisted values to heatmap",
+  (value) => {
+    vi.stubGlobal("localStorage", { ...mockStorage, getItem: () => value });
+
+    expect(loadStatisticsPreferences()).toEqual({ chartView: "heatmap" });
+  },
+);
+
+test("handles storage read and write errors without throwing", () => {
   vi.stubGlobal("localStorage", {
-    ...mockStorage,
-    getItem: () => JSON.stringify({ baseColor: "purple", chartView: "radar" }),
-  });
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#3778d4",
-    chartView: "heatmap",
-  });
-});
-
-test("returns defaults for invalid hex input", () => {
-  vi.stubGlobal("localStorage", mockStorage);
-  saveStatisticsPreferences({ baseColor: "invalid", chartView: "graph" });
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#3778d4",
-    chartView: "graph",
-  });
-});
-
-test("normalizes white to near-gray", () => {
-  vi.stubGlobal("localStorage", mockStorage);
-  saveStatisticsPreferences({ baseColor: "#ffffff", chartView: "heatmap" });
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#b8b8b8",
-    chartView: "heatmap",
-  });
-});
-
-test("normalizes black to near-dark", () => {
-  vi.stubGlobal("localStorage", mockStorage);
-  saveStatisticsPreferences({ baseColor: "#000000", chartView: "heatmap" });
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#474747",
-    chartView: "heatmap",
-  });
-});
-
-test("caps over-saturated color at 90% saturation after round trip", () => {
-  vi.stubGlobal("localStorage", mockStorage);
-  saveStatisticsPreferences({ baseColor: "#ff0080", chartView: "heatmap" });
-  const loaded = loadStatisticsPreferences();
-  expect(loaded.baseColor).not.toBe("#ff0080");
-});
-
-test("#3778d4 passes through unchanged", () => {
-  vi.stubGlobal("localStorage", mockStorage);
-  saveStatisticsPreferences({ baseColor: "#3778d4", chartView: "heatmap" });
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#3778d4",
-    chartView: "heatmap",
-  });
-});
-
-test("default return value is heatmap with blue base", () => {
-  vi.stubGlobal("localStorage", mockStorage);
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#3778d4",
-    chartView: "heatmap",
-  });
-});
-
-test("handles storage read errors gracefully", () => {
-  vi.stubGlobal("localStorage", {
-    ...mockStorage,
     getItem: () => {
       throw new Error("storage unavailable");
     },
-  });
-  expect(loadStatisticsPreferences()).toEqual({
-    baseColor: "#3778d4",
-    chartView: "heatmap",
-  });
-});
-
-test("handles storage write errors gracefully", () => {
-  vi.stubGlobal("localStorage", {
-    ...mockStorage,
     setItem: () => {
       throw new Error("storage unavailable");
     },
   });
-  expect(() =>
-    saveStatisticsPreferences({ baseColor: "#3778d4", chartView: "graph" }),
-  ).not.toThrow();
+
+  expect(loadStatisticsPreferences()).toEqual({ chartView: "heatmap" });
+  expect(() => saveStatisticsPreferences({ chartView: "graph" })).not.toThrow();
+});
+
+test("derives five semantic warning color mixes for dark theme", () => {
+  expect(deriveStatisticsPalette("dark")).toEqual([
+    "color-mix(in oklch, var(--warning) 28%, var(--surface-1))",
+    "color-mix(in oklch, var(--warning) 45%, var(--surface-1))",
+    "color-mix(in oklch, var(--warning) 62%, var(--surface-1))",
+    "color-mix(in oklch, var(--warning) 79%, var(--surface-1))",
+    "color-mix(in oklch, var(--warning) 96%, var(--surface-1))",
+  ]);
+});
+
+test("derives five semantic warning color mixes for light theme", () => {
+  expect(deriveStatisticsPalette("light")).toEqual([
+    "color-mix(in oklch, var(--warning) 18%, var(--surface-1))",
+    "color-mix(in oklch, var(--warning) 36%, var(--surface-1))",
+    "color-mix(in oklch, var(--warning) 55%, var(--surface-1))",
+    "color-mix(in oklch, var(--warning) 76%, var(--surface-1))",
+    "color-mix(in oklch, var(--warning) 96%, var(--surface-1))",
+  ]);
 });

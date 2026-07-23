@@ -69,7 +69,7 @@ test("filters activity with the shared non-searchable app combobox", async () =>
   expect(screen.queryByLabelText("2026-07-18: 60 Active time")).not.toBeInTheDocument();
 });
 
-test("keeps app, view, color, and an explicit graph mode while the calendar period changes", async () => {
+test("keeps app, view, and an explicit graph mode while the calendar period changes", async () => {
   const user = userEvent.setup();
   const series = [
     { appKey: "reading", title: "Reading", buckets: [{ date: "2026-06-18", value: 30 }] },
@@ -87,7 +87,6 @@ test("keeps app, view, color, and an explicit graph mode while the calendar peri
   await user.click(screen.getByRole("option", { name: "Reading" }));
   await user.click(screen.getByRole("button", { name: "Graph" }));
   await user.click(screen.getByRole("button", { name: "Cumulative" }));
-  await user.click(screen.getByRole("button", { name: "Set chart color to #e84c3d" }));
 
   rerender(
     <ActivityChartCard
@@ -101,7 +100,14 @@ test("keeps app, view, color, and an explicit graph mode while the calendar peri
   expect(screen.getByRole("combobox", { name: "Statistics app" })).toHaveTextContent("Reading");
   expect(screen.getByRole("button", { name: "Graph" })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByRole("button", { name: "Cumulative" })).toHaveAttribute("aria-pressed", "true");
-  expect(screen.getByRole("button", { name: "Set chart color to #e84c3d" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("does not render chart color controls", () => {
+  render(<ActivityChartCard period={{ unit: "month", anchorLocalDay: "2026-07-01" }} totalBuckets={[]} timeBuckets={[]} series={[]} />);
+
+  expect(screen.queryByText("Chart color")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /set chart color/i })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Custom chart color")).not.toBeInTheDocument();
 });
 
 test("uses weekly as the Year default and daily as the Week and Month default", () => {

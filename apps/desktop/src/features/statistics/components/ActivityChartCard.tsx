@@ -9,7 +9,6 @@ import {
 import type { ActivityChartSeries } from "../registry";
 import { ActivityHeatmap } from "./ActivityHeatmap";
 import { ActivityGraph, type GraphMode } from "./ActivityGraph";
-import { StatisticsColorPicker } from "./StatisticsColorPicker";
 import { Combobox } from "../../../components/Combobox";
 
 interface ActivityChartCardProps {
@@ -81,7 +80,6 @@ export function ActivityChartCard({
   );
   const [hasExplicitGraphMode, setHasExplicitGraphMode] = useState(false);
   const [selectedApp, setSelectedApp] = useState("all");
-  const [baseColor, setBaseColor] = useState(prefs.baseColor);
   const [theme, setTheme] = useState<"light" | "dark">(
     document.documentElement.dataset.theme === "dark" ? "dark" : "light",
   );
@@ -131,25 +129,14 @@ export function ActivityChartCard({
   const handleViewChange = useCallback(
     (newView: "heatmap" | "graph") => {
       setView(newView);
-      saveStatisticsPreferences({
-        ...loadStatisticsPreferences(),
-        chartView: newView,
-      });
+      saveStatisticsPreferences({ chartView: newView });
     },
     [],
   );
 
-  const handleColorChange = useCallback((color: string) => {
-    setBaseColor(color);
-    saveStatisticsPreferences({
-      ...loadStatisticsPreferences(),
-      baseColor: color,
-    });
-  }, []);
-
   const palette = useMemo(
-    () => deriveStatisticsPalette(baseColor, theme),
-    [baseColor, theme],
+    () => deriveStatisticsPalette(theme),
+    [theme],
   );
 
   const appOptions = useMemo(() => {
@@ -246,10 +233,6 @@ export function ActivityChartCard({
           allowedModes={allowedGraphModes}
         />
       )}
-      <StatisticsColorPicker
-        baseColor={baseColor}
-        onChange={handleColorChange}
-      />
     </section>
   );
 }
