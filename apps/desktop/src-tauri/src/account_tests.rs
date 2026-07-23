@@ -6,7 +6,8 @@ mod tests {
         MemorySessionStore, PocketBaseAccountApi, SessionStore,
     };
     use serde_json::json;
-    use std::sync::Mutex;
+    use std::sync::{mpsc, Arc, Mutex};
+    use std::time::Duration;
 
     #[allow(clippy::type_complexity)]
     struct MockHttpClient {
@@ -69,6 +70,102 @@ mod tests {
                 return Err("No mock response configured".to_string());
             }
             Ok(resps.remove(0))
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    struct SwitchingHttpClient {
+        stale_status: u16,
+        stale_upload_started: mpsc::Sender<()>,
+        release_stale_upload: Mutex<mpsc::Receiver<()>>,
+        requests: Mutex<Vec<(String, String, serde_json::Value, Option<String>)>>,
+    }
+
+    impl SwitchingHttpClient {
+        fn new(
+            stale_status: u16,
+        ) -> (Self, mpsc::Receiver<()>, mpsc::Sender<()>) {
+            let (started_tx, started_rx) = mpsc::channel();
+            let (release_tx, release_rx) = mpsc::channel();
+            (
+                Self {
+                    stale_status,
+                    stale_upload_started: started_tx,
+                    release_stale_upload: Mutex::new(release_rx),
+                    requests: Mutex::new(Vec::new()),
+                },
+                started_rx,
+                release_tx,
+            )
+        }
+    }
+
+    impl HttpClient for SwitchingHttpClient {
+        fn post(
+            &self,
+            url: &str,
+            body: serde_json::Value,
+            token: Option<&str>,
+        ) -> Result<(u16, serde_json::Value), String> {
+            self.requests.lock().unwrap().push((
+                "POST".to_string(),
+                url.to_string(),
+                body.clone(),
+                token.map(str::to_string),
+            ));
+
+            if url.ends_with("/api/corelib/sign-in") {
+                let account_id = if body.get("email").and_then(|value| value.as_str())
+                    == Some("account-b@example.test")
+                {
+                    "account-b"
+                } else {
+                    "account-a"
+                };
+                return Ok((
+                    200,
+                    json!({
+                        "status": "approved",
+                        "token": format!("token-{account_id}"),
+                        "profile": {
+                            "id": account_id,
+                            "displayName": account_id,
+                            "email": format!("{account_id}@example.test"),
+                            "status": "approved",
+                            "role": "member",
+                            "analyticsEnabled": true
+                        }
+                    }),
+                ));
+            }
+
+            if url.ends_with("/api/corelib/analytics/daily-statistics") {
+                return match token {
+                    Some("token-account-a") => {
+                        self.stale_upload_started
+                            .send(())
+                            .map_err(|error| error.to_string())?;
+                        self.release_stale_upload
+                            .lock()
+                            .unwrap()
+                            .recv()
+                            .map_err(|error| error.to_string())?;
+                        Ok((self.stale_status, json!({ "message": "session_expired" })))
+                    }
+                    Some("token-account-b") => Ok((204, json!(null))),
+                    other => Err(format!("unexpected analytics token: {other:?}")),
+                };
+            }
+
+            Err(format!("unexpected POST request: {url}"))
+        }
+
+        fn get(&self, url: &str, _token: Option<&str>) -> Result<(u16, serde_json::Value), String> {
+            Err(format!("unexpected GET request: {url}"))
+        }
+
+        fn delete(&self, url: &str, _token: Option<&str>) -> Result<(u16, serde_json::Value), String> {
+            Err(format!("unexpected DELETE request: {url}"))
         }
     }
 
@@ -190,8 +287,24 @@ mod tests {
     #[test]
     fn upserts_daily_statistics() {
         let store = MemorySessionStore::new();
-        store.set_token("token-abc").unwrap();
-        let http = MockHttpClient::new(vec![(204, json!(null))]);
+        let http = MockHttpClient::new(vec![
+            (
+                200,
+                json!({
+                    "status": "approved",
+                    "token": "token-account-a",
+                    "profile": {
+                        "id": "account-a",
+                        "displayName": "Account A",
+                        "email": "account-a@example.test",
+                        "status": "approved",
+                        "role": "member",
+                        "analyticsEnabled": true
+                    }
+                }),
+            ),
+            (204, json!(null)),
+        ]);
 
         let api = PocketBaseAccountApi::new_with_deps(
             "http://localhost:8090".to_string(),
@@ -216,13 +329,198 @@ mod tests {
             lapse_count: None,
         };
 
-        let res = api.upsert_daily_statistics(input);
+        api.sign_in("account-a@example.test", "password12345", true)
+            .expect("sign in account A");
+
+        let res = api.upsert_daily_statistics("account-a", input);
         assert!(res.is_ok());
 
         let reqs = api.http.requests.lock().unwrap();
-        assert_eq!(reqs.len(), 1);
-        assert_eq!(reqs[0].0, "POST");
-        assert!(reqs[0].1.contains("/api/corelib/analytics/daily-statistics"));
+        assert_eq!(reqs.len(), 2);
+        assert_eq!(reqs[1].0, "POST");
+        assert!(reqs[1].1.contains("/api/corelib/analytics/daily-statistics"));
+        assert_eq!(reqs[1].3.as_deref(), Some("token-account-a"));
+        assert!(reqs[1].2.get("expectedAccountId").is_none());
+    }
+
+    #[test]
+    fn rejects_daily_statistics_for_a_different_active_account_without_an_upsert_request() {
+        let store = MemorySessionStore::new();
+        let http = MockHttpClient::new(vec![(
+            200,
+            json!({
+                "status": "approved",
+                "token": "token-account-b",
+                "profile": {
+                    "id": "account-b",
+                    "displayName": "Account B",
+                    "email": "account-b@example.test",
+                    "status": "approved",
+                    "role": "member",
+                    "analyticsEnabled": true
+                }
+            }),
+        )]);
+        let api = PocketBaseAccountApi::new_with_deps(
+            "http://localhost:8090".to_string(),
+            store,
+            http,
+        );
+        api.sign_in("account-b@example.test", "password12345", true)
+            .expect("sign in account B");
+
+        let input = DailyStatisticsSnapshot {
+            schema_version: 1,
+            local_day: "2026-07-19".to_string(),
+            app_key: "reading".to_string(),
+            active_ms: 3600000,
+            active_day: true,
+            session_count: 3,
+            page_visit_count: Some(12),
+            unique_page_count: None,
+            real_review_count: None,
+            again_count: None,
+            hard_count: None,
+            good_count: None,
+            easy_count: None,
+            lapse_count: None,
+        };
+
+        let result = api.upsert_daily_statistics("account-a", input);
+
+        assert_eq!(result, Err(AccountError::AccountMismatch));
+        let requests = api.http.requests.lock().unwrap();
+        assert_eq!(requests.len(), 1, "mismatch must not reach the upsert endpoint");
+        assert!(requests
+            .iter()
+            .all(|request| !request.1.contains("/api/corelib/analytics/daily-statistics")));
+    }
+
+    #[test]
+    fn stale_unauthorized_upload_response_does_not_clear_the_new_active_session() {
+        for stale_status in [401, 403] {
+            let (http, upload_started, release_upload) =
+                SwitchingHttpClient::new(stale_status);
+            let api = Arc::new(PocketBaseAccountApi::new_with_deps(
+                "http://localhost:8090".to_string(),
+                MemorySessionStore::new(),
+                http,
+            ));
+            api.sign_in("account-a@example.test", "password12345", true)
+                .expect("sign in account A");
+
+            let snapshot = DailyStatisticsSnapshot {
+                schema_version: 1,
+                local_day: "2026-07-19".to_string(),
+                app_key: "reading".to_string(),
+                active_ms: 3600000,
+                active_day: true,
+                session_count: 3,
+                page_visit_count: None,
+                unique_page_count: None,
+                real_review_count: None,
+                again_count: None,
+                hard_count: None,
+                good_count: None,
+                easy_count: None,
+                lapse_count: None,
+            };
+            let stale_api = Arc::clone(&api);
+            let stale_snapshot = snapshot.clone();
+            let stale_upload = std::thread::spawn(move || {
+                stale_api.upsert_daily_statistics("account-a", stale_snapshot)
+            });
+
+            if let Err(error) = upload_started.recv_timeout(Duration::from_secs(2)) {
+                let _ = release_upload.send(());
+                panic!("account A upload did not start: {error}");
+            }
+            api.sign_in("account-b@example.test", "password12345", true)
+                .expect("activate account B while A upload is in flight");
+            assert_eq!(
+                api.store.get_token().unwrap().as_deref(),
+                Some("token-account-b")
+            );
+
+            release_upload.send(()).expect("release stale A response");
+            let stale_result = stale_upload.join().expect("join stale A upload");
+            assert_eq!(
+                stale_result,
+                Err(if stale_status == 401 {
+                    AccountError::SessionExpired
+                } else {
+                    AccountError::AccountNotApproved
+                })
+            );
+            assert_eq!(
+                api.store.get_token().unwrap().as_deref(),
+                Some("token-account-b"),
+                "stale {stale_status} must not clear B's persisted token"
+            );
+            api.upsert_daily_statistics("account-b", snapshot)
+                .expect("account B remains authenticated");
+
+            let requests = api.http.requests.lock().unwrap();
+            let analytics_tokens: Vec<&str> = requests
+                .iter()
+                .filter(|request| request.1.ends_with("/api/corelib/analytics/daily-statistics"))
+                .filter_map(|request| request.3.as_deref())
+                .collect();
+            assert_eq!(analytics_tokens, vec!["token-account-a", "token-account-b"]);
+        }
+    }
+
+    #[test]
+    fn unauthorized_upload_for_the_current_session_still_clears_it() {
+        for status in [401, 403] {
+            let store = MemorySessionStore::new();
+            let http = MockHttpClient::new(vec![
+                (
+                    200,
+                    json!({
+                        "status": "approved",
+                        "token": "token-account-a",
+                        "profile": {
+                            "id": "account-a",
+                            "displayName": "Account A",
+                            "email": "account-a@example.test",
+                            "status": "approved",
+                            "role": "member",
+                            "analyticsEnabled": true
+                        }
+                    }),
+                ),
+                (status, json!({ "message": "session_expired" })),
+            ]);
+            let api = PocketBaseAccountApi::new_with_deps(
+                "http://localhost:8090".to_string(),
+                store,
+                http,
+            );
+            api.sign_in("account-a@example.test", "password12345", true)
+                .expect("sign in account A");
+            let snapshot = DailyStatisticsSnapshot {
+                schema_version: 1,
+                local_day: "2026-07-19".to_string(),
+                app_key: "reading".to_string(),
+                active_ms: 3600000,
+                active_day: true,
+                session_count: 3,
+                page_visit_count: None,
+                unique_page_count: None,
+                real_review_count: None,
+                again_count: None,
+                hard_count: None,
+                good_count: None,
+                easy_count: None,
+                lapse_count: None,
+            };
+
+            assert!(api
+                .upsert_daily_statistics("account-a", snapshot)
+                .is_err());
+            assert_eq!(api.store.get_token().unwrap(), None);
+        }
     }
 
     #[test]

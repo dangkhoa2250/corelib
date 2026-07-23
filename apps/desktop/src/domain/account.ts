@@ -160,7 +160,7 @@ export interface AccountApi {
   adminSetFeatureAssignment(input: FeatureAssignmentInput): Promise<FeatureAssignment>;
   adminMetrics(): Promise<AdminMetrics>;
   adminDeleteUser(userId: string): Promise<void>;
-  upsertDailyStatistics(input: DailyStatisticsSnapshot): Promise<void>;
+  upsertDailyStatistics(expectedAccountId: string, input: DailyStatisticsSnapshot): Promise<void>;
   adminStatistics(range: string, appKey: string): Promise<AdminStatistics>;
 }
 

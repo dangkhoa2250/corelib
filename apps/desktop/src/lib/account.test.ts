@@ -28,8 +28,11 @@ it("upserts daily statistics through the typed native command", async () => {
     sessionCount: 3,
   };
 
-  await client.upsertDailyStatistics(input);
-  expect(call).toHaveBeenCalledWith("account_upsert_daily_statistics", { input });
+  await client.upsertDailyStatistics("account-a", input);
+  expect(call).toHaveBeenCalledWith("account_upsert_daily_statistics", {
+    expectedAccountId: "account-a",
+    input,
+  });
 });
 
 it("retrieves admin statistics through the typed native command", async () => {

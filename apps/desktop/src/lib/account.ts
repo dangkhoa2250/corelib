@@ -213,8 +213,11 @@ export class PocketBaseAccountApiClient implements AccountApi {
     return this.call<void>("admin_delete_user", { userId });
   }
 
-  upsertDailyStatistics(input: DailyStatisticsSnapshot): Promise<void> {
-    return this.call<void>("account_upsert_daily_statistics", { input });
+  upsertDailyStatistics(expectedAccountId: string, input: DailyStatisticsSnapshot): Promise<void> {
+    return this.call<void>("account_upsert_daily_statistics", {
+      expectedAccountId,
+      input,
+    });
   }
 
   adminStatistics(range: string, appKey: string): Promise<AdminStatistics> {

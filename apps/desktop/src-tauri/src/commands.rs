@@ -1455,10 +1455,13 @@ pub fn admin_delete_user(
 
 #[tauri::command]
 pub fn account_upsert_daily_statistics(
+    expected_account_id: String,
     input: DailyStatisticsSnapshot,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<(), String> {
-    state.api.upsert_daily_statistics(input).map_err(|e| e.to_string())
+    state.api
+        .upsert_daily_statistics(&expected_account_id, input)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

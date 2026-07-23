@@ -250,6 +250,7 @@ function SyncCoordinator({ accountApi }: { accountApi: AccountApi }) {
   const account = useAccount();
   return (
     <StatisticsAnalyticsSync
+      accountId={account?.session?.profile.id ?? null}
       enabled={account?.session?.profile.analyticsEnabled ?? false}
       accountApi={accountApi}
     />
