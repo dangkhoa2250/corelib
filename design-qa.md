@@ -9,14 +9,24 @@
 
 ## Automated evidence
 
-- Focused frontend tests: 27 files / 170 tests passed.
-- Full frontend tests: 77 files / 503 tests passed.
-- Production frontend build: passed.
+- Focused frontend tests: 21 files / 147 tests passed in 3.23s.
+- Full frontend tests: 76 files / 513 tests passed in 11.91s.
+- Production frontend build (`tsc && vite build`): passed; 6,318 modules transformed and built in 2.13s, with only the existing warning about a chunk larger than 500 kB.
 - Rust tests: 198 unit tests and 1 integration test passed.
 - Clippy with `-D warnings`: passed.
-- Token/forbidden-pattern scan: no Statistics/Admin native selector, gradient, horizontal-scroll, or `max-content` match.
+- Removed-API production scan: no `StatisticsColorPicker`, `statistics-color-picker`, `baseColor`, `Chart color`, `Custom chart color`, or `Set chart color` match in non-test Statistics source.
+- Forbidden-pattern scan: no native `<select`, gradient, horizontal-scroll, or `width: max-content` match in Statistics source.
+- Invariant scan confirmed `--statistics-accent: var(--warning)`, Year gap 1 / row 17 / radius 2, and 20px right content padding at desktop, mid, and mobile layouts.
 - `git diff --check`: passed.
 - Built-CSS selector inspection found all three implementation selectors: `statistics-range-picker`, `statistics-heatmap-wrapper--year`, and `statistics-app-card`.
+
+## 2026-07-23 CLI verification
+
+- Tested source: `c1d874c` (test-only TypeScript compatibility follow-up to `4ba7316`).
+- A prior full run was interfered with by overlapping Vitest processes and reported failures. The five affected files subsequently passed individually and together (95 / 95 tests), and two subsequent isolated full runs passed (76 files / 513 tests each).
+- The final focused suite, isolated full suite, production frontend build, removed-API scan, forbidden-pattern scan, invariant scan, and `git diff --check` all passed with the results recorded above.
+- No Library app, Tauri development or release app, Vite runtime, preview, browser, or other project UI runtime was launched or used for this verification.
+- Actual light and dark WKWebView rendering, scroll behavior, and screenshot comparison remain unverified because runtime execution was forbidden.
 
 ## Visual comparison history
 
