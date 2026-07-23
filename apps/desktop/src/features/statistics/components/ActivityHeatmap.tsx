@@ -4,6 +4,7 @@ import type { StatisticsPeriod, StatisticsTimeBucket } from "../../../domain/sta
 import { todayLocalDay } from "../period";
 
 const BUCKET_START_HOURS = [0, 4, 8, 12, 16, 20] as const;
+const DEFAULT_TOOLTIP = "Focus or hover a cell for exact activity details.";
 
 export type StatisticsPalette = readonly [string, string, string, string, string] | readonly string[];
 
@@ -256,8 +257,14 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
   const summary = useMemo(() => computeSummary(columns), [columns]);
   const sampledLabels = useMemo(() => sampleAxisLabelSpans(columns.length), [columns.length]);
   const [focused, setFocused] = useState<FocusedCell>({ column: 0, row: 0 });
-  const [tooltip, setTooltip] = useState<string | null>(null);
+  const tooltipRef = useRef<HTMLParagraphElement | null>(null);
   const shouldMoveFocus = useRef(false);
+
+  const updateTooltip = (description: string | null) => {
+    if (tooltipRef.current) {
+      tooltipRef.current.textContent = description ?? DEFAULT_TOOLTIP;
+    }
+  };
 
   useEffect(() => {
     setFocused((previous) => ({
@@ -360,11 +367,11 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
                       title={description}
                       onFocus={() => {
                         setFocused({ column: columnIndex, row });
-                        setTooltip(description);
+                        updateTooltip(description);
                       }}
-                      onBlur={() => setTooltip(null)}
-                      onMouseEnter={() => setTooltip(description)}
-                      onMouseLeave={() => setTooltip(null)}
+                      onBlur={() => updateTooltip(null)}
+                      onMouseEnter={() => updateTooltip(description)}
+                      onMouseLeave={() => updateTooltip(null)}
                       onClick={() => setFocused({ column: columnIndex, row })}
                       onKeyDown={(event) => moveFocus(event, columnIndex, row)}
                     />
@@ -375,7 +382,7 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
           </div>
         </div>
       </div>
-      <p role="tooltip" className="statistics-heatmap__tooltip">{tooltip ?? "Focus or hover a cell for exact activity details."}</p>
+      <p ref={tooltipRef} role="tooltip" className="statistics-heatmap__tooltip">{DEFAULT_TOOLTIP}</p>
       <p id="activity-heatmap-summary" data-testid="activity-heatmap-summary" className="statistics-heatmap__summary">{visibleSummary}</p>
       <p className="sr-only">Activity summary: {visibleSummary}</p>
     </div>

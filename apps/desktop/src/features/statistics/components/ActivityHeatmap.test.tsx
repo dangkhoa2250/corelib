@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { Profiler } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { StatisticsTimeBucket } from "../../../domain/statistics";
 import { ActivityHeatmap, buildHeatmapColumns, sampleAxisLabelSpans } from "./ActivityHeatmap";
@@ -194,6 +195,28 @@ test("shows exact tooltip text and a visible plus screen-reader summary", () => 
   expect(screen.getByRole("tooltip")).toHaveTextContent("July 13, 2026, 12:00–16:00: 15 minutes of activity");
   expect(screen.getByTestId("activity-heatmap-summary")).toHaveTextContent("Strongest time: 12:00–16:00");
   expect(screen.getByText(/Activity summary:/)).toHaveTextContent("Highest day: July 13, 2026");
+});
+
+test("updates hover details without rerendering the heatmap grid", () => {
+  const onRender = vi.fn();
+  render(
+    <Profiler id="heatmap" onRender={onRender}>
+      <ActivityHeatmap
+        period={month}
+        buckets={[bucket("2026-02-01", 12, 15 * 60_000)]}
+        selectedApp="all"
+        palette={palette}
+      />
+    </Profiler>,
+  );
+  onRender.mockClear();
+
+  fireEvent.mouseEnter(
+    screen.getByRole("gridcell", { name: /February 1, 2026, 12:00–16:00: 15 minutes/ }),
+  );
+
+  expect(screen.getByRole("tooltip")).toHaveTextContent("February 1, 2026, 12:00–16:00: 15 minutes of activity");
+  expect(onRender).not.toHaveBeenCalled();
 });
 
 test("moves roving focus across period columns and time rows", () => {

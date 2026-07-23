@@ -10,7 +10,7 @@
 ## Automated evidence
 
 - Focused frontend tests: 27 files / 170 tests passed.
-- Full frontend tests: 77 files / 498 tests passed.
+- Full frontend tests: 77 files / 503 tests passed.
 - Production frontend build: passed.
 - Rust tests: 198 unit tests and 1 integration test passed.
 - Clippy with `-D warnings`: passed.
