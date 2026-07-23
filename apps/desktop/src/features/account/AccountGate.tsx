@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { AccountApi, SessionSnapshot } from "../../domain/account";
 import { SignInPage } from "./SignInPage";
 import { RegisterPage } from "./RegisterPage";
@@ -63,6 +63,7 @@ export function AccountGate({
   const [activeTab, setActiveTab] = useState<"signin" | "register">("signin");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const sessionGeneration = useRef(0);
 
   // Load session on mount
   useEffect(() => {
@@ -84,6 +85,7 @@ export function AccountGate({
   }, [api]);
 
   const handleSignOut = async () => {
+    sessionGeneration.current += 1;
     try {
       await api.signOut();
     } catch (_) {}
@@ -94,14 +96,29 @@ export function AccountGate({
 
   const handleUpdateAnalytics = async (enabled: boolean) => {
     if (state.kind !== "approved") return;
-    const updatedProfile = await api.setAnalyticsEnabled(enabled);
-    setState({
-      kind: "approved",
-      session: {
-        ...state.session,
-        profile: updatedProfile,
-      },
-    });
+    const operationGeneration = sessionGeneration.current;
+    const accountId = state.session.profile.id;
+    try {
+      const updatedProfile = await api.setAnalyticsEnabled(enabled);
+      if (sessionGeneration.current !== operationGeneration) return;
+      setState((current) => {
+        if (
+          sessionGeneration.current !== operationGeneration ||
+          current.kind !== "approved" ||
+          current.session.profile.id !== accountId
+        ) return current;
+        return {
+          kind: "approved",
+          session: {
+            ...current.session,
+            profile: updatedProfile,
+          },
+        };
+      });
+    } catch (error) {
+      if (sessionGeneration.current !== operationGeneration) return;
+      throw error;
+    }
   };
 
   const handleSignIn = async (emailVal: string, passwordVal: string, rememberVal: boolean) => {
@@ -116,6 +133,7 @@ export function AccountGate({
       } else if (res === "rejected") {
         setState({ kind: "rejected" });
       } else if (typeof res === "object" && "approved" in res) {
+        sessionGeneration.current += 1;
         setState({ kind: "approved", session: res.approved });
       } else {
         setState({ kind: "anonymous" });

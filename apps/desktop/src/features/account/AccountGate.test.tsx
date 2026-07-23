@@ -1,6 +1,6 @@
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { AccountGate } from "./AccountGate";
+import { AccountGate, useAccount } from "./AccountGate";
 import type { AccountApi, SessionSnapshot } from "../../domain/account";
 
 const mockApi = (overrides: Partial<AccountApi> = {}): AccountApi => ({
@@ -40,6 +40,39 @@ const mockSession: SessionSnapshot = {
   },
 };
 
+const memberSession = (overrides: Partial<SessionSnapshot["profile"]> = {}): SessionSnapshot => ({
+  ...mockSession,
+  profile: {
+    ...mockSession.profile,
+    ...overrides,
+  },
+});
+
+function AccountControls({ onAnalyticsStarted }: { onAnalyticsStarted?: (promise: Promise<void>) => void }) {
+  const { session, signOut, updateAnalytics } = useAccount();
+  if (!session) return null;
+
+  return (
+    <>
+      <output data-testid="account-id">{session.profile.id}</output>
+      <output data-testid="account-display-name">{session.profile.displayName}</output>
+      <output data-testid="analytics-enabled">{String(session.profile.analyticsEnabled)}</output>
+      <button
+        type="button"
+        onClick={() => {
+          const update = updateAnalytics(false);
+          onAnalyticsStarted?.(update);
+        }}
+      >
+        Disable analytics
+      </button>
+      <button type="button" onClick={() => void signOut()}>
+        Sign out
+      </button>
+    </>
+  );
+}
+
 describe("AccountGate Component", () => {
   it("renders loading spinner on mount and does not render children", () => {
     const api = mockApi({
@@ -70,6 +103,132 @@ describe("AccountGate Component", () => {
       expect(screen.getByTestId("child")).toBeInTheDocument();
       expect(screen.getByText("Normal App Content")).toBeInTheDocument();
     });
+  });
+
+  it("applies a delayed analytics update for the current account", async () => {
+    let resolveAnalytics!: (profile: SessionSnapshot["profile"]) => void;
+    const delayedAnalytics = new Promise<SessionSnapshot["profile"]>((resolve) => {
+      resolveAnalytics = resolve;
+    });
+    const accountA = memberSession({ id: "account-a", analyticsEnabled: true });
+    const updatedProfile = {
+      ...accountA.profile,
+      displayName: "Updated Mai",
+      analyticsEnabled: false,
+    };
+    const setAnalyticsEnabled = vi.fn().mockReturnValue(delayedAnalytics);
+    const api = mockApi({
+      currentSession: () => new Promise(() => {}),
+      setAnalyticsEnabled,
+    });
+    let analyticsUpdate!: Promise<void>;
+
+    render(
+      <AccountGate api={api} initialState={{ kind: "approved", session: accountA }}>
+        <AccountControls onAnalyticsStarted={(promise) => { analyticsUpdate = promise; }} />
+      </AccountGate>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Disable analytics" }));
+    expect(setAnalyticsEnabled).toHaveBeenCalledWith(false);
+
+    await act(async () => {
+      resolveAnalytics(updatedProfile);
+      await analyticsUpdate;
+    });
+
+    expect(screen.getByTestId("account-id")).toHaveTextContent("account-a");
+    expect(screen.getByTestId("account-display-name")).toHaveTextContent("Updated Mai");
+    expect(screen.getByTestId("analytics-enabled")).toHaveTextContent("false");
+  });
+
+  it("does not restore the previous account when its delayed analytics update succeeds after another account signs in", async () => {
+    let resolveAnalytics!: (profile: SessionSnapshot["profile"]) => void;
+    const delayedAnalytics = new Promise<SessionSnapshot["profile"]>((resolve) => {
+      resolveAnalytics = resolve;
+    });
+    const accountA = memberSession({ id: "account-a", analyticsEnabled: true });
+    const accountB = memberSession({
+      id: "account-b",
+      displayName: "Bryn",
+      email: "bryn@example.test",
+      analyticsEnabled: false,
+    });
+    const api = mockApi({
+      currentSession: () => new Promise(() => {}),
+      signOut: vi.fn().mockResolvedValue(undefined),
+      signIn: vi.fn().mockResolvedValue({ approved: accountB }),
+      setAnalyticsEnabled: vi.fn().mockReturnValue(delayedAnalytics),
+    });
+    let analyticsUpdate!: Promise<void>;
+
+    render(
+      <AccountGate api={api} initialState={{ kind: "approved", session: accountA }}>
+        <AccountControls onAnalyticsStarted={(promise) => { analyticsUpdate = promise; }} />
+      </AccountGate>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Disable analytics" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Email Address")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: accountB.profile.email } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123456" } });
+    fireEvent.submit(screen.getByLabelText("Password").closest("form")!);
+
+    await waitFor(() => expect(screen.getByTestId("account-id")).toHaveTextContent("account-b"));
+    await act(async () => {
+      resolveAnalytics({ ...accountA.profile, analyticsEnabled: false });
+      await analyticsUpdate;
+    });
+
+    expect(screen.getByTestId("account-id")).toHaveTextContent("account-b");
+    expect(screen.getByTestId("analytics-enabled")).toHaveTextContent("false");
+  });
+
+  it("silently ignores a previous account's rejected analytics update after another account signs in", async () => {
+    const staleError = new Error("analytics update failed");
+    let rejectAnalytics!: (error: Error) => void;
+    const delayedAnalytics = new Promise<SessionSnapshot["profile"]>((_, reject) => {
+      rejectAnalytics = reject;
+    });
+    const accountA = memberSession({ id: "account-a", analyticsEnabled: true });
+    const accountB = memberSession({
+      id: "account-b",
+      displayName: "Bryn",
+      email: "bryn@example.test",
+      analyticsEnabled: false,
+    });
+    const api = mockApi({
+      currentSession: () => new Promise(() => {}),
+      signOut: vi.fn().mockResolvedValue(undefined),
+      signIn: vi.fn().mockResolvedValue({ approved: accountB }),
+      setAnalyticsEnabled: vi.fn().mockReturnValue(delayedAnalytics),
+    });
+    let analyticsUpdate!: Promise<void>;
+
+    render(
+      <AccountGate api={api} initialState={{ kind: "approved", session: accountA }}>
+        <AccountControls onAnalyticsStarted={(promise) => { analyticsUpdate = promise; }} />
+      </AccountGate>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Disable analytics" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Email Address")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("Email Address"), { target: { value: accountB.profile.email } });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "password123456" } });
+    fireEvent.submit(screen.getByLabelText("Password").closest("form")!);
+
+    await waitFor(() => expect(screen.getByTestId("account-id")).toHaveTextContent("account-b"));
+    await act(async () => {
+      rejectAnalytics(staleError);
+      await expect(analyticsUpdate).resolves.toBeUndefined();
+    });
+
+    expect(screen.getByTestId("account-id")).toHaveTextContent("account-b");
+    expect(screen.getByTestId("analytics-enabled")).toHaveTextContent("false");
   });
 
   it("renders sign-in form when session fails to load", async () => {
