@@ -203,9 +203,9 @@ export function ActivityGraph({
       }
       e.preventDefault();
       setFocusedIdx(next);
-      showKeyboardTooltip(next);
+      if (hoveredIdx === null) showKeyboardTooltip(next);
     },
-    [focusedIdx, n, showKeyboardTooltip],
+    [focusedIdx, hoveredIdx, n, showKeyboardTooltip],
   );
 
   const handleMouseMove = useCallback(

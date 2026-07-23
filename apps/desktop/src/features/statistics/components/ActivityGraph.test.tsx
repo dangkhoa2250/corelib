@@ -181,6 +181,27 @@ test("gives pointer interaction precedence and restores the keyboard point after
   expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-22: 2 Active time");
 });
 
+test("keeps the pointer marker and tooltip authoritative while keyboard navigation continues", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  fireEvent.focus(svg);
+  fireEvent.mouseMove(svg, { clientX: 540, clientY: 100 });
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "580");
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
+
+  fireEvent.keyDown(svg, { key: "ArrowRight" });
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "580");
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
+
+  fireEvent.mouseLeave(svg);
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "315");
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-22: 2 Active time");
+});
+
 test("cumulative mode shows monotonic non-decreasing values", () => {
   const { container } = render(
     <ActivityGraph buckets={dailyBuckets} mode="cumulative" onModeChange={vi.fn()} valueLabel="Active time" />,
