@@ -1,7 +1,7 @@
 const STORAGE_KEY = "library.statistics.preferences.v1";
 
-const LIGHT_MIX = [18, 36, 55, 76, 96] as const;
-const DARK_MIX = [28, 45, 62, 79, 96] as const;
+const LIGHT_MIX = [18, 36, 55, 76, 100] as const;
+const DARK_MIX = [28, 45, 62, 79, 100] as const;
 
 export type StatisticsChartView = "heatmap" | "graph";
 
@@ -53,6 +53,6 @@ export function saveStatisticsPreferences(value: StatisticsPreferences): void {
 export function deriveStatisticsPalette(theme: "light" | "dark"): string[] {
   const mix = theme === "light" ? LIGHT_MIX : DARK_MIX;
   return mix.map(
-    (pct) => `color-mix(in oklch, var(--warning) ${pct}%, var(--surface-1))`,
+    (pct) => `color-mix(in srgb, var(--statistics-accent) ${pct}%, var(--surface-1))`,
   );
 }

@@ -79,22 +79,28 @@ test("handles storage read and write errors without throwing", () => {
   expect(() => saveStatisticsPreferences({ chartView: "graph" })).not.toThrow();
 });
 
-test("derives five semantic warning color mixes for dark theme", () => {
-  expect(deriveStatisticsPalette("dark")).toEqual([
-    "color-mix(in oklch, var(--warning) 28%, var(--surface-1))",
-    "color-mix(in oklch, var(--warning) 45%, var(--surface-1))",
-    "color-mix(in oklch, var(--warning) 62%, var(--surface-1))",
-    "color-mix(in oklch, var(--warning) 79%, var(--surface-1))",
-    "color-mix(in oklch, var(--warning) 96%, var(--surface-1))",
+test("derives five blue accent color mixes for dark theme", () => {
+  const palette = deriveStatisticsPalette("dark");
+  expect(palette).toEqual([
+    "color-mix(in srgb, var(--statistics-accent) 28%, var(--surface-1))",
+    "color-mix(in srgb, var(--statistics-accent) 45%, var(--surface-1))",
+    "color-mix(in srgb, var(--statistics-accent) 62%, var(--surface-1))",
+    "color-mix(in srgb, var(--statistics-accent) 79%, var(--surface-1))",
+    "color-mix(in srgb, var(--statistics-accent) 100%, var(--surface-1))",
   ]);
+  expect(palette.some((color) => color.includes("in oklch"))).toBe(false);
+  expect(palette.some((color) => color.includes("var(--warning)"))).toBe(false);
 });
 
-test("derives five semantic warning color mixes for light theme", () => {
-  expect(deriveStatisticsPalette("light")).toEqual([
-    "color-mix(in oklch, var(--warning) 18%, var(--surface-1))",
-    "color-mix(in oklch, var(--warning) 36%, var(--surface-1))",
-    "color-mix(in oklch, var(--warning) 55%, var(--surface-1))",
-    "color-mix(in oklch, var(--warning) 76%, var(--surface-1))",
-    "color-mix(in oklch, var(--warning) 96%, var(--surface-1))",
+test("derives five blue accent color mixes for light theme", () => {
+  const palette = deriveStatisticsPalette("light");
+  expect(palette).toEqual([
+    "color-mix(in srgb, var(--statistics-accent) 18%, var(--surface-1))",
+    "color-mix(in srgb, var(--statistics-accent) 36%, var(--surface-1))",
+    "color-mix(in srgb, var(--statistics-accent) 55%, var(--surface-1))",
+    "color-mix(in srgb, var(--statistics-accent) 76%, var(--surface-1))",
+    "color-mix(in srgb, var(--statistics-accent) 100%, var(--surface-1))",
   ]);
+  expect(palette.some((color) => color.includes("in oklch"))).toBe(false);
+  expect(palette.some((color) => color.includes("var(--warning)"))).toBe(false);
 });

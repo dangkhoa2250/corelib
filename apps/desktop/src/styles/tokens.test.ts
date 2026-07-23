@@ -55,12 +55,14 @@ test("keeps disabled Statistics and shared combobox controls on their normal sur
   expect(statisticsDisabled).toContain("cursor: not-allowed;");
 });
 
-test("defines the Statistics sparkline accent through a semantic warning token", () => {
+test("defines a theme-aware blue Statistics accent for charts and sparklines", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const statisticsCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
   const sparkline = readFileSync(join(currentDir, "../features/statistics/components/MiniSparkline.tsx"), "utf8");
 
-  expect(statisticsCss).toMatch(/\.statistics-shell\s*\{[\s\S]*?--statistics-accent:\s*var\(--warning\);/);
+  expect(statisticsCss).toMatch(/\.statistics-shell\s*\{[\s\S]*?--statistics-accent:\s*#456079;/);
+  expect(statisticsCss).toMatch(/\[data-theme="dark"\]\s+\.statistics-shell\s*\{[\s\S]*?--statistics-accent:\s*#83c3ff;/);
+  expect(statisticsCss).not.toMatch(/--statistics-accent:\s*var\(--warning\)/);
   expect(sparkline).toContain('stroke="var(--statistics-accent)"');
 });
 
@@ -100,6 +102,7 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
   const desktopCss = statCss.slice(0, statCss.indexOf("@media"));
+  const statCssWithoutStatisticsAccent = statCss.replace(/--statistics-accent:\s*#[0-9a-fA-F]{3,8};/g, "");
 
   const shellContent = desktopCss.match(/\.statistics-shell__content\s*\{([^}]*)\}/)?.[1] ?? "";
   const decreaseComparison = desktopCss.match(/\.statistics-kpi-card__comparison\[data-kind="decrease"\]\s*\{([^}]*)\}/)?.[1] ?? "";
@@ -115,7 +118,7 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
   expect(decreaseComparison).toContain("color: var(--text-secondary);");
   expect(decreaseComparison).not.toContain("var(--error)");
   expect(statCss).not.toMatch(/\boverflow(?:-y)?\s*:\s*(?:auto|scroll)\s*;/);
-  expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,6};/);
+  expect(statCssWithoutStatisticsAccent).not.toMatch(/#[0-9a-fA-F]{3,6};/);
 });
 
 test("pins every approved desktop Statistics density token", () => {
@@ -166,7 +169,8 @@ test("pins every approved desktop Statistics density token", () => {
   expect(block("\\.statistics-heatmap__x-axis")).toContain("margin-bottom: 6px;");
   expect(block("\\.statistics-heatmap__tooltip")).toContain("margin: 10px 0 0;");
   expect(block("\\.statistics-heatmap__summary")).toContain("margin: 10px 0 0;");
-  expect(desktopCss).toContain("--statistics-accent: var(--warning);");
+  expect(desktopCss).toContain("--statistics-accent: #456079;");
+  expect(statCss).toContain("--statistics-accent: #83c3ff;");
   expect(statCss).not.toContain(".statistics-color-picker");
   expect(block("\\.statistics-heatmap-wrapper--year")).toContain("--heatmap-gap: 1px;");
   expect(block("\\.statistics-heatmap-wrapper--year")).toContain("--heatmap-row-height: 17px;");
@@ -183,6 +187,7 @@ test("pins every approved desktop Statistics density token", () => {
 test("keeps the statistics dashboard flat, responsive, and token-correct", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const statCssWithoutStatisticsAccent = statCss.replace(/--statistics-accent:\s*#[0-9a-fA-F]{3,8};/g, "");
   const kpiGrid = statCss.match(/\.statistics-kpi-grid\s*\{([^}]*)\}/)?.[1] ?? "";
   const appGrid = statCss.match(/\.statistics-app-grid\s*\{([^}]*)\}/)?.[1] ?? "";
   const emptyCell = statCss.match(/\.statistics-heatmap__cell\s*\{([^}]*)\}/)?.[1] ?? "";
@@ -192,7 +197,7 @@ test("keeps the statistics dashboard flat, responsive, and token-correct", () =>
   expect(statCss).not.toMatch(/linear-gradient|radial-gradient|conic-gradient/);
   expect(statCss).not.toMatch(/overflow-x\s*:\s*(auto|scroll)/);
   expect(statCss).not.toContain("width: max-content");
-  expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+  expect(statCssWithoutStatisticsAccent).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
   expect(kpiGrid).toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
   expect(appGrid).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
   expect(emptyCell).toContain("background: var(--surface-3);");

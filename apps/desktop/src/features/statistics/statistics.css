@@ -1,8 +1,12 @@
 .statistics-shell {
   height: 100%;
-  --statistics-accent: var(--warning);
+  --statistics-accent: #456079;
   background: var(--main-bg);
   color: var(--text-primary);
+}
+
+[data-theme="dark"] .statistics-shell {
+  --statistics-accent: #83c3ff;
 }
 
 .statistics-shell > [data-testid="statistics-scroll-area"],
