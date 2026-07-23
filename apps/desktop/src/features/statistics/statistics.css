@@ -316,7 +316,7 @@
 .statistics-chart-card__controls { margin-bottom: 16px; }
 .statistics-app-filter { width: min(240px, 100%); }
 .statistics-graph { width: 100%; min-width: 0; }
-.statistics-graph svg { display: block; width: 100%; min-height: 230px; }
+.statistics-graph svg { display: block; width: 100%; min-height: 190px; }
 .statistics-graph__mode-bar { margin-bottom: 12px; }
 .statistics-graph__mode-btn { padding: 6px 11px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--surface-2); color: var(--text-secondary); font: inherit; font-size: 12px; cursor: pointer; }
 .statistics-graph__mode-btn:hover { background: var(--interactive-hover); color: var(--text-primary); }

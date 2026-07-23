@@ -22,13 +22,26 @@ export interface ActivityGraphProps {
 }
 
 const VB_W = 600;
-const VB_H = 200;
-const PT = 20;
+const VB_H = 120;
+const PT = 12;
 const PR = 20;
-const PB = 30;
+const PB = 24;
 const PL = 50;
 const PW = VB_W - PL - PR;
 const PH = VB_H - PT - PB;
+
+function renderedSvgContentBounds(rect: DOMRect) {
+  const width = rect.width;
+  const height = rect.height;
+  const scale = Math.min(width / VB_W, height / VB_H);
+  const left = rect.left || 0;
+  const top = rect.top || 0;
+  return {
+    scale,
+    left: left + (width - VB_W * scale) / 2,
+    top: top + (height - VB_H * scale) / 2,
+  };
+}
 
 function parseDate(s: string): { y: number; m: number; d: number } {
   const [y, m, d] = s.split("-").map(Number);
@@ -167,7 +180,7 @@ export function ActivityGraph({
 
   const yTicks = useMemo(() => {
     const ticks: number[] = [];
-    const step = Math.max(1, Math.ceil(maxY / 4));
+    const step = Math.max(1, Math.ceil(maxY / 3));
     for (let v = 0; v <= maxY; v += step) {
       ticks.push(v);
     }
@@ -186,10 +199,15 @@ export function ActivityGraph({
     (idx: number) => {
       const bucket = data[idx];
       const containerRect = containerRef.current?.getBoundingClientRect();
+      const svgRect = svgRef.current?.getBoundingClientRect();
       if (!bucket || !containerRect) return;
+      const contentBounds = renderedSvgContentBounds(svgRect?.width && svgRect.height ? svgRect : containerRect);
+      if (contentBounds.scale <= 0) return;
+      const containerLeft = containerRect.left || 0;
+      const containerTop = containerRect.top || 0;
       setTooltip({
-        x: (xScale(idx) / VB_W) * containerRect.width,
-        y: (yScale(bucket.value) / VB_H) * containerRect.height - 30,
+        x: contentBounds.left + xScale(idx) * contentBounds.scale - containerLeft,
+        y: contentBounds.top + yScale(bucket.value) * contentBounds.scale - containerTop - 30,
         content: describePoint(bucket),
       });
     },
@@ -247,7 +265,9 @@ export function ActivityGraph({
       const containerRect = containerRef.current?.getBoundingClientRect();
       if (!rect || !containerRect) return;
 
-      const svgX = ((e.clientX - rect.left) / rect.width) * VB_W;
+      const contentBounds = renderedSvgContentBounds(rect);
+      if (contentBounds.scale <= 0) return;
+      const svgX = (e.clientX - contentBounds.left) / contentBounds.scale;
       let nearest = 0;
       let minDist = Infinity;
       for (let i = 0; i < n; i++) {
@@ -362,7 +382,7 @@ export function ActivityGraph({
                 y={y + 3}
                 textAnchor="end"
                 fill="var(--text-secondary)"
-                fontSize={10}
+                fontSize={7}
               >
                 {v}
               </text>
@@ -402,7 +422,7 @@ export function ActivityGraph({
             y={VB_H - 8}
             textAnchor="middle"
             fill="var(--text-secondary)"
-            fontSize={10}
+            fontSize={7}
           >
             {label}
           </text>

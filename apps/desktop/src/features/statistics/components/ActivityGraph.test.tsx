@@ -31,6 +31,38 @@ test("renders SVG with role img and descriptive label", () => {
   expect(screen.getByRole("img", { name: /active-time trend.*daily/ })).toBeInTheDocument();
 });
 
+test("uses a compact wide viewbox so the graph does not grow with the card width", () => {
+  render(<ActivityGraph buckets={dailyBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  expect(screen.getByRole("img")).toHaveAttribute("viewBox", "0 0 600 120");
+});
+
+test("limits the Y axis to four readable grid lines", () => {
+  const buckets: ActivityBucket[] = [
+    { date: "2026-07-21", value: 0 },
+    { date: "2026-07-22", value: 10 },
+  ];
+  const { container } = render(
+    <ActivityGraph buckets={buckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />,
+  );
+
+  expect(container.querySelectorAll("line")).toHaveLength(4);
+});
+
+test("uses compact seven-pixel axis labels without changing the tooltip", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const svg = screen.getByRole("img");
+  expect(Array.from(svg.querySelectorAll("text"))).not.toHaveLength(0);
+  expect(Array.from(svg.querySelectorAll("text")).every((label) => label.getAttribute("font-size") === "7")).toBe(true);
+
+  mockGraphBounds(screen.getByTestId("activity-graph"), svg);
+  fireEvent.focus(svg);
+  const tooltip = screen.getByTestId("activity-graph").querySelector(".statistics-graph__tooltip");
+  expect(tooltip).toHaveTextContent("2026-07-21: 0 Active time");
+  expect(tooltip).not.toHaveAttribute("font-size");
+});
+
 test("mode buttons call onModeChange", async () => {
   const onModeChange = vi.fn();
   const user = userEvent.setup();
@@ -159,6 +191,34 @@ test("uses a single marker and tooltip for keyboard navigation", () => {
 
   fireEvent.blur(svg);
   expect(screen.queryByTestId("activity-graph-marker")).not.toBeInTheDocument();
+});
+
+test("positions the keyboard tooltip from the rendered SVG content when it is vertically letterboxed", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  vi.spyOn(graph, "getBoundingClientRect").mockReturnValue({ left: 80, top: 20, width: 640, height: 340 } as DOMRect);
+  vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({ left: 100, top: 40, width: 600, height: 300 } as DOMRect);
+
+  fireEvent.focus(svg);
+  fireEvent.keyDown(svg, { key: "ArrowRight" });
+
+  const tooltip = graph.querySelector<HTMLElement>(".statistics-graph__tooltip");
+  expect(tooltip).toHaveStyle({ left: "335px", top: "92px" });
+});
+
+test("uses the rendered SVG content bounds for hover selection when it is horizontally letterboxed", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  vi.spyOn(graph, "getBoundingClientRect").mockReturnValue({ left: 80, top: 20, width: 1240, height: 160 } as DOMRect);
+  vi.spyOn(svg, "getBoundingClientRect").mockReturnValue({ left: 100, top: 40, width: 1200, height: 120 } as DOMRect);
+
+  fireEvent.mouseMove(svg, { clientX: 500, clientY: 80 });
+
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "50");
 });
 
 test("gives pointer interaction precedence and restores the keyboard point after pointer leave", () => {
