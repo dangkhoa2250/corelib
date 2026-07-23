@@ -2,8 +2,8 @@
 
 ## Source visual truth
 
-- The original temporary reference path is no longer available, and no in-repository reference screenshot was preserved.
-- Implementation screenshot: unavailable; not captured.
+- The older dashboard reference's original temporary path is no longer available, and no in-repository copy of that older reference was preserved.
+- The current blue reference exists at `/var/folders/bt/j1f5fvln301gww7qwxzwhfwr0000gn/T/codex-clipboard-bf46a518-1ebd-40fd-88c3-f4862a4bb51f.png`; no implementation screenshot or runtime comparison was captured.
 - Viewport: unavailable.
 - Intended states: Statistics overview in dark and light themes, including responsive layouts.
 
@@ -24,6 +24,19 @@
 - The final focused suite, isolated full suite, production frontend build, removed-API scan, forbidden-pattern scan, invariant scan, and `git diff --check` all passed with the results recorded above.
 - No Library app, Tauri development or release app, Vite runtime, preview, browser, or other project UI runtime was launched or used for this verification.
 - Actual light and dark WKWebView rendering, scroll behavior, and screenshot comparison remain unverified because runtime execution was forbidden.
+
+## 2026-07-24 CLI verification
+
+- Tested source revision: `b6484cc`. Dirty scope observed before verification: `apps/desktop/src/features/statistics/components/ActivityGraph.test.tsx`, `apps/desktop/src/features/statistics/components/ActivityGraph.tsx`, `apps/desktop/src/features/statistics/statistics.css`, and `node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/results.json`. These pre-existing changes, including the Vitest cache, were not modified or staged by this QA record.
+- Visual reference supplied for comparison (not opened in a browser or runtime): `/var/folders/bt/j1f5fvln301gww7qwxzwhfwr0000gn/T/codex-clipboard-bf46a518-1ebd-40fd-88c3-f4862a4bb51f.png`.
+- From `apps/desktop`, `npm test -- src/features/statistics src/components/ScrollArea.test.tsx src/styles/tokens.test.ts` exited 0: 21 test files / 152 tests passed; Vitest duration 3.72s (wall-clock `time -p`: 4.46s).
+- From `apps/desktop`, `npm test` exited 0: 76 test files / 518 tests passed; Vitest duration 11.12s (wall-clock `time -p`: 11.54s).
+- From `apps/desktop`, `npm run build` (`tsc && vite build`) exited 0: 6,318 modules transformed and Vite completed in 2.28s (wall-clock `time -p`: 4.94s). It emitted the standard warning that some minified chunks exceed 500 kB.
+- From the repository root, `git diff --check` exited 0 with no output.
+- From the repository root, `rg -n '<select|linear-gradient|radial-gradient|conic-gradient|overflow-x[[:space:]]*:[[:space:]]*(auto|scroll)|width[[:space:]]*:[[:space:]]*max-content' apps/desktop/src/features/statistics` exited 1 with no matches.
+- From the repository root, `rg -n --glob '!*.test.ts' --glob '!*.test.tsx' 'statistics-accent:\s*var\(--warning\)|color-mix\(in [^,]+,\s*var\(--warning\)' apps/desktop/src/features/statistics` exited 1 with no production-source matches.
+- Process observation was read-only: no running `tauri dev`, `vite`, or `library_desktop` process was present (aside from the process-search command itself).
+- No Library app, Tauri process, Vite runtime, browser, or WKWebView comparison was launched, reused, or performed. The supplied image therefore does not establish rendered color fidelity; blue/accent colors remain unverified in an actual rendered surface.
 
 ## Visual comparison history
 
