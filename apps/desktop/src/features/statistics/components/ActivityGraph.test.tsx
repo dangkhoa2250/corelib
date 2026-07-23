@@ -14,6 +14,18 @@ const dailyBuckets: ActivityBucket[] = Array.from({ length: 30 }, (_, i) => ({
   value: Math.floor(Math.random() * 60),
 }));
 
+const markerBuckets: ActivityBucket[] = [
+  { date: "2026-07-21", value: 0 },
+  { date: "2026-07-22", value: 2 },
+  { date: "2026-07-23", value: 1 },
+];
+
+function mockGraphBounds(graph: HTMLElement, svg: SVGSVGElement) {
+  const bounds = { left: 0, top: 0, width: 600, height: 200 } as DOMRect;
+  vi.spyOn(graph, "getBoundingClientRect").mockReturnValue(bounds);
+  vi.spyOn(svg, "getBoundingClientRect").mockReturnValue(bounds);
+}
+
 test("renders SVG with role img and descriptive label", () => {
   render(<ActivityGraph buckets={dailyBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
   expect(screen.getByRole("img", { name: /active-time trend.*daily/ })).toBeInTheDocument();
@@ -86,14 +98,87 @@ test("keeps weekly semantics in accessible point and tooltip text but not visibl
       valueLabel="Active time"
     />,
   );
-  const point = screen.getByLabelText("Week of 2026-07-20: 2 Active time");
+  expect(screen.getByLabelText("Week of 2026-07-20: 2 Active time")).toBeInTheDocument();
   const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
   vi.spyOn(graph, "getBoundingClientRect").mockReturnValue({ width: 600, height: 200 } as DOMRect);
 
-  fireEvent.focus(point);
+  fireEvent.focus(svg);
 
-  expect(screen.getByText("Week of 2026-07-20: 2 Active time")).toBeInTheDocument();
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("Week of 2026-07-20: 2 Active time");
   expect(Array.from(container.querySelectorAll("text")).every((element) => !element.textContent?.includes("Week of"))).toBe(true);
+});
+
+test("shows no graph markers until the graph is interacted with", () => {
+  const { container } = render(
+    <ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />,
+  );
+
+  expect(screen.queryByTestId("activity-graph-marker")).not.toBeInTheDocument();
+  expect(screen.getByTestId("activity-graph").querySelectorAll("circle")).toHaveLength(0);
+  expect(container.querySelectorAll("circle")).toHaveLength(0);
+});
+
+test("shows one radius-three marker for pointer interaction and removes it when the pointer leaves", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  fireEvent.mouseMove(svg, { clientX: 300, clientY: 100 });
+
+  expect(screen.getAllByTestId("activity-graph-marker")).toHaveLength(1);
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("r", "3");
+
+  fireEvent.mouseLeave(svg);
+
+  expect(screen.queryByTestId("activity-graph-marker")).not.toBeInTheDocument();
+});
+
+test("uses a single marker and tooltip for keyboard navigation", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  fireEvent.focus(svg);
+  expect(screen.getAllByTestId("activity-graph-marker")).toHaveLength(1);
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("r", "3");
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-21: 0 Active time");
+
+  fireEvent.keyDown(svg, { key: "ArrowRight" });
+  expect(screen.getAllByTestId("activity-graph-marker")).toHaveLength(1);
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-22: 2 Active time");
+
+  fireEvent.keyDown(svg, { key: "End" });
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
+  fireEvent.keyDown(svg, { key: "Home" });
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-21: 0 Active time");
+
+  fireEvent.blur(svg);
+  expect(screen.queryByTestId("activity-graph-marker")).not.toBeInTheDocument();
+});
+
+test("gives pointer interaction precedence and restores the keyboard point after pointer leave", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  fireEvent.focus(svg);
+  fireEvent.keyDown(svg, { key: "ArrowRight" });
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-22: 2 Active time");
+
+  fireEvent.mouseMove(svg, { clientX: 540, clientY: 100 });
+  expect(screen.getAllByTestId("activity-graph-marker")).toHaveLength(1);
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
+
+  fireEvent.mouseLeave(svg);
+  expect(screen.getAllByTestId("activity-graph-marker")).toHaveLength(1);
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-22: 2 Active time");
 });
 
 test("cumulative mode shows monotonic non-decreasing values", () => {

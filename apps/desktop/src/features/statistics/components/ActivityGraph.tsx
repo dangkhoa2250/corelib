@@ -102,6 +102,7 @@ export function ActivityGraph({
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [focusedIdx, setFocusedIdx] = useState(0);
+  const [keyboardActive, setKeyboardActive] = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
 
@@ -166,8 +167,23 @@ export function ActivityGraph({
     [mode, valueLabel],
   );
 
+  const showKeyboardTooltip = useCallback(
+    (idx: number) => {
+      const bucket = data[idx];
+      const containerRect = containerRef.current?.getBoundingClientRect();
+      if (!bucket || !containerRect) return;
+      setTooltip({
+        x: (xScale(idx) / VB_W) * containerRect.width,
+        y: (yScale(bucket.value) / VB_H) * containerRect.height - 30,
+        content: describePoint(bucket),
+      });
+    },
+    [data, describePoint, xScale, yScale],
+  );
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<SVGSVGElement>) => {
+      if (n === 0) return;
       let next = focusedIdx;
       switch (e.key) {
         case "ArrowRight":
@@ -187,15 +203,9 @@ export function ActivityGraph({
       }
       e.preventDefault();
       setFocusedIdx(next);
-      const cx = (xScale(next) / VB_W) * (containerRef.current?.getBoundingClientRect().width ?? PW);
-      const cy = (yScale(data[next].value) / VB_H) * (containerRef.current?.getBoundingClientRect().height ?? PH) - 30;
-      setTooltip({
-        x: cx,
-        y: cy,
-        content: describePoint(data[next]),
-      });
+      showKeyboardTooltip(next);
     },
-    [focusedIdx, n, data, xScale, yScale, describePoint],
+    [focusedIdx, n, showKeyboardTooltip],
   );
 
   const handleMouseMove = useCallback(
@@ -229,28 +239,28 @@ export function ActivityGraph({
 
   const handleMouseLeave = useCallback(() => {
     setHoveredIdx(null);
+    if (keyboardActive && data[focusedIdx]) {
+      showKeyboardTooltip(focusedIdx);
+    } else {
+      setTooltip(null);
+    }
+  }, [data, focusedIdx, keyboardActive, showKeyboardTooltip]);
+
+  const handleSvgFocus = useCallback(() => {
+    if (n === 0) return;
+    const next = Math.min(Math.max(focusedIdx, 0), n - 1);
+    setFocusedIdx(next);
+    setKeyboardActive(true);
+    showKeyboardTooltip(next);
+  }, [focusedIdx, n, showKeyboardTooltip]);
+
+  const handleSvgBlur = useCallback(() => {
+    setKeyboardActive(false);
     setTooltip(null);
   }, []);
 
-  const handlePointFocus = useCallback(
-    (idx: number) => {
-      setFocusedIdx(idx);
-      const containerRect = containerRef.current?.getBoundingClientRect();
-      if (!containerRect) return;
-      const cx = (xScale(idx) / VB_W) * containerRect.width;
-      const cy = (yScale(data[idx].value) / VB_H) * containerRect.height - 30;
-      setTooltip({
-        x: cx,
-        y: cy,
-        content: describePoint(data[idx]),
-      });
-    },
-    [data, xScale, yScale, describePoint],
-  );
-
-  const handlePointBlur = useCallback(() => {
-    setTooltip(null);
-  }, []);
+  const activeIdx = hoveredIdx ?? (keyboardActive ? focusedIdx : null);
+  const activeBucket = activeIdx === null ? null : data[activeIdx];
 
   const modeButtons = (
     <div className="statistics-graph__mode-bar">
@@ -294,6 +304,8 @@ export function ActivityGraph({
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         preserveAspectRatio="xMidYMid meet"
         onKeyDown={handleKeyDown}
+        onFocus={handleSvgFocus}
+        onBlur={handleSvgBlur}
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
         tabIndex={0}
@@ -339,6 +351,16 @@ export function ActivityGraph({
             strokeLinejoin="round"
           />
         )}
+        {activeBucket && activeIdx !== null && (
+          <circle
+            data-testid="activity-graph-marker"
+            cx={xScale(activeIdx)}
+            cy={yScale(activeBucket.value)}
+            r={3}
+            fill="var(--chart-line, currentColor)"
+            aria-hidden="true"
+          />
+        )}
         {xLabels.map(({ idx, label }) => (
           <text
             key={`xl-${idx}`}
@@ -351,23 +373,14 @@ export function ActivityGraph({
             {label}
           </text>
         ))}
-        {data.map((b, i) => {
-          const isActive = focusedIdx === i || hoveredIdx === i;
-          return (
-            <circle
-              key={i}
-              cx={xScale(i)}
-              cy={yScale(b.value)}
-              r={isActive ? 5 : 3}
-              fill="var(--chart-line, currentColor)"
-              tabIndex={isActive ? 0 : -1}
-              onFocus={() => handlePointFocus(i)}
-              onBlur={handlePointBlur}
-              aria-label={describePoint(b)}
-            />
-          );
-        })}
       </svg>
+      <ul className="sr-only" aria-label={`${valueLabel} data`}>
+        {data.map((bucket) => (
+          <li key={bucket.date} aria-label={describePoint(bucket)}>
+            {describePoint(bucket)}
+          </li>
+        ))}
+      </ul>
       {tooltip && (
         <div
           className="statistics-graph__tooltip"
