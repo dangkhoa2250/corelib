@@ -124,7 +124,11 @@ test("pins every approved desktop Statistics density token", () => {
   const desktopCss = statCss.slice(0, statCss.indexOf("@media"));
   const block = (selector: string) => desktopCss.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
   const shellPaddings = [...statCss.matchAll(/\.statistics-shell__content\s*\{[^}]*padding:\s*([^;]+);/g)].map((match) => match[1].trim());
+  const sharedContent = block("\\.statistics-shell__header,\\s*\\.statistics-page,\\s*\\.statistics-shell__content > :not\\(\\.statistics-shell__header\\)");
+  const adjacentSections = block("\\.statistics-section \\+ \\.statistics-section,\\s*\\.statistics-kpi-grid \\+ \\.statistics-section");
+  const screenReaderOnly = block("\\.sr-only");
 
+  expect(sharedContent).toContain("max-width: 1180px;");
   expect(block("\\.statistics-shell__header")).toContain("gap: 20px;");
   expect(block("\\.statistics-shell__header")).toContain("margin-bottom: 24px;");
   expect(block("\\.statistics-shell__heading h1")).toContain("font-size: clamp(28px, 2.7vw, 36px);");
@@ -145,7 +149,7 @@ test("pins every approved desktop Statistics density token", () => {
   expect(block("\\.statistics-control")).toContain("padding: 6px 10px;");
   expect(block("\\.statistics-control")).toContain("font-size: 13px;");
   expect(desktopCss).toContain(".statistics-section {\n  padding: 22px;\n  border-radius: 16px;\n}");
-  expect(desktopCss).toContain("margin-top: 18px;");
+  expect(adjacentSections).toContain("margin-top: 18px;");
   expect(block("\\.statistics-section__header")).toContain("margin-bottom: 16px;");
   expect(block("\\.statistics-section__title")).toContain("font-size: 20px;");
   expect(block("\\.statistics-app-grid")).toContain("gap: 16px;");
@@ -167,6 +171,11 @@ test("pins every approved desktop Statistics density token", () => {
   expect(block("\\.statistics-heatmap-wrapper--year")).toContain("--heatmap-gap: 1px;");
   expect(block("\\.statistics-heatmap-wrapper--year")).toContain("--heatmap-row-height: 17px;");
   expect(block("\\.statistics-heatmap-wrapper--year \\.statistics-heatmap__cell")).toContain("border-radius: 2px;");
+  expect(screenReaderOnly).toContain("position: absolute;");
+  expect(screenReaderOnly).toContain("width: 1px;");
+  expect(screenReaderOnly).toContain("height: 1px;");
+  expect(screenReaderOnly).toContain("overflow: hidden;");
+  expect(screenReaderOnly).toContain("clip: rect(0,0,0,0);");
   expect(shellPaddings).toEqual(["28px 20px 38px 28px", "26px 20px 36px 24px", "22px 20px 34px 18px"]);
   expect(shellPaddings.map((padding) => padding.split(/\s+/)[1])).toEqual(["20px", "20px", "20px"]);
 });
