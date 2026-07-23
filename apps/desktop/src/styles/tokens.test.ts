@@ -55,12 +55,12 @@ test("keeps disabled Statistics and shared combobox controls on their normal sur
   expect(statisticsDisabled).toContain("cursor: not-allowed;");
 });
 
-test("defines the Statistics sparkline accent through a semantic token", () => {
+test("defines the Statistics sparkline accent through a semantic warning token", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const statisticsCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
   const sparkline = readFileSync(join(currentDir, "../features/statistics/components/MiniSparkline.tsx"), "utf8");
 
-  expect(statisticsCss).toMatch(/\.statistics-shell\s*\{[\s\S]*?--statistics-accent:\s*var\(--link\);/);
+  expect(statisticsCss).toMatch(/\.statistics-shell\s*\{[\s\S]*?--statistics-accent:\s*var\(--warning\);/);
   expect(sparkline).toContain('stroke="var(--statistics-accent)"');
 });
 
@@ -99,10 +99,19 @@ test("uses one transparent-track scrollbar primitive across the app", () => {
 test("uses semantic tokens in Statistics CSS with proper scroll-surface padding", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const desktopCss = statCss.slice(0, statCss.indexOf("@media"));
 
-  const shellContent = statCss.match(/\.statistics-shell__content\s*\{([^}]*)\}/)?.[1] ?? "";
-  const decreaseComparison = statCss.match(/\.statistics-kpi-card__comparison\[data-kind="decrease"\]\s*\{([^}]*)\}/)?.[1] ?? "";
-  expect(shellContent).toContain("padding: 32px 20px 44px 32px;");
+  const shellContent = desktopCss.match(/\.statistics-shell__content\s*\{([^}]*)\}/)?.[1] ?? "";
+  const decreaseComparison = desktopCss.match(/\.statistics-kpi-card__comparison\[data-kind="decrease"\]\s*\{([^}]*)\}/)?.[1] ?? "";
+  const kpiCard = desktopCss.match(/\.statistics-kpi-card\s*\{([^}]*)\}/)?.[1] ?? "";
+  const section = desktopCss.match(/\.statistics-section \{\n  padding: 22px;\n  border-radius: 16px;\n\}/)?.[0] ?? "";
+  const appCard = desktopCss.match(/\.statistics-app-card\s*\{([^}]*)\}/)?.[1] ?? "";
+  expect(shellContent).toContain("padding: 28px 20px 38px 28px;");
+  expect(kpiCard).toContain("min-height: 156px;");
+  expect(section).toContain("padding: 22px;");
+  expect(section).toContain("border-radius: 16px;");
+  expect(appCard).toContain("padding: 20px;");
+  expect(appCard).toContain("border-radius: 14px;");
   expect(decreaseComparison).toContain("color: var(--text-secondary);");
   expect(decreaseComparison).not.toContain("var(--error)");
   expect(statCss).not.toContain("overflow: auto;");
@@ -115,6 +124,8 @@ test("keeps the statistics dashboard flat, responsive, and token-correct", () =>
   const kpiGrid = statCss.match(/\.statistics-kpi-grid\s*\{([^}]*)\}/)?.[1] ?? "";
   const appGrid = statCss.match(/\.statistics-app-grid\s*\{([^}]*)\}/)?.[1] ?? "";
   const emptyCell = statCss.match(/\.statistics-heatmap__cell\s*\{([^}]*)\}/)?.[1] ?? "";
+  const yearHeatmap = statCss.match(/\.statistics-heatmap-wrapper--year\s*\{([^}]*)\}/)?.[1] ?? "";
+  const yearCells = statCss.match(/\.statistics-heatmap-wrapper--year \.statistics-heatmap__cell\s*\{([^}]*)\}/)?.[1] ?? "";
 
   expect(statCss).not.toMatch(/linear-gradient|radial-gradient|conic-gradient/);
   expect(statCss).not.toMatch(/overflow-x\s*:\s*(auto|scroll)/);
@@ -123,6 +134,9 @@ test("keeps the statistics dashboard flat, responsive, and token-correct", () =>
   expect(kpiGrid).toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
   expect(appGrid).toContain("grid-template-columns: repeat(2, minmax(0, 1fr));");
   expect(emptyCell).toContain("background: var(--surface-3);");
+  expect(yearHeatmap).toContain("--heatmap-gap: 1px;");
+  expect(yearHeatmap).toContain("--heatmap-row-height: 17px;");
+  expect(yearCells).toContain("border-radius: 2px;");
   expect(statCss).toContain("color: var(--text-primary);");
   expect(statCss).toContain("color: var(--text-secondary);");
   expect(statCss).toContain("color: var(--success);");
@@ -131,6 +145,14 @@ test("keeps the statistics dashboard flat, responsive, and token-correct", () =>
   expect(statCss).toContain("@media (max-width: 720px)");
   expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-kpi-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-kpi-grid,\s*\.statistics-app-grid \{ grid-template-columns: minmax\(0, 1fr\);/);
+  expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-shell__content \{ padding: 26px 20px 36px 24px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-kpi-card \{ min-height: 146px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-section \{ padding: 20px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-shell__content \{ padding: 22px 20px 34px 18px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-control \{ min-height: 36px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-kpi-card \{ min-height: 148px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-section \{ padding: 18px;/);
+  expect(statCss).not.toContain(".statistics-color-picker");
 });
 
 test("keeps non-interactive Statistics insight cards free of clickable affordances", () => {
