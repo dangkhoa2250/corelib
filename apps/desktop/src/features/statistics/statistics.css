@@ -379,6 +379,7 @@
   .statistics-kpi-grid,
   .statistics-app-grid { grid-template-columns: minmax(0, 1fr); }
   .statistics-control { min-height: 36px; }
+  .statistics-range-picker > div:last-child .statistics-control { width: 36px; min-height: 36px; }
   .statistics-kpi-card { min-height: 148px; }
   .statistics-section { padding: 18px; border-radius: 15px; }
   .statistics-section__header { align-items: flex-start; flex-direction: column; }

@@ -212,6 +212,7 @@ test("keeps the statistics dashboard flat, responsive, and token-correct", () =>
   expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-section \{ padding: 20px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-shell__content \{ padding: 22px 20px 34px 18px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-control \{ min-height: 36px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-range-picker > div:last-child \.statistics-control \{ width: 36px; min-height: 36px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-kpi-card \{ min-height: 148px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-section \{ padding: 18px;/);
   expect(statCss).not.toContain(".statistics-color-picker");
