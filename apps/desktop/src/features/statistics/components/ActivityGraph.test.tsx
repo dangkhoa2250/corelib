@@ -20,7 +20,7 @@ const markerBuckets: ActivityBucket[] = [
   { date: "2026-07-23", value: 1 },
 ];
 
-function mockGraphBounds(graph: HTMLElement, svg: SVGSVGElement) {
+function mockGraphBounds(graph: HTMLElement, svg: Element) {
   const bounds = { left: 0, top: 0, width: 600, height: 200 } as DOMRect;
   vi.spyOn(graph, "getBoundingClientRect").mockReturnValue(bounds);
   vi.spyOn(svg, "getBoundingClientRect").mockReturnValue(bounds);
@@ -70,7 +70,7 @@ test("uses six evenly distributed compact labels for 53 weekly buckets", () => {
 
   expect(labels.map(({ idx }) => idx)).toEqual([0, 10, 21, 31, 42, 52]);
   expect(labels[0].label).toBe("Dec 29");
-  expect(labels.at(-1)?.idx).toBe(52);
+  expect(labels[labels.length - 1]?.idx).toBe(52);
   expect(labels.every(({ label }) => !label.includes("Week of"))).toBe(true);
 });
 
