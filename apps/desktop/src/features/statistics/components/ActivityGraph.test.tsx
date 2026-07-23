@@ -202,6 +202,101 @@ test("keeps the pointer marker and tooltip authoritative while keyboard navigati
   expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-22: 2 Active time");
 });
 
+test("keeps the pointer interaction authoritative when the graph receives focus after hover", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  fireEvent.mouseMove(svg, { clientX: 540, clientY: 100 });
+  svg.focus();
+  fireEvent.focus(svg);
+
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "580");
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
+});
+
+test("keeps the pointer interaction visible when the graph blurs until pointer leave", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  svg.focus();
+  fireEvent.focus(svg);
+  fireEvent.mouseMove(svg, { clientX: 540, clientY: 100 });
+  svg.blur();
+  fireEvent.blur(svg);
+
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "580");
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
+
+  fireEvent.mouseLeave(svg);
+  expect(screen.queryByTestId("activity-graph-marker")).not.toBeInTheDocument();
+  expect(graph.querySelector(".statistics-graph__tooltip")).not.toBeInTheDocument();
+});
+
+test("clamps focused selection and refreshes its tooltip when the data changes", () => {
+  const { rerender } = render(
+    <ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />,
+  );
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  svg.focus();
+  fireEvent.focus(svg);
+  fireEvent.keyDown(svg, { key: "End" });
+  rerender(
+    <ActivityGraph
+      buckets={[
+        { date: "2026-07-24", value: 4 },
+        { date: "2026-07-25", value: 5 },
+      ]}
+      mode="daily"
+      onModeChange={vi.fn()}
+      valueLabel="Active time"
+    />,
+  );
+
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "580");
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-25: 5 Active time");
+});
+
+test("clears stale pointer interaction when the graph data changes without keyboard focus", () => {
+  const { rerender } = render(
+    <ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />,
+  );
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  fireEvent.mouseMove(svg, { clientX: 540, clientY: 100 });
+  rerender(<ActivityGraph buckets={markerBuckets} mode="cumulative" onModeChange={vi.fn()} valueLabel="Total time" />);
+
+  expect(screen.queryByTestId("activity-graph-marker")).not.toBeInTheDocument();
+  expect(graph.querySelector(".statistics-graph__tooltip")).not.toBeInTheDocument();
+});
+
+test("announces the keyboard-selected graph point through a live status", () => {
+  render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
+
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  svg.focus();
+  fireEvent.focus(svg);
+  const status = screen.getByRole("status");
+  expect(svg).toHaveAttribute("aria-describedby", status.id);
+  expect(status).toHaveTextContent("2026-07-21: 0 Active time");
+
+  fireEvent.keyDown(svg, { key: "ArrowRight" });
+  expect(status).toHaveTextContent("2026-07-22: 2 Active time");
+});
+
 test("cumulative mode shows monotonic non-decreasing values", () => {
   const { container } = render(
     <ActivityGraph buckets={dailyBuckets} mode="cumulative" onModeChange={vi.fn()} valueLabel="Active time" />,

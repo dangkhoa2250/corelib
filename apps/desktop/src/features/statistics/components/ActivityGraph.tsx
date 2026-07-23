@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 
 export type GraphMode = "daily" | "weekly" | "cumulative";
 
@@ -102,9 +102,12 @@ export function ActivityGraph({
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [focusedIdx, setFocusedIdx] = useState(0);
+  const focusedIdxRef = useRef(focusedIdx);
   const [keyboardActive, setKeyboardActive] = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
+  const selectedValueId = useId();
+  focusedIdxRef.current = focusedIdx;
 
   const data = useMemo(() => {
     if (mode === "weekly") return aggregateWeekly(buckets);
@@ -181,6 +184,22 @@ export function ActivityGraph({
     [data, describePoint, xScale, yScale],
   );
 
+  useEffect(() => {
+    const isSvgFocused = svgRef.current === document.activeElement;
+    if (isSvgFocused && n > 0) {
+      const next = Math.min(Math.max(focusedIdxRef.current, 0), n - 1);
+      setHoveredIdx(null);
+      setFocusedIdx(next);
+      setKeyboardActive(true);
+      showKeyboardTooltip(next);
+      return;
+    }
+
+    setHoveredIdx(null);
+    setKeyboardActive(false);
+    setTooltip(null);
+  }, [data, describePoint, n, showKeyboardTooltip]);
+
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<SVGSVGElement>) => {
       if (n === 0) return;
@@ -203,6 +222,7 @@ export function ActivityGraph({
       }
       e.preventDefault();
       setFocusedIdx(next);
+      setKeyboardActive(true);
       if (hoveredIdx === null) showKeyboardTooltip(next);
     },
     [focusedIdx, hoveredIdx, n, showKeyboardTooltip],
@@ -251,16 +271,17 @@ export function ActivityGraph({
     const next = Math.min(Math.max(focusedIdx, 0), n - 1);
     setFocusedIdx(next);
     setKeyboardActive(true);
-    showKeyboardTooltip(next);
-  }, [focusedIdx, n, showKeyboardTooltip]);
+    if (hoveredIdx === null) showKeyboardTooltip(next);
+  }, [focusedIdx, hoveredIdx, n, showKeyboardTooltip]);
 
   const handleSvgBlur = useCallback(() => {
     setKeyboardActive(false);
-    setTooltip(null);
-  }, []);
+    if (hoveredIdx === null) setTooltip(null);
+  }, [hoveredIdx]);
 
   const activeIdx = hoveredIdx ?? (keyboardActive ? focusedIdx : null);
   const activeBucket = activeIdx === null ? null : data[activeIdx];
+  const selectedValue = keyboardActive && data[focusedIdx] ? describePoint(data[focusedIdx]) : "";
 
   const modeButtons = (
     <div className="statistics-graph__mode-bar">
@@ -301,6 +322,7 @@ export function ActivityGraph({
         ref={svgRef}
         role="img"
         aria-label={`${valueLabel.replace(/ /g, "-").toLowerCase()} trend, ${mode} view`}
+        aria-describedby={selectedValueId}
         viewBox={`0 0 ${VB_W} ${VB_H}`}
         preserveAspectRatio="xMidYMid meet"
         onKeyDown={handleKeyDown}
@@ -381,6 +403,9 @@ export function ActivityGraph({
           </li>
         ))}
       </ul>
+      <div id={selectedValueId} className="sr-only" role="status" aria-live="polite">
+        {selectedValue}
+      </div>
       {tooltip && (
         <div
           className="statistics-graph__tooltip"
