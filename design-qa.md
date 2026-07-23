@@ -9,10 +9,10 @@
 
 ## Automated evidence
 
-- Focused frontend tests: 24 files / 140 tests passed.
-- Full frontend tests: 77 files / 481 tests passed.
+- Focused frontend tests: 25 files / 159 tests passed.
+- Full frontend tests: 77 files / 495 tests passed.
 - Production frontend build: passed.
-- Rust tests: 191 unit tests and 1 integration test passed.
+- Rust tests: 198 unit tests and 1 integration test passed.
 - Clippy with `-D warnings`: passed.
 - Token/forbidden-pattern scan: no Statistics/Admin native selector, gradient, horizontal-scroll, or `max-content` match.
 - `git diff --check`: passed.
