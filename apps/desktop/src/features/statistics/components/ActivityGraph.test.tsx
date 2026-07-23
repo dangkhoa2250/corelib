@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import {
@@ -202,7 +202,7 @@ test("keeps the pointer marker and tooltip authoritative while keyboard navigati
   expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-22: 2 Active time");
 });
 
-test("keeps the pointer interaction authoritative when the graph receives focus after hover", () => {
+test("keeps the pointer interaction authoritative when the graph receives focus after hover", async () => {
   render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
 
   const graph = screen.getByTestId("activity-graph");
@@ -211,13 +211,14 @@ test("keeps the pointer interaction authoritative when the graph receives focus 
 
   fireEvent.mouseMove(svg, { clientX: 540, clientY: 100 });
   svg.focus();
-  fireEvent.focus(svg);
+
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("2026-07-21: 0 Active time"));
 
   expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "580");
   expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
 });
 
-test("keeps the pointer interaction visible when the graph blurs until pointer leave", () => {
+test("keeps the pointer interaction visible when the graph blurs until pointer leave", async () => {
   render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
 
   const graph = screen.getByTestId("activity-graph");
@@ -225,10 +226,11 @@ test("keeps the pointer interaction visible when the graph blurs until pointer l
   mockGraphBounds(graph, svg);
 
   svg.focus();
-  fireEvent.focus(svg);
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("2026-07-21: 0 Active time"));
   fireEvent.mouseMove(svg, { clientX: 540, clientY: 100 });
   svg.blur();
-  fireEvent.blur(svg);
+
+  await waitFor(() => expect(screen.getByRole("status")).toBeEmptyDOMElement());
 
   expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "580");
   expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
@@ -238,7 +240,7 @@ test("keeps the pointer interaction visible when the graph blurs until pointer l
   expect(graph.querySelector(".statistics-graph__tooltip")).not.toBeInTheDocument();
 });
 
-test("clamps focused selection and refreshes its tooltip when the data changes", () => {
+test("clamps focused selection and refreshes its tooltip when the data changes", async () => {
   const { rerender } = render(
     <ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />,
   );
@@ -247,7 +249,7 @@ test("clamps focused selection and refreshes its tooltip when the data changes",
   mockGraphBounds(graph, svg);
 
   svg.focus();
-  fireEvent.focus(svg);
+  await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("2026-07-21: 0 Active time"));
   fireEvent.keyDown(svg, { key: "End" });
   rerender(
     <ActivityGraph
@@ -280,7 +282,7 @@ test("clears stale pointer interaction when the graph data changes without keybo
   expect(graph.querySelector(".statistics-graph__tooltip")).not.toBeInTheDocument();
 });
 
-test("announces the keyboard-selected graph point through a live status", () => {
+test("announces the keyboard-selected graph point through a live status", async () => {
   render(<ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />);
 
   const graph = screen.getByTestId("activity-graph");
@@ -288,13 +290,35 @@ test("announces the keyboard-selected graph point through a live status", () => 
   mockGraphBounds(graph, svg);
 
   svg.focus();
-  fireEvent.focus(svg);
   const status = screen.getByRole("status");
   expect(svg).toHaveAttribute("aria-describedby", status.id);
-  expect(status).toHaveTextContent("2026-07-21: 0 Active time");
+  await waitFor(() => expect(status).toHaveTextContent("2026-07-21: 0 Active time"));
 
   fireEvent.keyDown(svg, { key: "ArrowRight" });
   expect(status).toHaveTextContent("2026-07-22: 2 Active time");
+});
+
+test("preserves pointer hover when equivalent graph data is rerendered while focused", () => {
+  const { rerender } = render(
+    <ActivityGraph buckets={markerBuckets} mode="daily" onModeChange={vi.fn()} valueLabel="Active time" />,
+  );
+  const graph = screen.getByTestId("activity-graph");
+  const svg = screen.getByRole("img");
+  mockGraphBounds(graph, svg);
+
+  svg.focus();
+  fireEvent.mouseMove(svg, { clientX: 540, clientY: 100 });
+  rerender(
+    <ActivityGraph
+      buckets={markerBuckets.map((bucket) => ({ ...bucket }))}
+      mode="daily"
+      onModeChange={vi.fn()}
+      valueLabel="Active time"
+    />,
+  );
+
+  expect(screen.getByTestId("activity-graph-marker")).toHaveAttribute("cx", "580");
+  expect(graph.querySelector(".statistics-graph__tooltip")).toHaveTextContent("2026-07-23: 1 Active time");
 });
 
 test("cumulative mode shows monotonic non-decreasing values", () => {

@@ -109,11 +109,23 @@ export function ActivityGraph({
   const selectedValueId = useId();
   focusedIdxRef.current = focusedIdx;
 
-  const data = useMemo(() => {
+  const transformedData = useMemo(() => {
     if (mode === "weekly") return aggregateWeekly(buckets);
     if (mode === "cumulative") return cumulativeSum(buckets);
     return buckets;
   }, [buckets, mode]);
+  const dataSignature = useMemo(
+    () =>
+      `${mode.length}:${mode}:${buckets
+        .map((bucket) => `${bucket.date.length}:${bucket.date}:${String(bucket.value).length}:${bucket.value}`)
+        .join("")}`,
+    [buckets, mode],
+  );
+  const stableDataRef = useRef<{ signature: string; data: ActivityBucket[] } | null>(null);
+  if (stableDataRef.current?.signature !== dataSignature) {
+    stableDataRef.current = { signature: dataSignature, data: transformedData };
+  }
+  const data = stableDataRef.current.data;
 
   const maxY = useMemo(() => Math.max(...data.map((b) => b.value), 1), [data]);
   const n = data.length;
