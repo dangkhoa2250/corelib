@@ -7,6 +7,11 @@ export interface ActivityBucket {
   value: number;
 }
 
+export interface GraphAxisLabel {
+  idx: number;
+  label: string;
+}
+
 export interface ActivityGraphProps {
   buckets: ActivityBucket[];
   mode: GraphMode;
@@ -68,6 +73,20 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 function formatShortDate(dateStr: string): string {
   const { m, d } = parseDate(dateStr);
   return `${MONTHS[m - 1]} ${d}`;
+}
+
+export function graphAxisLabels(data: ActivityBucket[], mode: GraphMode): GraphAxisLabel[] {
+  if (data.length === 0) return [];
+  if (data.length === 1) return [{ idx: 0, label: formatShortDate(data[0].date) }];
+
+  const maxLabels = mode === "weekly" ? 6 : 7;
+  const labelCount = Math.min(data.length, maxLabels);
+  const indices = new Set<number>();
+  for (let index = 0; index < labelCount; index++) {
+    indices.add(Math.round((index * (data.length - 1)) / (labelCount - 1)));
+  }
+
+  return Array.from(indices, (idx) => ({ idx, label: formatShortDate(data[idx].date) }));
 }
 
 const MODES: GraphMode[] = ["daily", "weekly", "cumulative"];
@@ -140,21 +159,12 @@ export function ActivityGraph({
     return ticks;
   }, [maxY]);
 
-  const xLabels = useMemo(() => {
-    if (n <= 1) return [{ idx: 0, label: "" }];
-    const maxLabels = Math.min(n, 7);
-    const step = Math.max(1, Math.floor((n - 1) / (maxLabels - 1)));
-    const labels: { idx: number; label: string }[] = [];
-    for (let i = 0; i < n; i += step) {
-      const prefix = mode === "weekly" ? "Week of " : "";
-      labels.push({ idx: i, label: prefix + formatShortDate(data[i].date) });
-    }
-    if (labels[labels.length - 1]?.idx !== n - 1) {
-      const prefix = mode === "weekly" ? "Week of " : "";
-      labels.push({ idx: n - 1, label: prefix + formatShortDate(data[n - 1].date) });
-    }
-    return labels;
-  }, [data, n, mode]);
+  const xLabels = useMemo(() => graphAxisLabels(data, mode), [data, mode]);
+
+  const describePoint = useCallback(
+    (bucket: ActivityBucket) => `${mode === "weekly" ? `Week of ${bucket.date}` : bucket.date}: ${bucket.value} ${valueLabel}`,
+    [mode, valueLabel],
+  );
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<SVGSVGElement>) => {
@@ -182,10 +192,10 @@ export function ActivityGraph({
       setTooltip({
         x: cx,
         y: cy,
-        content: `${data[next].date}: ${data[next].value} ${valueLabel}`,
+        content: describePoint(data[next]),
       });
     },
-    [focusedIdx, n, data, xScale, yScale, valueLabel],
+    [focusedIdx, n, data, xScale, yScale, describePoint],
   );
 
   const handleMouseMove = useCallback(
@@ -211,10 +221,10 @@ export function ActivityGraph({
       setTooltip({
         x: e.clientX - containerRect.left + 10,
         y: e.clientY - containerRect.top - 30,
-        content: `${data[nearest].date}: ${data[nearest].value} ${valueLabel}`,
+        content: describePoint(data[nearest]),
       });
     },
-    [n, data, xScale, valueLabel],
+    [n, data, xScale, describePoint],
   );
 
   const handleMouseLeave = useCallback(() => {
@@ -232,10 +242,10 @@ export function ActivityGraph({
       setTooltip({
         x: cx,
         y: cy,
-        content: `${data[idx].date}: ${data[idx].value} ${valueLabel}`,
+        content: describePoint(data[idx]),
       });
     },
-    [data, xScale, yScale, valueLabel],
+    [data, xScale, yScale, describePoint],
   );
 
   const handlePointBlur = useCallback(() => {
@@ -353,7 +363,7 @@ export function ActivityGraph({
               tabIndex={isActive ? 0 : -1}
               onFocus={() => handlePointFocus(i)}
               onBlur={handlePointBlur}
-              aria-label={`${b.date}: ${b.value} ${valueLabel}`}
+              aria-label={describePoint(b)}
             />
           );
         })}
