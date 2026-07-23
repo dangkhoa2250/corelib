@@ -145,6 +145,33 @@ The implementation must expose the sampling logic as a pure helper so unit
 tests can verify dense Year data without depending on SVG measurements in
 JSDOM.
 
+## Graph point treatment
+
+The graph must not render a persistent circle for every data point. At rest,
+the chart contains only:
+
+- horizontal grid lines and axis labels;
+- the orange trend line;
+- the low-opacity orange area fill.
+
+Pointer interaction renders exactly one marker at the data point nearest the
+pointer's X position. The marker disappears when the pointer leaves the chart.
+
+Keyboard interaction retains equivalent access:
+
+- tabbing into the SVG activates the current keyboard index;
+- Left, Right, Home, and End move that index;
+- while the chart has keyboard focus, exactly one marker and its tooltip are
+  visible;
+- the marker disappears when keyboard focus leaves the chart.
+
+The active marker radius is `3` SVG units. The current inactive radius of `3`
+and active radius of `5` are removed along with the per-point circle list.
+There must be no oversized first-point marker on initial render.
+
+The line path remains the authoritative visual representation. Marker
+interaction state must not rebuild or alter the line or area paths.
+
 ## Responsive behavior
 
 At `721–900px`:
@@ -198,12 +225,15 @@ Implementation follows test-driven development:
    no longer influence rendering.
 2. Add failing pure-helper tests for evenly sampled Weekly labels and compact
    visible text.
-3. Update focused CSS regression assertions with the approved density targets,
+3. Add failing graph tests proving no markers exist at rest, one radius-three
+   marker appears for pointer interaction, and one marker remains available
+   during keyboard navigation.
+4. Update focused CSS regression assertions with the approved density targets,
    including the unchanged 20px scrollbar gutter.
-4. Implement the smallest production changes needed to pass.
-5. Run focused Statistics, shared token, and ScrollArea tests.
-6. Run the complete frontend test suite and production frontend build.
-7. Run `git diff --check` and a forbidden-pattern scan for gradients, native
+5. Implement the smallest production changes needed to pass.
+6. Run focused Statistics, shared token, and ScrollArea tests.
+7. Run the complete frontend test suite and production frontend build.
+8. Run `git diff --check` and a forbidden-pattern scan for gradients, native
    selectors, horizontal scroll, and `max-content`.
 
 Because the user forbids launching the application, passing tests and build do
@@ -219,6 +249,8 @@ comparison occurred.
 - No `Chart color` label, preset swatch, or custom color input remains.
 - Heatmap, graph, points, fills, and sparklines use semantic orange.
 - Weekly Year graph labels do not collide by construction.
+- Graphs render no persistent point markers at rest.
+- Pointer or keyboard interaction renders exactly one radius-three marker.
 - Year heatmap cell density remains unchanged.
 - No horizontal scrollbar is introduced.
 - The Statistics `ScrollArea` content keeps its 20px right inset.
