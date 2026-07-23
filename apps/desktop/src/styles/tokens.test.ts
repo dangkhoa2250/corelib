@@ -114,8 +114,61 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
   expect(appCard).toContain("border-radius: 14px;");
   expect(decreaseComparison).toContain("color: var(--text-secondary);");
   expect(decreaseComparison).not.toContain("var(--error)");
-  expect(statCss).not.toContain("overflow: auto;");
+  expect(statCss).not.toMatch(/\boverflow(?:-y)?\s*:\s*(?:auto|scroll)\s*;/);
   expect(statCss).not.toMatch(/#[0-9a-fA-F]{3,6};/);
+});
+
+test("pins every approved desktop Statistics density token", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const desktopCss = statCss.slice(0, statCss.indexOf("@media"));
+  const block = (selector: string) => desktopCss.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+  const shellPaddings = [...statCss.matchAll(/\.statistics-shell__content\s*\{[^}]*padding:\s*([^;]+);/g)].map((match) => match[1].trim());
+
+  expect(block("\\.statistics-shell__header")).toContain("gap: 20px;");
+  expect(block("\\.statistics-shell__header")).toContain("margin-bottom: 24px;");
+  expect(block("\\.statistics-shell__heading h1")).toContain("font-size: clamp(28px, 2.7vw, 36px);");
+  expect(block("\\.statistics-card")).toContain("padding: 18px;");
+  expect(block("\\.statistics-card")).toContain("border-radius: 14px;");
+  expect(block("\\.statistics-card__label")).toContain("font-size: 13px;");
+  expect(block("\\.statistics-card__value")).toContain("font-size: clamp(26px, 2.4vw, 32px);");
+  expect(block("\\.statistics-kpi-grid")).toContain("gap: 16px;");
+  expect(block("\\.statistics-kpi-card")).toContain("min-height: 156px;");
+  expect(block("\\.statistics-kpi-card__icon,\\s*\\.statistics-icon-tile")).toContain("width: 38px;");
+  expect(block("\\.statistics-kpi-card__icon,\\s*\\.statistics-icon-tile")).toContain("height: 38px;");
+  expect(block("\\.statistics-kpi-card__icon svg")).toContain("width: 19px;");
+  expect(block("\\.statistics-kpi-card__icon svg")).toContain("height: 19px;");
+  expect(block("\\.statistics-mini-sparkline")).toContain("width: min(108px, 42%);");
+  expect(block("\\.statistics-mini-sparkline")).toContain("height: 36px;");
+  expect(block("\\.statistics-mini-sparkline")).toContain("flex: 0 1 108px;");
+  expect(block("\\.statistics-control")).toContain("min-height: 34px;");
+  expect(block("\\.statistics-control")).toContain("padding: 6px 10px;");
+  expect(block("\\.statistics-control")).toContain("font-size: 13px;");
+  expect(desktopCss).toContain(".statistics-section {\n  padding: 22px;\n  border-radius: 16px;\n}");
+  expect(desktopCss).toContain("margin-top: 18px;");
+  expect(block("\\.statistics-section__header")).toContain("margin-bottom: 16px;");
+  expect(block("\\.statistics-section__title")).toContain("font-size: 20px;");
+  expect(block("\\.statistics-app-grid")).toContain("gap: 16px;");
+  expect(block("\\.statistics-app-card")).toContain("gap: 18px 16px;");
+  expect(block("\\.statistics-app-card")).toContain("padding: 20px;");
+  expect(block("\\.statistics-app-card")).toContain("border-radius: 14px;");
+  expect(block("\\.statistics-app-card__icon")).toContain("width: 40px;");
+  expect(block("\\.statistics-app-card__icon")).toContain("height: 40px;");
+  expect(block("\\.statistics-app-card__heading h3")).toContain("font-size: 18px;");
+  expect(block("\\.statistics-app-card__metrics strong")).toContain("font-size: 25px;");
+  expect(block("\\.statistics-app-card \\.statistics-mini-sparkline")).toContain("width: 92px;");
+  expect(block("\\.statistics-app-card \\.statistics-mini-sparkline")).toContain("height: 36px;");
+  expect(block("\\.statistics-chart-card__controls")).toContain("margin-bottom: 16px;");
+  expect(block("\\.statistics-heatmap__x-axis")).toContain("margin-bottom: 6px;");
+  expect(block("\\.statistics-heatmap__tooltip")).toContain("margin: 10px 0 0;");
+  expect(block("\\.statistics-heatmap__summary")).toContain("margin: 10px 0 0;");
+  expect(desktopCss).toContain("--statistics-accent: var(--warning);");
+  expect(statCss).not.toContain(".statistics-color-picker");
+  expect(block("\\.statistics-heatmap-wrapper--year")).toContain("--heatmap-gap: 1px;");
+  expect(block("\\.statistics-heatmap-wrapper--year")).toContain("--heatmap-row-height: 17px;");
+  expect(block("\\.statistics-heatmap-wrapper--year \\.statistics-heatmap__cell")).toContain("border-radius: 2px;");
+  expect(shellPaddings).toEqual(["28px 20px 38px 28px", "26px 20px 36px 24px", "22px 20px 34px 18px"]);
+  expect(shellPaddings.map((padding) => padding.split(/\s+/)[1])).toEqual(["20px", "20px", "20px"]);
 });
 
 test("keeps the statistics dashboard flat, responsive, and token-correct", () => {
