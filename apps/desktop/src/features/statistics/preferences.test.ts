@@ -38,6 +38,24 @@ test("ignores a legacy base color while preserving the saved view", () => {
   expect(loadStatisticsPreferences()).toEqual({ chartView: "graph" });
 });
 
+test("returns a fresh fallback preference object for every load", () => {
+  vi.stubGlobal("localStorage", mockStorage);
+
+  const fallback = loadStatisticsPreferences();
+  fallback.chartView = "graph";
+
+  expect(loadStatisticsPreferences()).toEqual({ chartView: "heatmap" });
+});
+
+test("overwrites legacy preferences with chart-view-only data", () => {
+  vi.stubGlobal("localStorage", mockStorage);
+  store[STORAGE_KEY] = JSON.stringify({ baseColor: "#3778d4", chartView: "graph" });
+
+  saveStatisticsPreferences({ chartView: "heatmap" });
+
+  expect(store[STORAGE_KEY]).toBe(JSON.stringify({ chartView: "heatmap" }));
+});
+
 test.each([null, "not-json", JSON.stringify({}), JSON.stringify({ chartView: "radar" })])(
   "defaults malformed, missing, or invalid persisted values to heatmap",
   (value) => {

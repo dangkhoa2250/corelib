@@ -9,16 +9,18 @@ export interface StatisticsPreferences {
   chartView: StatisticsChartView;
 }
 
-const DEFAULT_PREFERENCES: StatisticsPreferences = { chartView: "heatmap" };
-
 function isChartView(value: unknown): value is StatisticsChartView {
   return value === "heatmap" || value === "graph";
+}
+
+function defaultPreferences(): StatisticsPreferences {
+  return { chartView: "heatmap" };
 }
 
 export function loadStatisticsPreferences(): StatisticsPreferences {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_PREFERENCES;
+    if (!raw) return defaultPreferences();
 
     const parsed: unknown = JSON.parse(raw);
     if (
@@ -32,7 +34,7 @@ export function loadStatisticsPreferences(): StatisticsPreferences {
     // storage errors never break statistics
   }
 
-  return DEFAULT_PREFERENCES;
+  return defaultPreferences();
 }
 
 export function saveStatisticsPreferences(value: StatisticsPreferences): void {
