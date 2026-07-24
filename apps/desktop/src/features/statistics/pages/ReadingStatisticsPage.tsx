@@ -1,16 +1,9 @@
-import { useCallback, useEffect, useState, type ComponentProps } from "react";
-import { IconChartBar } from "@tabler/icons-react";
+import { useCallback, useEffect, useState } from "react";
 import type { ReadingStatistics, StatisticsPeriod } from "../../../domain/statistics";
 import { getReadingStatistics } from "../../../lib/statistics";
-import { KpiCard as BaseKpiCard } from "../components/KpiCard";
-import { MetricSection } from "../components/MetricSection";
 import { ActivityChartCard } from "../components/ActivityChartCard";
-
-type KpiCardProps = Omit<ComponentProps<typeof BaseKpiCard>, "icon">;
-
-function KpiCard(props: KpiCardProps) {
-  return <BaseKpiCard icon={<IconChartBar />} {...props} />;
-}
+import { StatisticsDetailSection } from "../components/StatisticsDetailSection";
+import { StatisticsMetricStrip } from "../components/StatisticsMetricStrip";
 
 function formatMs(ms: number): string {
   const hours = Math.floor(ms / 3600000);
@@ -37,42 +30,59 @@ export function ReadingStatisticsPage({
 }: ReadingStatisticsPageProps) {
   const [stats, setStats] = useState<ReadingStatistics | null>(null);
   const [state, setState] = useState<"loading" | "error" | "loaded">("loading");
-  const load = useCallback(async () => {
-    setState("loading");
-    try {
-      const result = await getReadingStats(period);
-      setStats(result);
-      setState("loaded");
-    } catch {
-      setState("error");
-    }
-  }, [period, getReadingStats]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = useCallback(() => setReloadKey((current) => current + 1), []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    setState("loading");
+    setStats(null);
+    void getReadingStats(period)
+      .then((result) => {
+        if (!cancelled) {
+          setStats(result);
+          setState("loaded");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, getReadingStats, reloadKey]);
 
   return (
     <div className="statistics-page">
-      <MetricSection
+      <h1 className="statistics-detail-header">All Reading</h1>
+      <StatisticsDetailSection
         title="Overview"
         state={state}
-        onRetry={load}
+        onRetry={retry}
       >
         {stats && (
           <>
-            <div className="statistics-kpi-grid">
-              <KpiCard label="Active time" value={formatMs(stats.activeMs)} />
-              <KpiCard label="Sessions" value={`${stats.sessionCount} sessions`} />
-              <KpiCard label="Average session" value={formatSessionTime(stats.averageSessionMs)} />
-              <KpiCard label="Page visits" value={`${stats.pageVisits} visits`} />
-              <KpiCard label="Unique pages" value={String(stats.uniquePages)} />
-              <KpiCard label="Revisits" value={String(stats.revisits)} />
-            </div>
-            <ActivityChartCard period={period} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
+            <StatisticsMetricStrip
+              ariaLabel="Reading summary"
+              metrics={[
+                { id: "active", label: "Active time", value: formatMs(stats.activeMs), emphasis: "primary" },
+                { id: "sessions", label: "Sessions", value: String(stats.sessionCount), emphasis: "primary" },
+                { id: "avg", label: "Average session", value: formatSessionTime(stats.averageSessionMs), emphasis: "primary" },
+                { id: "visits", label: "Page visits", value: `${stats.pageVisits}`, emphasis: "secondary" },
+                { id: "unique", label: "Unique pages", value: String(stats.uniquePages), emphasis: "secondary" },
+                { id: "revisits", label: "Revisits", value: String(stats.revisits), emphasis: "secondary" },
+              ]}
+            />
+            <ActivityChartCard
+              embedded
+              period={period}
+              totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))}
+              series={[]}
+              timeBuckets={stats.timeBuckets}
+            />
           </>
         )}
-      </MetricSection>
+      </StatisticsDetailSection>
     </div>
   );
 }

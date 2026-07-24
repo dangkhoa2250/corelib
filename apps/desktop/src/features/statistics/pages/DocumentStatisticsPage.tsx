@@ -1,16 +1,11 @@
-import { useCallback, useEffect, useState, type ComponentProps } from "react";
-import { IconChartBar } from "@tabler/icons-react";
+import { useCallback, useEffect, useState } from "react";
 import type { DocumentStatistics, StatisticsPeriod } from "../../../domain/statistics";
+import type { LibraryDocument } from "../../../domain/document";
+import { documentStatusLabel } from "../../../domain/document";
 import { getDocumentStatistics } from "../../../lib/statistics";
-import { KpiCard as BaseKpiCard } from "../components/KpiCard";
-import { MetricSection } from "../components/MetricSection";
 import { ActivityChartCard } from "../components/ActivityChartCard";
-
-type KpiCardProps = Omit<ComponentProps<typeof BaseKpiCard>, "icon">;
-
-function KpiCard(props: KpiCardProps) {
-  return <BaseKpiCard icon={<IconChartBar />} {...props} />;
-}
+import { StatisticsDetailSection } from "../components/StatisticsDetailSection";
+import { StatisticsMetricStrip } from "../components/StatisticsMetricStrip";
 
 function formatMs(ms: number): string {
   const hours = Math.floor(ms / 3600000);
@@ -30,7 +25,7 @@ function formatRatio(value: number | null): string {
 }
 
 export interface DocumentStatisticsPageProps {
-  documentId: string;
+  document: LibraryDocument;
   period: StatisticsPeriod;
   onPeriodChange?(period: StatisticsPeriod): void;
   getDocStats?: typeof getDocumentStatistics;
@@ -38,63 +33,96 @@ export interface DocumentStatisticsPageProps {
 }
 
 export function DocumentStatisticsPage({
-  documentId,
+  document,
   period,
   getDocStats = getDocumentStatistics,
 }: DocumentStatisticsPageProps) {
   const [stats, setStats] = useState<DocumentStatistics | null>(null);
   const [state, setState] = useState<"loading" | "error" | "loaded">("loading");
-  const load = useCallback(async () => {
-    setState("loading");
-    try {
-      const result = await getDocStats(documentId, period);
-      setStats(result);
-      setState("loaded");
-    } catch {
-      setState("error");
-    }
-  }, [documentId, period, getDocStats]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = useCallback(() => setReloadKey((current) => current + 1), []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    setState("loading");
+    setStats(null);
+    void getDocStats(document.id, period)
+      .then((result) => {
+        if (!cancelled) {
+          setStats(result);
+          setState("loaded");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [document.id, period, getDocStats, reloadKey]);
+
+  const statusLabel = documentStatusLabel(document);
 
   return (
     <div className="statistics-page">
-      <MetricSection
-        title="Overview"
+      <h1 className="statistics-detail-header">{document.title}</h1>
+      {document.author ? (
+        <p className="statistics-detail-subheader">{document.author}</p>
+      ) : null}
+      {statusLabel ? (
+        <p className="statistics-detail-status">{statusLabel}</p>
+      ) : null}
+      <StatisticsDetailSection
+        title="Reading"
         state={state}
-        onRetry={load}
+        onRetry={retry}
       >
         {stats && (
           <>
-            <div className="statistics-kpi-grid">
-              <KpiCard label="Active time" value={formatMs(stats.activeMs)} />
-              <KpiCard label="Sessions" value={`${stats.sessionCount} sessions`} />
-              <KpiCard label="Average session" value={formatSessionTime(stats.averageSessionMs)} />
-              <KpiCard label="Page visits" value={`${stats.pageVisits} visits`} />
-              <KpiCard label="Unique pages" value={String(stats.uniquePages)} />
-              <KpiCard label="Revisits" value={String(stats.revisits)} />
-            </div>
-
-            <MetricSection title="Coverage">
-              <div className="statistics-kpi-grid">
-                <KpiCard label="Lifetime navigation coverage" value={`${Math.round(stats.coverage * 100)}% coverage`} />
-              </div>
-            </MetricSection>
-
-            <MetricSection title="Reviews">
-              <div className="statistics-kpi-grid">
-                <KpiCard label="Real reviews" value={`${stats.realReviews} reviews`} />
-                <KpiCard label="Recall rate" value={formatRatio(stats.recallRate)} />
-                <KpiCard label="Again count" value={String(stats.againCount)} />
-                <KpiCard label="Lapses" value={String(stats.lapses)} />
-              </div>
-            </MetricSection>
-            <ActivityChartCard period={period} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
+            <StatisticsMetricStrip
+              ariaLabel="Reading summary"
+              metrics={[
+                { id: "active", label: "Active time", value: formatMs(stats.activeMs), emphasis: "primary" },
+                { id: "sessions", label: "Sessions", value: String(stats.sessionCount), emphasis: "primary" },
+                { id: "avg", label: "Average session", value: formatSessionTime(stats.averageSessionMs), emphasis: "primary" },
+                { id: "visits", label: "Page visits", value: `${stats.pageVisits}`, emphasis: "secondary" },
+                { id: "unique", label: "Unique pages", value: String(stats.uniquePages), emphasis: "secondary" },
+                { id: "revisits", label: "Revisits", value: String(stats.revisits), emphasis: "secondary" },
+              ]}
+            />
+            <ActivityChartCard
+              embedded
+              period={period}
+              totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))}
+              series={[]}
+              timeBuckets={stats.timeBuckets}
+            />
           </>
         )}
-      </MetricSection>
+      </StatisticsDetailSection>
+      {stats && (
+        <>
+          <StatisticsDetailSection title="Coverage">
+            <StatisticsMetricStrip
+              ariaLabel="Coverage summary"
+              metrics={[
+                { id: "coverage", label: "Lifetime navigation coverage", value: `${Math.round(stats.coverage * 100)}%`, emphasis: "primary" },
+              ]}
+            />
+          </StatisticsDetailSection>
+          <StatisticsDetailSection title="Reviews">
+            <StatisticsMetricStrip
+              ariaLabel="Review summary"
+              metrics={[
+                { id: "real", label: "Real reviews", value: String(stats.realReviews), emphasis: "primary" },
+                { id: "recall", label: "Recall rate", value: formatRatio(stats.recallRate), emphasis: "primary" },
+                { id: "again", label: "Again count", value: String(stats.againCount), emphasis: "secondary" },
+                { id: "lapses", label: "Lapses", value: String(stats.lapses), emphasis: "secondary" },
+              ]}
+            />
+          </StatisticsDetailSection>
+        </>
+      )}
     </div>
   );
 }
