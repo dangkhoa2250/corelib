@@ -220,6 +220,7 @@ pub struct ReadingStatistics {
     pub unique_pages: i64,
     pub revisits: i64,
     pub buckets: Vec<ActivityBucket>,
+    pub time_buckets: Vec<StatisticsTimeBucket>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -238,6 +239,7 @@ pub struct DocumentStatistics {
     pub again_count: i64,
     pub lapses: i64,
     pub buckets: Vec<ActivityBucket>,
+    pub time_buckets: Vec<StatisticsTimeBucket>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -255,6 +257,7 @@ pub struct MemoraStatistics {
     pub active_days: i64,
     pub due_forecast: DueForecast,
     pub buckets: Vec<ActivityBucket>,
+    pub time_buckets: Vec<StatisticsTimeBucket>,
 }
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -271,6 +274,7 @@ pub struct DeckStatisticsDetail {
     pub lapse_rate: Option<f64>,
     pub due_forecast: DueForecast,
     pub buckets: Vec<ActivityBucket>,
+    pub time_buckets: Vec<StatisticsTimeBucket>,
 }
 
 const ACTIVE_DAY_THRESHOLD_MS: i64 = 60_000;
@@ -636,7 +640,7 @@ impl LibraryDatabase {
         let previous_real = query_capped_review_ms(&self.connection, &previous, now_utc, ReviewScope::All)?;
         let previous_active_ms = previous_reading + previous_practice + previous_real;
         let previous_active_days = count_active_days_in_window(&lifetime_active_days, &previous);
-        let time_buckets = build_time_buckets(&self.connection, &window, today_local_day)?;
+        let time_buckets = build_time_buckets(&self.connection, &window, today_local_day, TimeBucketScope::Overview)?;
 
         Ok(StatisticsOverview {
             active_ms,
@@ -668,6 +672,7 @@ impl LibraryDatabase {
         let page_metrics = query_reading_page_metrics(&self.connection, &window, None)?;
         let bucket_days = window.bucket_days(&self.connection, today_local_day, now_utc)?;
         let buckets = build_reading_buckets(&self.connection, &bucket_days, &window, None)?;
+        let time_buckets = build_time_buckets(&self.connection, &window, today_local_day, TimeBucketScope::Reading)?;
 
         Ok(ReadingStatistics {
             active_ms,
@@ -677,6 +682,7 @@ impl LibraryDatabase {
             unique_pages: page_metrics.unique_pages,
             revisits: page_metrics.revisits,
             buckets,
+            time_buckets,
         })
     }
 
@@ -705,6 +711,7 @@ impl LibraryDatabase {
         let bucket_days = window.bucket_days(&self.connection, today_local_day, now_utc)?;
         let buckets =
             build_reading_buckets(&self.connection, &bucket_days, &window, Some(document_id))?;
+        let time_buckets = build_time_buckets(&self.connection, &window, today_local_day, TimeBucketScope::Document(document_id))?;
 
         Ok(DocumentStatistics {
             document_id: document_id.to_string(),
@@ -720,6 +727,7 @@ impl LibraryDatabase {
             again_count: rating.again,
             lapses,
             buckets,
+            time_buckets,
         })
     }
 
@@ -731,6 +739,7 @@ impl LibraryDatabase {
     ) -> Result<MemoraStatistics> {
         let window = period.window()?;
         let body = build_memora_body(&self.connection, &window, now_utc, today_local_day, None)?;
+        let time_buckets = build_time_buckets(&self.connection, &window, today_local_day, TimeBucketScope::Memora)?;
         Ok(MemoraStatistics {
             active_ms: body.active_ms,
             practice_active_ms: body.practice_active_ms,
@@ -744,6 +753,7 @@ impl LibraryDatabase {
             active_days: body.active_days,
             due_forecast: body.due_forecast,
             buckets: body.buckets,
+            time_buckets,
         })
     }
 
@@ -762,6 +772,7 @@ impl LibraryDatabase {
             today_local_day,
             Some(deck_id),
         )?;
+        let time_buckets = build_time_buckets(&self.connection, &window, today_local_day, TimeBucketScope::Deck(deck_id))?;
         Ok(DeckStatisticsDetail {
             deck_id: deck_id.to_string(),
             active_ms: body.active_ms,
@@ -774,6 +785,7 @@ impl LibraryDatabase {
             lapse_rate: body.lapse_rate,
             due_forecast: body.due_forecast,
             buckets: body.buckets,
+            time_buckets,
         })
     }
 }
@@ -1733,56 +1745,186 @@ fn materialize_buckets(
         .collect())
 }
 
+#[derive(Clone, Copy)]
+enum TimeBucketScope<'a> {
+    Overview,
+    Reading,
+    Document(&'a str),
+    Memora,
+    Deck(&'a str),
+}
+
+impl TimeBucketScope<'_> {
+    fn includes_memora(self) -> bool {
+        matches!(self, Self::Overview | Self::Memora | Self::Deck(_))
+    }
+}
+
 fn build_time_buckets(
     connection: &rusqlite::Connection,
     window: &CalendarWindow,
     today_local_day: &str,
+    scope: TimeBucketScope<'_>,
 ) -> Result<Vec<StatisticsTimeBucket>> {
     let mut values: HashMap<(String, i64, String), i64> = HashMap::new();
-    let mut statement = connection.prepare(
+
+    let activity_scope = match scope {
+        TimeBucketScope::Overview => (
+            "AND ((sessions.app_key = 'reading' AND sessions.activity_kind = 'reading')
+               OR (sessions.app_key = 'memora' AND sessions.activity_kind = 'practice'))",
+            None,
+        ),
+        TimeBucketScope::Reading => (
+            "AND sessions.app_key = 'reading' AND sessions.activity_kind = 'reading'",
+            None,
+        ),
+        TimeBucketScope::Document(id) => (
+            "AND sessions.app_key = 'reading' AND sessions.activity_kind = 'reading'
+             AND sessions.context_kind = 'document' AND sessions.context_id = ?3",
+            Some(id),
+        ),
+        TimeBucketScope::Memora => (
+            "AND sessions.app_key = 'memora' AND sessions.activity_kind = 'practice'",
+            None,
+        ),
+        TimeBucketScope::Deck(id) => (
+            "AND sessions.app_key = 'memora' AND sessions.activity_kind = 'practice'
+             AND sessions.context_kind = 'deck' AND sessions.context_id = ?3",
+            Some(id),
+        ),
+    };
+    let activity_sql = format!(
         "SELECT buckets.local_day, buckets.bucket_start_hour, sessions.app_key,
                 COALESCE(SUM(buckets.raw_active_ms), 0)
          FROM activity_session_time_buckets buckets
          JOIN activity_sessions sessions ON sessions.id = buckets.session_id
          WHERE buckets.local_day >= ?1 AND buckets.local_day < ?2
-           AND ((sessions.app_key = 'reading' AND sessions.activity_kind = 'reading')
-             OR (sessions.app_key = 'memora' AND sessions.activity_kind = 'practice'))
+           {activity_filter}
          GROUP BY buckets.local_day, buckets.bucket_start_hour, sessions.app_key",
-    )?;
-    let rows = statement.query_map(params![format_local_day(window.start), format_local_day(window.end_exclusive)], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, String>(2)?, row.get::<_, i64>(3)?))
-    })?;
-    for row in rows {
-        let (day, hour, app_key, active_ms) = row?;
+        activity_filter = activity_scope.0,
+    );
+    let mut statement = connection.prepare(&activity_sql)?;
+    let row_map = |row: &rusqlite::Row<'_>| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)?,
+        ))
+    };
+    let activity_rows = match activity_scope.1 {
+        Some(id) => statement
+            .query_map(
+                params![
+                    format_local_day(window.start),
+                    format_local_day(window.end_exclusive),
+                    id,
+                ],
+                row_map,
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?,
+        None => statement
+            .query_map(
+                params![
+                    format_local_day(window.start),
+                    format_local_day(window.end_exclusive),
+                ],
+                row_map,
+            )?
+            .collect::<std::result::Result<Vec<_>, _>>()?,
+    };
+    for (day, hour, app_key, active_ms) in activity_rows {
         values.insert((day, hour, app_key), active_ms);
     }
-    let mut review_statement = connection.prepare(
-        "SELECT COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)),
-                (local_minute_of_day / 240) * 4, COALESCE(SUM(MIN(elapsed_ms, ?3)), 0)
-         FROM review_logs
-         WHERE COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)) >= ?1
-           AND COALESCE(NULLIF(local_day, ''), substr(reviewed_at, 1, 10)) < ?2
-         GROUP BY 1, 2",
-    )?;
-    let review_rows = review_statement.query_map(
-        params![format_local_day(window.start), format_local_day(window.end_exclusive), REVIEW_TIME_CAP_MS],
-        |row| Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?, row.get::<_, i64>(2)?)),
-    )?;
-    for row in review_rows {
-        let (day, hour, active_ms) = row?;
-        *values.entry((day, hour, "memora".into())).or_insert(0) += active_ms;
+
+    if scope.includes_memora() {
+        let (review_join, review_filter, deck_id) = match scope {
+            TimeBucketScope::Deck(id) => (
+                "JOIN cards ON cards.id = review_logs.card_id",
+                "AND cards.deck_id = ?4",
+                Some(id),
+            ),
+            _ => ("", "", None),
+        };
+        let review_sql = format!(
+            "SELECT COALESCE(
+                        NULLIF(review_logs.local_day, ''),
+                        substr(review_logs.reviewed_at, 1, 10)
+                    ),
+                    (review_logs.local_minute_of_day / 240) * 4,
+                    COALESCE(SUM(MIN(review_logs.elapsed_ms, ?3)), 0)
+             FROM review_logs
+             {review_join}
+             WHERE COALESCE(
+                       NULLIF(review_logs.local_day, ''),
+                       substr(review_logs.reviewed_at, 1, 10)
+                   ) >= ?1
+               AND COALESCE(
+                       NULLIF(review_logs.local_day, ''),
+                       substr(review_logs.reviewed_at, 1, 10)
+                   ) < ?2
+               {review_filter}
+             GROUP BY 1, 2",
+        );
+        let mut review_statement = connection.prepare(&review_sql)?;
+        let extract = |row: &rusqlite::Row<'_>| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+            ))
+        };
+        let review_rows = match deck_id {
+            Some(id) => review_statement
+                .query_map(
+                    params![
+                        format_local_day(window.start),
+                        format_local_day(window.end_exclusive),
+                        REVIEW_TIME_CAP_MS,
+                        id,
+                    ],
+                    extract,
+                )?
+                .collect::<std::result::Result<Vec<_>, _>>()?,
+            None => review_statement
+                .query_map(
+                    params![
+                        format_local_day(window.start),
+                        format_local_day(window.end_exclusive),
+                        REVIEW_TIME_CAP_MS,
+                    ],
+                    extract,
+                )?
+                .collect::<std::result::Result<Vec<_>, _>>()?,
+        };
+        for (day, hour, active_ms) in review_rows {
+            *values.entry((day, hour, "memora".into())).or_insert(0) += active_ms;
+        }
     }
+
+    let app_keys: &[&str] = match scope {
+        TimeBucketScope::Overview => &["reading", "memora"],
+        TimeBucketScope::Reading | TimeBucketScope::Document(_) => &["reading"],
+        TimeBucketScope::Memora | TimeBucketScope::Deck(_) => &["memora"],
+    };
 
     let mut buckets = Vec::new();
     for day in enumerate_days(&format_local_day(window.start), &window.today)? {
         let is_future = day.as_str() > today_local_day;
         for bucket_start_hour in [0, 4, 8, 12, 16, 20] {
-            for app_key in ["reading", "memora"] {
+            for app_key in app_keys {
                 buckets.push(StatisticsTimeBucket {
-                    active_ms: if is_future { 0 } else { values.get(&(day.clone(), bucket_start_hour, app_key.into())).copied().unwrap_or(0) },
                     local_day: day.clone(),
                     bucket_start_hour,
-                    app_key: app_key.into(),
+                    app_key: (*app_key).into(),
+                    active_ms: if is_future {
+                        0
+                    } else {
+                        values
+                            .get(&(day.clone(), bucket_start_hour, (*app_key).into()))
+                            .copied()
+                            .unwrap_or(0)
+                    },
                     is_future,
                 });
             }

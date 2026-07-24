@@ -68,6 +68,129 @@ fn week_overview_zero_fills_local_time_buckets_and_marks_future_days() {
     assert!(overview.time_buckets.iter().filter(|bucket| bucket.local_day.as_str() > TODAY_LOCAL_DAY).all(|bucket| bucket.is_future && bucket.active_ms == 0));
 }
 
+fn bucket_ms(
+    buckets: &[crate::statistics::StatisticsTimeBucket],
+    day: &str,
+    hour: i64,
+) -> i64 {
+    buckets
+        .iter()
+        .find(|bucket| bucket.local_day == day && bucket.bucket_start_hour == hour)
+        .map(|bucket| bucket.active_ms)
+        .unwrap_or(-1)
+}
+
+#[test]
+fn reading_and_document_details_return_scoped_zero_filled_time_buckets() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "doc-a", 10);
+    seed_document_with_pages(&mut database, "doc-b", 10);
+
+    start_session(
+        &mut database, "read-a", "reading", "reading",
+        "2026-07-18T08:00:00.000Z", "2026-07-18",
+        Some("document"), Some("doc-a"),
+    );
+    checkpoint(
+        &mut database, "read-a", "2026-07-18T08:02:00.000Z",
+        120_000, Some("doc-a"), Some(1), 1,
+    );
+    start_session(
+        &mut database, "read-b", "reading", "reading",
+        "2026-07-18T12:00:00.000Z", "2026-07-18",
+        Some("document"), Some("doc-b"),
+    );
+    checkpoint(
+        &mut database, "read-b", "2026-07-18T12:01:00.000Z",
+        60_000, Some("doc-b"), Some(1), 1,
+    );
+
+    let selected = period(PeriodUnit::Week, "2026-07-18");
+    let reading = database
+        .reading_statistics(&selected, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("reading");
+    let document = database
+        .document_statistics("doc-a", &selected, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("doc-a");
+
+    assert_eq!(reading.time_buckets.len(), 7 * 6);
+    assert_eq!(document.time_buckets.len(), 7 * 6);
+    assert_eq!(bucket_ms(&reading.time_buckets, "2026-07-18", 8), 120_000);
+    assert_eq!(bucket_ms(&reading.time_buckets, "2026-07-18", 12), 60_000);
+    assert_eq!(bucket_ms(&document.time_buckets, "2026-07-18", 8), 120_000);
+    assert_eq!(bucket_ms(&document.time_buckets, "2026-07-18", 12), 0);
+    assert!(document.time_buckets.iter().all(|bucket| bucket.app_key == "reading"));
+    assert!(document.time_buckets.iter()
+        .filter(|bucket| bucket.local_day.as_str() > TODAY_LOCAL_DAY)
+        .all(|bucket| bucket.is_future && bucket.active_ms == 0));
+}
+
+#[test]
+fn memora_and_deck_details_return_practice_plus_scoped_review_time_buckets() {
+    let (_directory, mut database) = db();
+    seed_document_with_pages(&mut database, "source-doc", 10);
+    let deck_a = database.create_deck("Deck A").expect("deck a");
+    let deck_b = database.create_deck("Deck B").expect("deck b");
+    let card_a = create_card_for_document(
+        &mut database, "Deck A", "source-doc", 1, "card-a",
+    );
+    let card_b = create_card_for_document(
+        &mut database, "Deck B", "source-doc", 1, "card-b",
+    );
+
+    insert_review_log(
+        &database, "review-a", &card_a,
+        "2026-07-18T09:00:00.000Z", "good", "review", "review", 600_000,
+    );
+    insert_review_log(
+        &database, "review-b", &card_b,
+        "2026-07-18T13:00:00.000Z", "hard", "review", "review", 30_000,
+    );
+    database.connection.execute(
+        "UPDATE review_logs SET local_day='2026-07-18', local_minute_of_day=540 WHERE id='review-a'",
+        [],
+    ).expect("set review-a local time");
+    database.connection.execute(
+        "UPDATE review_logs SET local_day='2026-07-18', local_minute_of_day=780 WHERE id='review-b'",
+        [],
+    ).expect("set review-b local time");
+
+    start_session(
+        &mut database, "practice-a", "memora", "practice",
+        "2026-07-18T08:00:00.000Z", "2026-07-18",
+        Some("deck"), Some(&deck_a.id),
+    );
+    checkpoint(
+        &mut database, "practice-a", "2026-07-18T08:01:00.000Z",
+        60_000, None, None, 0,
+    );
+    start_session(
+        &mut database, "practice-b", "memora", "practice",
+        "2026-07-18T12:00:00.000Z", "2026-07-18",
+        Some("deck"), Some(&deck_b.id),
+    );
+    checkpoint(
+        &mut database, "practice-b", "2026-07-18T12:01:00.000Z",
+        60_000, None, None, 0,
+    );
+
+    let selected = period(PeriodUnit::Week, "2026-07-18");
+    let memora = database
+        .memora_statistics(&selected, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("memora");
+    let detail_a = database
+        .deck_statistics_detail(&deck_a.id, &selected, FIXED_NOW, TODAY_LOCAL_DAY)
+        .expect("deck a detail");
+
+    assert_eq!(memora.time_buckets.len(), 7 * 6);
+    assert_eq!(detail_a.time_buckets.len(), 7 * 6);
+    assert_eq!(bucket_ms(&memora.time_buckets, "2026-07-18", 8), 360_000);
+    assert_eq!(bucket_ms(&memora.time_buckets, "2026-07-18", 12), 90_000);
+    assert_eq!(bucket_ms(&detail_a.time_buckets, "2026-07-18", 8), 360_000);
+    assert_eq!(bucket_ms(&detail_a.time_buckets, "2026-07-18", 12), 0);
+    assert!(detail_a.time_buckets.iter().all(|bucket| bucket.app_key == "memora"));
+}
+
 #[test]
 fn selected_calendar_month_excludes_later_reading_and_document_activity() {
     let (_directory, mut database) = db();
@@ -224,6 +347,17 @@ fn activity_without_time_buckets_falls_back_once_to_the_session_day() {
             .find(|bucket| bucket.local_day == "2026-07-02")
             .map(|bucket| bucket.active_ms),
         Some(42_000)
+    );
+    assert_eq!(
+        overview
+            .time_buckets
+            .iter()
+            .filter(|bucket| {
+                bucket.app_key == "reading" && bucket.local_day == "2026-07-02"
+            })
+            .map(|bucket| bucket.active_ms)
+            .sum::<i64>(),
+        0,
     );
     let snapshots = get_daily_statistics_snapshots(
         &database.connection,
