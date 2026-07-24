@@ -667,10 +667,6 @@
   font-size: 15px;
 }
 
-.statistics-scope-picker {
-  display: none;
-}
-
 @media (max-width: 900px) {
   .statistics-shell__content { padding: 26px 20px 36px 24px; }
   .statistics-shell__header { flex-wrap: wrap; }
@@ -716,7 +712,7 @@
     display: none;
   }
 
-  .statistics-scope-picker {
+  .statistics-master-detail__collapsed {
     display: block;
     margin-bottom: 14px;
   }
