@@ -796,6 +796,9 @@ export function App({
       <div className={`app-shell__content ${route.name === "statistics" || route.name === "admin" ? "app-shell__content--managed-scroll" : ""}`}>
         {route.name === "statistics" ? (
           <StatisticsPage
+            documents={documents ?? []}
+            documentsLoading={loading}
+            listDecks={learning.listDecks}
             target={route.target}
             origin={route.origin}
             onBack={() => {

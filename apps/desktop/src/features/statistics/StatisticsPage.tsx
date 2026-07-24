@@ -1,20 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
+import type { LibraryDocument } from "../../domain/document";
+import type { Deck } from "../../domain/learning";
 import type { StatisticsPeriod } from "../../domain/statistics";
 import { currentPeriod } from "./period";
 import type { StatisticsRouteTarget } from "../../app/routes";
 import { StatisticsShell } from "./components/StatisticsShell";
 import { StatisticsOverviewPage } from "./pages/StatisticsOverviewPage";
-import { DocumentStatisticsPage } from "./pages/DocumentStatisticsPage";
-import { DeckStatisticsPage } from "./pages/DeckStatisticsPage";
+import { ReadingStatisticsWorkspace } from "./pages/ReadingStatisticsWorkspace";
+import { MemoraStatisticsWorkspace } from "./pages/MemoraStatisticsWorkspace";
 import { RegisteredAppStatisticsPage } from "./pages/RegisteredAppStatisticsPage";
 import { DEFAULT_STATISTICS_APPS, type StatisticsAppDefinition } from "./registry";
 import { MetricSection } from "./components/MetricSection";
+
+const NO_DOCUMENTS: LibraryDocument[] = [];
+const EMPTY_DECK_LOADER = async (): Promise<Deck[]> => [];
 
 interface StatisticsPageProps {
   target?: StatisticsRouteTarget;
   origin?: "library" | "memora";
   onBack?(): void;
   apps?: StatisticsAppDefinition[];
+  documents?: LibraryDocument[];
+  documentsLoading?: boolean;
+  listDecks?: () => Promise<Deck[]>;
 }
 
 type StatisticsView =
@@ -28,6 +36,9 @@ export function StatisticsPage({
   origin,
   onBack,
   apps = DEFAULT_STATISTICS_APPS,
+  documents = NO_DOCUMENTS,
+  documentsLoading = false,
+  listDecks = EMPTY_DECK_LOADER,
 }: StatisticsPageProps) {
   const [period, setPeriod] = useState<StatisticsPeriod>(() => currentPeriod("month"));
   const [view, setView] = useState<StatisticsView>({ kind: "overview" });
@@ -44,29 +55,46 @@ export function StatisticsPage({
     }
   }, [target]);
 
+  const activeAppKey =
+    view.kind === "document"
+      ? "reading"
+      : view.kind === "deck"
+        ? "memora"
+        : view.kind === "app"
+          ? view.appKey
+          : null;
+
   const handleBack = useCallback(() => {
+    if (origin) {
+      onBack?.();
+      return;
+    }
     if (view.kind !== "overview") {
       setView({ kind: "overview" });
-    } else {
-      onBack?.();
+      return;
     }
-  }, [view.kind, onBack]);
+    onBack?.();
+  }, [origin, onBack, view.kind]);
 
-  const selectedApp = view.kind === "app" ? apps.find((app) => app.key === view.appKey) : undefined;
-  const title = view.kind === "overview"
-    ? "Statistics"
-    : view.kind === "app"
-      ? selectedApp?.title ?? "App statistics"
-      : view.kind === "document"
-        ? "Document statistics"
-        : "Deck statistics";
-  const breadcrumb = view.kind === "overview"
-    ? undefined
-    : view.kind === "app"
-      ? `Statistics / ${title}`
-      : view.kind === "document"
-        ? "Statistics / Reading / Document"
-        : "Statistics / Memora / Deck";
+  const selectedApp =
+    view.kind === "app"
+      ? apps.find((app) => app.key === view.appKey)
+      : undefined;
+
+  const title =
+    view.kind === "overview"
+      ? "Statistics"
+      : activeAppKey === "reading"
+        ? "Reading statistics"
+        : activeAppKey === "memora"
+          ? "Memora statistics"
+          : selectedApp?.title ?? "App statistics";
+
+  const breadcrumb =
+    view.kind === "overview"
+      ? undefined
+      : `Statistics / ${title}`;
+
   const shellBack = view.kind !== "overview" || origin ? handleBack : undefined;
 
   return (
@@ -85,25 +113,42 @@ export function StatisticsPage({
           onOpenApp={(appKey) => setView({ kind: "app", appKey })}
         />
       )}
-      {view.kind === "app" && selectedApp && (
+      {activeAppKey === "reading" && (
+        <ReadingStatisticsWorkspace
+          documents={documents}
+          documentsLoading={documentsLoading}
+          selectedDocumentId={
+            view.kind === "document" ? view.documentId : null
+          }
+          onSelectDocument={(documentId) =>
+            setView(
+              documentId
+                ? { kind: "document", documentId }
+                : { kind: "app", appKey: "reading" },
+            )
+          }
+          period={period}
+        />
+      )}
+      {activeAppKey === "memora" && (
+        <MemoraStatisticsWorkspace
+          listDecks={listDecks}
+          selectedDeckId={view.kind === "deck" ? view.deckId : null}
+          onSelectDeck={(deckId) =>
+            setView(
+              deckId
+                ? { kind: "deck", deckId }
+                : { kind: "app", appKey: "memora" },
+            )
+          }
+          period={period}
+        />
+      )}
+      {view.kind === "app" && activeAppKey !== "reading" && activeAppKey !== "memora" && selectedApp && (
         <RegisteredAppStatisticsPage app={selectedApp} period={period} />
       )}
-      {view.kind === "app" && !selectedApp && <MetricSection title="App statistics" state="empty" />}
-      {view.kind === "document" && (
-        <DocumentStatisticsPage
-          documentId={view.documentId}
-          period={period}
-          onPeriodChange={setPeriod}
-          onBack={() => setView({ kind: "overview" })}
-        />
-      )}
-      {view.kind === "deck" && (
-        <DeckStatisticsPage
-          deckId={view.deckId}
-          period={period}
-          onPeriodChange={setPeriod}
-          onBack={() => setView({ kind: "overview" })}
-        />
+      {view.kind === "app" && activeAppKey !== "reading" && activeAppKey !== "memora" && !selectedApp && (
+        <MetricSection title="App statistics" state="empty" />
       )}
     </StatisticsShell>
   );
