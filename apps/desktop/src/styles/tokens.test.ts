@@ -255,6 +255,49 @@ test("keeps the calendar time heatmap inside its card without horizontal scrolli
   expect(heatmapTooltip).not.toContain("position: absolute;");
 });
 
+test("pins the Statistics master detail and WKWebView inset contract", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(
+    join(currentDir, "../features/statistics/statistics.css"),
+    "utf8",
+  );
+  const workspace = css.match(
+    /\.statistics-master-detail\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  const entityContent = css.match(
+    /\.statistics-entity-pane__scroll-content\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  const metricStrip = css.match(
+    /\.statistics-metric-strip\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  const detailSection = css.match(
+    /\.statistics-detail-section\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  const embeddedActivity = css.match(
+    /\.statistics-activity-card--embedded\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+
+  expect(workspace).toContain(
+    "grid-template-columns: 272px minmax(0, 1fr);",
+  );
+  expect(workspace).toContain("gap: 18px;");
+  expect(entityContent).toContain("padding-right: 20px;");
+  expect(metricStrip).not.toContain("min-height: 156px;");
+  expect(detailSection).not.toMatch(/background|box-shadow|border-radius/);
+  expect(embeddedActivity).toContain("background: transparent;");
+  expect(embeddedActivity).toContain("box-shadow: none;");
+  expect(css).toContain("@media (max-width: 1180px)");
+  expect(css).toContain("@media (max-width: 480px)");
+  expect(css).toMatch(
+    /@media \(max-width: 720px\)[\s\S]*?\.statistics-control\s*\{[^}]*min-height: 36px;/,
+  );
+  expect(css).not.toMatch(/\boverflow(?:-y)?\s*:\s*(?:auto|scroll)\s*;/);
+  expect(css).not.toMatch(/::-webkit-scrollbar/);
+  expect(css).not.toMatch(/linear-gradient|radial-gradient|conic-gradient/);
+  expect(css).not.toMatch(/overflow-x\s*:\s*(auto|scroll)/);
+  expect(css).not.toContain("width: max-content");
+});
+
 test("loads the Statistics stylesheet from the application entry point", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const entry = readFileSync(join(currentDir, "../main.tsx"), "utf8");
