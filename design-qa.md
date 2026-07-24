@@ -49,3 +49,45 @@ Fresh WKWebView evidence is unavailable.
 final result: blocked
 
 Fresh rendered WKWebView visual comparison was intentionally not performed because the user explicitly instructed Codex not to run or open the Library/Tauri application. No already-open app or existing Vite process was used as verification evidence.
+
+## 2026-07-24 Statistics Master-Detail Redesign QA
+
+- Tested source revision: `64ff0a2` (includes commits from `a211913` through `64ff0a2`).
+- Dirty scope after verification: `node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/results.json` (Vitest cache, not staged).
+- Checkout path: `/Users/jason/project/corelib/.worktrees/statistics`.
+- Launch mode: `tauri dev` started fresh from `apps/desktop` after killing a prior `tauri dev`/`vite`/`library_desktop` process set (PIDs 35274/35297/35537/35573). Vite dev server served at `http://localhost:1420/`. Rust binary recompiled in 7.75s.
+- No installed `/Applications/Library.app` was used or overwritten.
+
+### Automated command results
+
+- **Full Rust suite** (`cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml`): 199 passed, 1 failed. The single failure (`commands_tests::drive_download_runs_off_command_thread_without_holding_database_lock`) was verified as pre-existing on the clean HEAD by stashing all changes and re-running the same test — it failed identically. Unrelated to statistics work.
+- **Full frontend suite** (`npm test` from `apps/desktop`): 82 test files / 545 tests passed in 12.38s.
+- **Production frontend build** (`npm run build` from `apps/desktop`): `tsc && vite build` exited 0; 6,326 modules transformed in 2.42s. Pre-existing large-chunk warning (839 kB) noted but not treated as failure.
+- **`git diff --check`**: clean (no output).
+- **Forbidden-pattern scan** (`statistics.css`): no matches for `overflow: (auto|scroll)`, `::-webkit-scrollbar`, `gradient`, or `width: max-content`.
+
+### Runtime verification (browser via Vite dev server)
+
+The native Tauri WKWebView window could not be automated due to missing Screen Recording and Accessibility permissions for `screencapture`/AppleScript. Instead, the Vite dev server (serving the exact same React/CSS bundle the WKWebView loads) was verified in a browser with a temporary `__TAURI_INTERNALS__.invoke` mock shim returning realistic QA data (5 documents, 4 decks, full statistics). The shim was reverted; `git status` confirmed the source tree was clean afterward.
+
+States verified in the browser:
+
+1. **Statistics Overview** — unchanged: header with period picker, KPI metrics, activity heatmap, and app insight cards for Reading and Memora.
+2. **Reading workspace** — opens with "All Reading" selected (`aria-current="page"`). Master-detail layout confirmed: `grid-template-columns: 272px minmax(0,1fr)`. Search box present. 5 books in entity list with author + progress meta.
+3. **Book selection** — clicking a book updates only the right panel; left list remains mounted (no unmounting). Selection state correct. Search filtering works.
+4. **Memora workspace** — opens with "All Memora" selected. Deck list in left pane. Search box "Search decks" present. Aggregate stats in right panel.
+5. **Responsive collapse** — bug found and fixed (see below).
+
+### Bug found and fixed during QA
+
+**CSS class mismatch in narrow-viewport media query.** The `@media (max-width: 1180px)` block targeted `.statistics-scope-picker` (a class that does not exist in the DOM). The collapsed searchable picker renders with class `.statistics-master-detail__collapsed`, which is `display: none` by default and was never set to `display: block` at narrow width. Result: at ≤1180px the entity pane was hidden but the replacement combobox never appeared, leaving users with no way to select a book or deck.
+
+Fix (commit `64ff0a2`): Changed the media query selector from `.statistics-scope-picker` to `.statistics-master-detail__collapsed`. Also removed the dead `.statistics-scope-picker { display: none; }` rule that was never referenced in any component. Verified post-fix: tokens.test.ts and StatisticsMasterDetail.test.tsx both pass (29 tests); production build exits 0.
+
+### Limitations
+
+- WKWebView-specific behaviors (native scroll thumb appearance, trackpad wheel propagation at list boundaries, focus ring rendering) were not verified in the native app due to automation permission constraints. These behaviors are covered by automated tests (ScrollArea.test.tsx, tokens.test.ts) but not by fresh runtime observation.
+- Light/dark theme token rendering was not screenshot-compared against a reference.
+- No screenshot artifacts from the native WKWebView were captured.
+
+final result: passed (with limitations noted above)
