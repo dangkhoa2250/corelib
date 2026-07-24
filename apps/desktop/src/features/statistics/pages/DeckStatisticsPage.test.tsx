@@ -14,6 +14,7 @@ const deckStats = {
   lapseRate: null,
   dueForecast: { today: 0, next7Days: 0, next30Days: 0 },
   buckets: [],
+  timeBuckets: [],
 };
 
 test("loads deck data with its deck ID and supplied calendar period", async () => {

@@ -10,6 +10,7 @@ const readingStats = {
   uniquePages: 0,
   revisits: 0,
   buckets: [],
+  timeBuckets: [],
 };
 
 test("loads reading data for the supplied calendar period and refetches on period change", async () => {

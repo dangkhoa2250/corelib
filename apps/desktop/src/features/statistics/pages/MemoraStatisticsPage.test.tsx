@@ -15,6 +15,7 @@ const memoraStats = {
   activeDays: 0,
   dueForecast: { today: 0, next7Days: 0, next30Days: 0 },
   buckets: [],
+  timeBuckets: [],
 };
 
 test("loads Memora data for the supplied calendar period", async () => {

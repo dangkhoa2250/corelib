@@ -67,6 +67,7 @@ export interface ReadingStatistics {
   uniquePages: number;
   revisits: number;
   buckets: ActivityBucket[];
+  timeBuckets: StatisticsTimeBucket[];
 }
 
 export interface DocumentStatistics {
@@ -83,6 +84,7 @@ export interface DocumentStatistics {
   againCount: number;
   lapses: number;
   buckets: ActivityBucket[];
+  timeBuckets: StatisticsTimeBucket[];
 }
 
 export interface MemoraStatistics {
@@ -98,6 +100,7 @@ export interface MemoraStatistics {
   activeDays: number;
   dueForecast: DueForecast;
   buckets: ActivityBucket[];
+  timeBuckets: StatisticsTimeBucket[];
 }
 
 export interface DeckStatisticsDetail {
@@ -112,6 +115,7 @@ export interface DeckStatisticsDetail {
   lapseRate: number | null;
   dueForecast: DueForecast;
   buckets: ActivityBucket[];
+  timeBuckets: StatisticsTimeBucket[];
 }
 
 export interface StartActivitySessionInput {
