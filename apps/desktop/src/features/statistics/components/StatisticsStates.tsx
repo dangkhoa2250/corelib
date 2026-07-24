@@ -4,7 +4,7 @@ interface StatisticsErrorStateProps {
 }
 
 export function StatisticsSkeleton() {
-  return <div className="statistics-skeleton">Loading...</div>;
+  return <div className="statistics-skeleton" role="status">Loading...</div>;
 }
 
 export function StatisticsEmptyState() {
