@@ -22,7 +22,7 @@ export function RatingDistribution({ distribution }: RatingDistributionProps) {
   return (
     <div className="rating-distribution" aria-label={ariaLabel}>
       <div className="rating-distribution__bar">
-        {entries.map(([key, label]) => (
+        {entries.map(([key]) => (
           <div
             className={`rating-distribution__segment rating-distribution__segment--${key}`}
             data-testid={`rating-${key}-segment`}
