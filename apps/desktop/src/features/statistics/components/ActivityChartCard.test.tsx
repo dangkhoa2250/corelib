@@ -238,3 +238,27 @@ test("derives matching selected-app graph totals from hourly buckets while keepi
   expect(screen.getByLabelText("2026-07-13: 20 Active time")).toBeInTheDocument();
   expect(screen.getByLabelText("2026-07-14: 0 Active time")).toBeInTheDocument();
 });
+
+test("shows Heatmap without an app filter for a fixed scope", () => {
+  render(
+    <ActivityChartCard
+      embedded
+      period={{ unit: "week", anchorLocalDay: "2026-07-13" }}
+      totalBuckets={[{ date: "2026-07-13", value: 15 }]}
+      series={[]}
+      timeBuckets={[{
+        localDay: "2026-07-13",
+        bucketStartHour: 12,
+        activeMs: 15 * 60_000,
+        appKey: "reading",
+        isFuture: false,
+      }]}
+    />,
+  );
+
+  expect(screen.getByRole("button", { name: "Heatmap" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Graph" })).toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "Statistics app" })).toBeNull();
+  expect(screen.getByText("Activity").closest("section"))
+    .toHaveClass("statistics-activity-card--embedded");
+});

@@ -19,6 +19,8 @@ interface ActivityChartCardProps {
   timeBuckets?: StatisticsTimeBucket[];
   heatmapEnabled?: boolean;
   defaultGraphMode?: GraphMode;
+  embedded?: boolean;
+  showAppFilter?: boolean;
 }
 
 /** Apps registered for this statistics surface, independent of loaded data. */
@@ -68,6 +70,8 @@ export function ActivityChartCard({
   timeBuckets,
   heatmapEnabled = true,
   defaultGraphMode,
+  embedded = false,
+  showAppFilter,
 }: ActivityChartCardProps) {
   const prefs = useMemo(() => loadStatisticsPreferences(), []);
   const canShowHeatmap = heatmapEnabled && timeBuckets !== undefined;
@@ -171,8 +175,18 @@ export function ActivityChartCard({
     setGraphMode(mode);
   }, []);
 
+  const inferredFilterVisibility =
+    (registeredApps?.length ?? 0) > 0 || series.length > 0;
+  const shouldShowAppFilter = showAppFilter ?? inferredFilterVisibility;
+
   return (
-    <section className="statistics-section">
+    <section
+      className={
+        embedded
+          ? "statistics-section statistics-activity-card--embedded"
+          : "statistics-section"
+      }
+    >
       <div className="statistics-section__header">
         <h2 className="statistics-section__title">Activity</h2>
         <div className="statistics-chart-card__toggle">
@@ -205,16 +219,18 @@ export function ActivityChartCard({
           )}
         </div>
       </div>
-      <div className="statistics-chart-card__controls">
-        <Combobox
-          value={selectedApp}
-          onChange={setSelectedApp}
-          options={appOptions}
-          ariaLabel="Statistics app"
-          searchable={false}
-          className="statistics-app-filter"
-        />
-      </div>
+      {shouldShowAppFilter ? (
+        <div className="statistics-chart-card__controls">
+          <Combobox
+            value={selectedApp}
+            onChange={setSelectedApp}
+            options={appOptions}
+            ariaLabel="Statistics app"
+            searchable={false}
+            className="statistics-app-filter"
+          />
+        </div>
+      ) : null}
       {canShowHeatmap && view === "heatmap" && period && (
         <ActivityHeatmap
           period={period}
