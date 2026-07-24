@@ -1,16 +1,10 @@
-import { useCallback, useEffect, useState, type ComponentProps } from "react";
-import { IconChartBar } from "@tabler/icons-react";
+import { useCallback, useEffect, useState } from "react";
 import type { MemoraStatistics, StatisticsPeriod } from "../../../domain/statistics";
 import { getMemoraStatistics } from "../../../lib/statistics";
-import { KpiCard as BaseKpiCard } from "../components/KpiCard";
-import { MetricSection } from "../components/MetricSection";
 import { ActivityChartCard } from "../components/ActivityChartCard";
-
-type KpiCardProps = Omit<ComponentProps<typeof BaseKpiCard>, "icon">;
-
-function KpiCard(props: KpiCardProps) {
-  return <BaseKpiCard icon={<IconChartBar />} {...props} />;
-}
+import { RatingDistribution } from "../components/RatingDistribution";
+import { StatisticsDetailSection } from "../components/StatisticsDetailSection";
+import { StatisticsMetricStrip } from "../components/StatisticsMetricStrip";
 
 function formatMs(ms: number): string {
   const hours = Math.floor(ms / 3600000);
@@ -43,75 +37,97 @@ export function MemoraStatisticsPage({
 }: MemoraStatisticsPageProps) {
   const [stats, setStats] = useState<MemoraStatistics | null>(null);
   const [state, setState] = useState<"loading" | "error" | "loaded">("loading");
-  const load = useCallback(async () => {
-    setState("loading");
-    try {
-      const result = await getMemoraStats(period);
-      setStats(result);
-      setState("loaded");
-    } catch {
-      setState("error");
-    }
-  }, [period, getMemoraStats]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const retry = useCallback(() => setReloadKey((current) => current + 1), []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    setState("loading");
+    setStats(null);
+    void getMemoraStats(period)
+      .then((result) => {
+        if (!cancelled) {
+          setStats(result);
+          setState("loaded");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setState("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [period, getMemoraStats, reloadKey]);
 
   return (
     <div className="statistics-page">
-      <MetricSection
+      <h1 className="statistics-detail-header">All Memora</h1>
+      <StatisticsDetailSection
         title="Overview"
         state={state}
-        onRetry={load}
+        onRetry={retry}
       >
         {stats && (
           <>
-            <div className="statistics-kpi-grid">
-              <KpiCard label="Active time" value={formatMs(stats.activeMs)} />
-              <KpiCard label="Practice active time" value={formatMs(stats.practiceActiveMs)} />
-              <KpiCard label="Sessions" value={`${stats.sessionCount} sessions`} />
-              <KpiCard label="Reviews" value={`${stats.realReviews} reviews`} />
-              <KpiCard label="Recall rate" value={formatRatio(stats.recallRate)} />
-            </div>
-
-            <MetricSection title="Ratings">
-              <p className="statistics-hint">Again · Hard · Good · Easy</p>
-              <KpiCard
-                label="Rating distribution"
-                value={`${stats.ratingDistribution.again} · ${stats.ratingDistribution.hard} · ${stats.ratingDistribution.good} · ${stats.ratingDistribution.easy}`}
-              />
-            </MetricSection>
-
-            <MetricSection title="Card states">
-              <div className="statistics-kpi-grid">
-                <KpiCard label="New" value={String(stats.cardStates.new)} />
-                <KpiCard label="Learning" value={String(stats.cardStates.learning)} />
-                <KpiCard label="Review" value={String(stats.cardStates.review)} />
-                <KpiCard label="Relearning" value={String(stats.cardStates.relearning)} />
-                <KpiCard label="Suspended" value={String(stats.cardStates.suspended)} />
-              </div>
-            </MetricSection>
-
-            <MetricSection title="Performance">
-              <div className="statistics-kpi-grid">
-                <KpiCard label="Average answer time" value={formatMsShort(stats.averageAnswerMs)} />
-                <KpiCard label="Lapse rate" value={formatRatio(stats.lapseRate)} />
-                <KpiCard label="Active days" value={String(stats.activeDays)} />
-              </div>
-            </MetricSection>
-
-            <MetricSection title="Due forecast">
-              <div className="statistics-kpi-grid">
-                <KpiCard label="Today" value={String(stats.dueForecast.today)} />
-                <KpiCard label="Next 7 days" value={String(stats.dueForecast.next7Days)} />
-                <KpiCard label="Next 30 days" value={String(stats.dueForecast.next30Days)} />
-              </div>
-            </MetricSection>
-            <ActivityChartCard period={period} totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))} series={[]} />
+            <StatisticsMetricStrip
+              ariaLabel="Memora summary"
+              metrics={[
+                { id: "active", label: "Active time", value: formatMs(stats.activeMs), emphasis: "primary" },
+                { id: "sessions", label: "Sessions", value: String(stats.sessionCount), emphasis: "primary" },
+                { id: "reviews", label: "Reviews", value: String(stats.realReviews), emphasis: "primary" },
+                { id: "recall", label: "Recall rate", value: formatRatio(stats.recallRate), emphasis: "primary" },
+              ]}
+            />
+            <ActivityChartCard
+              embedded
+              period={period}
+              totalBuckets={stats.buckets.map((bucket) => ({ date: bucket.localDay, value: Math.round(bucket.activeMs / 60_000) }))}
+              series={[]}
+              timeBuckets={stats.timeBuckets}
+            />
           </>
         )}
-      </MetricSection>
+      </StatisticsDetailSection>
+      {stats && (
+        <>
+          <StatisticsDetailSection title="Ratings">
+            <RatingDistribution distribution={stats.ratingDistribution} />
+          </StatisticsDetailSection>
+          <StatisticsDetailSection title="Card states">
+            <StatisticsMetricStrip
+              ariaLabel="Card states"
+              metrics={[
+                { id: "new", label: "New", value: String(stats.cardStates.new) },
+                { id: "learning", label: "Learning", value: String(stats.cardStates.learning) },
+                { id: "review", label: "Review", value: String(stats.cardStates.review) },
+                { id: "relearning", label: "Relearning", value: String(stats.cardStates.relearning) },
+                { id: "suspended", label: "Suspended", value: String(stats.cardStates.suspended) },
+              ]}
+            />
+          </StatisticsDetailSection>
+          <StatisticsDetailSection title="Performance">
+            <StatisticsMetricStrip
+              ariaLabel="Performance"
+              metrics={[
+                { id: "practice", label: "Practice active time", value: formatMs(stats.practiceActiveMs), emphasis: "primary" },
+                { id: "avg-answer", label: "Average answer time", value: formatMsShort(stats.averageAnswerMs) },
+                { id: "lapse", label: "Lapse rate", value: formatRatio(stats.lapseRate) },
+                { id: "active-days", label: "Active days", value: String(stats.activeDays) },
+              ]}
+            />
+          </StatisticsDetailSection>
+          <StatisticsDetailSection title="Due forecast">
+            <StatisticsMetricStrip
+              ariaLabel="Due forecast"
+              metrics={[
+                { id: "today", label: "Today", value: String(stats.dueForecast.today), emphasis: "primary" },
+                { id: "next7", label: "Next 7 days", value: String(stats.dueForecast.next7Days), emphasis: "primary" },
+                { id: "next30", label: "Next 30 days", value: String(stats.dueForecast.next30Days), emphasis: "primary" },
+              ]}
+            />
+          </StatisticsDetailSection>
+        </>
+      )}
     </div>
   );
 }
