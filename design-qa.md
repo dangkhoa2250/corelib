@@ -91,3 +91,76 @@ Fix (commit `64ff0a2`): Changed the media query selector from `.statistics-scope
 - No screenshot artifacts from the native WKWebView were captured.
 
 final result: passed (with limitations noted above)
+
+## 2026-07-27 Statistics Audit Follow-ups QA
+
+- Tested source revision: `48c6acf` (includes commits `fe12013`, `77f5c04`, `40f3fb8`, `52c1fbe`, `48c6acf` on branch `feat/statistics-platform`).
+- Starting dirty scope: `node_modules/.vite/vitest/da39a3ee5e6b4b0d3255bfef95601890afd80709/results.json` (Vitest cache, pre-existing, not staged).
+- Ending dirty scope: same pre-existing `results.json` only (plus two untracked docs: `docs/desktop-pocketbase-statistics-qa.md`, `docs/superpowers/plans/2026-07-27-statistics-audit-followups.md`).
+- Checkout path: `/Users/jason/project/corelib/.worktrees/statistics`.
+- Launch mode: `release` (fresh `npm run tauri build` from `apps/desktop` with `ACCOUNT_API_BASE_URL=http://127.0.0.1:8090`).
+- No installed `/Applications/Library.app` was used or overwritten.
+
+### Automated command results
+
+- **Focused acceptance suite** (`npm test -- src/features/statistics src/components/ScrollArea.test.tsx src/styles/tokens.test.ts src/app/commandRegistry.test.ts` from `apps/desktop`): 28 test files / 190 tests passed. `route.statistics` command registration covered (7 tests).
+- **Full frontend suite** (`npm test` from `apps/desktop`): 82 test files / 549 tests passed.
+- **Production frontend build** (`npm run build` from `apps/desktop`): `tsc && vite build` exited 0; 6,326 modules transformed in 2.30s. Pre-existing large-chunk warning (839.50 kB) noted but not treated as failure.
+- **Full Rust suite** (`cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml` from worktree root): 201 passed, 0 failed.
+- **`git diff --check`**: clean (exit 0, no output).
+- **Forbidden-pattern scan** (`statistics.css`): no matches for `overflow: (auto|scroll)`, `::-webkit-scrollbar`, `gradient`, `overflow-x: (auto|scroll)`, or `width: max-content` (exit 1, no matches).
+
+### PocketBase + app account
+
+- `GET http://127.0.0.1:8090/api/health` → `{"code":200,"message":"API is healthy."}`
+- `POST /api/corelib/sign-in` with approved account → `{"status":"approved","hasToken":true,"profileStatus":"approved","role":"admin"}`. Token not printed; credentials not written to Git, files, logs, or screenshot names.
+
+### Release artifact
+
+- Built `2026-07-27 16:32:13 +0900` (newer than build-start epoch `1785137503`).
+- Path: `/Users/jason/project/corelib/.worktrees/statistics/apps/desktop/src-tauri/target/release/bundle/macos/Library.app`.
+- `strings` of `library_desktop` binary contains `http://127.0.0.1:8090` (endpoint embedded at compile time).
+- Updater signing unavailable (`TAURI_SIGNING_PRIVATE_KEY` not set); recorded as "bundle created; updater signing unavailable."
+
+### Running process
+
+- PID `88759` confirmed at `/Users/jason/project/corelib/.worktrees/statistics/apps/desktop/src-tauri/target/release/bundle/macos/Library.app/Contents/MacOS/library_desktop`.
+- No `/Applications/Library.app` instance running.
+
+### Native WKWebView screenshots (dark theme, ~1400×800 unless noted)
+
+Saved to `/Users/jason/project/corelib/.worktrees/statistics/tmp/qa-2026-07-27/`:
+
+1. `1-statistics-overview.png` — Statistics overview (header, period picker, KPI metrics, activity heatmap, Reading/Memora insight cards).
+2. `2-reading-aggregate.png` — Reading statistics, "All Reading" selected. Both panes have matching card surfaces (border, ~14px radius, background, shadow). Right pane has ~20px inner padding. No nested KPI cards. Selected row uses background-only highlight; **no blue accent bar** (per design feedback; commit `48c6acf`). Heatmap "Jul 31" label fully readable.
+3. `3-reading-selected-book.png` — "Learning Theory from First Principles" selected; only right detail pane updates. Visual contract same as #2.
+4. `4-reading-empty-filter.png` — **BLOCKED**: Tauri/WKWebView AX limitation prevents routing text input to the "Search books" field (set_value, type_text, and press_key all failed to populate the field). The "No books found" empty state could not be triggered programmatically.
+5. `5-memora-aggregate.png` — Memora statistics, "All Memora" selected. Visual contract confirmed. Heatmap "Jul 31" label fully readable.
+6. `6-memora-deck-heatmap.png` — "English" deck selected, Heatmap view. Visual contract confirmed. Heatmap "Jul 31" label fully readable.
+7. `7-memora-deck-graph.png` — same deck, Graph view (Heatmap/Graph toggle works). Visual contract confirmed.
+8. `8-collapsed-scope-picker.png` — Window resized to 1100px width; left entity pane replaced by searchable combobox showing "English". Responsive breakpoint working correctly.
+
+### Visual checks (all master-detail screenshots)
+
+- Both top-level panes have matching border, radius, background, and shadow. ✓
+- Right pane has ~20px inner padding. ✓
+- No nested KPI cards returned. ✓
+- Selected aggregate/book/deck uses `var(--interactive-selected)` background; **no `var(--statistics-accent)` inset bar** (design change per user feedback). ✓
+- Final heatmap date label fully readable and inside the plot. ✓
+- Native right-edge scrollbar does not overlap content. ✓
+- Heatmap/Graph toggles both work. ✓
+- Long book titles remain readable through accessible names even when visually ellipsized. ✓
+
+### Design deviation from plan
+
+The implementation plan's Task 3 and Final acceptance checklist specified an inset `var(--statistics-accent)` indicator on selected rows. Per direct user feedback during QA, the blue accent bar was removed (commit `48c6acf`). Selected rows now convey selection via `var(--interactive-selected)` background only. The CSS contract test was updated to pin the background and assert the accent is absent.
+
+### Limitations
+
+- `4-reading-empty-filter.png` ("No books found" empty state) could not be captured due to a Tauri/WKWebView AX limitation: the accessibility mirror of the search `<input>` does not accept text input via `set_value`, `type_text`, or `press_key`. The behavior is covered by the automated test added in Task 2 (`ReadingStatisticsWorkspace.test.tsx` "uses approved book copy for an empty Reading filter").
+- Missing-deck and missing-document unavailable states were not manually reproducible in the running WKWebView (no deep-link harness in the UI). Both are covered by automated tests (Task 1: `MemoraStatisticsWorkspace.test.tsx` "shows an unavailable state…"; the equivalent Reading test already existed).
+- Updater signing unavailable (`TAURI_SIGNING_PRIVATE_KEY` not set). The unsigned local app was used for visual QA only; not reported as a fully passing release build.
+- Light theme not screenshot-verified (only dark theme observed). Token definitions for both themes are pinned by `tokens.test.ts`.
+- Heatmap keyboard grid navigation not screenshot-verified (covered by `ActivityHeatmap.test.tsx` roving-focus tests).
+
+final result: passed (with limitations noted above)
