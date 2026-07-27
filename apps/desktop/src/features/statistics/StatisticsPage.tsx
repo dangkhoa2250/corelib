@@ -40,7 +40,7 @@ export function StatisticsPage({
   documentsLoading = false,
   listDecks = EMPTY_DECK_LOADER,
 }: StatisticsPageProps) {
-  const [period, setPeriod] = useState<StatisticsPeriod>(() => currentPeriod("month"));
+  const [period, setPeriod] = useState<StatisticsPeriod>(() => currentPeriod("year"));
   const [view, setView] = useState<StatisticsView>({ kind: "overview" });
 
   useEffect(() => {

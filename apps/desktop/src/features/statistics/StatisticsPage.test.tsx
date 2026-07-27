@@ -55,9 +55,9 @@ test("uses backend active-day eligibility rather than daily active time", () => 
   ])).toEqual([1, 0, 1]);
 });
 
-test("defaults personal statistics to the current calendar month", async () => {
+test("defaults personal statistics to the current calendar year", async () => {
   render(<StatisticsPage />);
-  expect(await screen.findByRole("button", { name: "Month" })).toHaveAttribute("aria-pressed", "true");
+  expect(await screen.findByRole("button", { name: "Year" })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("passes a calendar period to overview loading", async () => {
