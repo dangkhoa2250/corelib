@@ -340,8 +340,14 @@ export function ActivityHeatmap({ period, buckets, selectedApp, palette }: Activ
           <div className="statistics-heatmap__x-axis" aria-hidden="true">
             {sampledLabels.map(({ index, span }) => {
               const column = columns[index];
+              const isEndLabel = index + span === columns.length;
+
               return (
-                <span key={column.key} style={{ gridColumn: `${index + 1} / span ${span}` }}>
+                <span
+                  key={column.key}
+                  data-axis-edge={isEndLabel ? "end" : undefined}
+                  style={{ gridColumn: `${index + 1} / span ${span}` }}
+                >
                   {column.label}
                 </span>
               );

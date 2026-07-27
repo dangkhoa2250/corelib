@@ -228,3 +228,26 @@ test("moves roving focus across period columns and time rows", () => {
   fireEvent.keyDown(screen.getByRole("gridcell", { name: /July 14, 2026, 00:00–04:00/ }), { key: "ArrowDown" });
   expect(screen.getByRole("gridcell", { name: /July 14, 2026, 04:00–08:00/ })).toHaveFocus();
 });
+
+test("marks a final-column Month label for inward edge alignment", () => {
+  const july = {
+    unit: "month" as const,
+    anchorLocalDay: "2026-07-01",
+  };
+  const { container } = render(
+    <ActivityHeatmap
+      period={july}
+      buckets={[]}
+      selectedApp="all"
+      palette={palette}
+    />,
+  );
+
+  const labels = container.querySelectorAll(
+    ".statistics-heatmap__x-axis span",
+  );
+  const lastLabel = labels.item(labels.length - 1);
+
+  expect(lastLabel).toHaveTextContent("Jul 31");
+  expect(lastLabel).toHaveAttribute("data-axis-edge", "end");
+});

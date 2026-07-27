@@ -330,6 +330,7 @@
 .statistics-heatmap__plot { min-width: 0; }
 .statistics-heatmap__x-axis { display: grid; grid-template-columns: repeat(var(--column-count), minmax(0, 1fr)); gap: var(--heatmap-gap); min-width: 0; min-height: 21px; margin-bottom: 6px; color: var(--text-secondary); font-size: 11px; line-height: 15px; }
 .statistics-heatmap__x-axis span { align-self: end; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.statistics-heatmap__x-axis span[data-axis-edge="end"] { justify-self: end; overflow: visible; text-align: right; }
 .statistics-heatmap__y-axis { display: grid; grid-template-rows: 27px auto; color: var(--text-secondary); font-size: 11px; line-height: 15px; text-align: right; }
 .statistics-heatmap__y-axis-start { align-self: end; transform: translateY(50%); }
 .statistics-heatmap__y-axis-boundaries { display: grid; grid-template-rows: repeat(6, var(--heatmap-row-height)); gap: var(--heatmap-gap); }

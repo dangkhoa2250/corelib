@@ -253,6 +253,13 @@ test("keeps the calendar time heatmap inside its card without horizontal scrolli
   const heatmapTooltip = statCss.match(/\.statistics-heatmap__tooltip\s*\{([^}]*)\}/)?.[1] ?? "";
   expect(heatmapTooltip).toContain("min-height: 18px;");
   expect(heatmapTooltip).not.toContain("position: absolute;");
+
+  const heatmapEndLabel = statCss.match(
+    /\.statistics-heatmap__x-axis span\[data-axis-edge="end"\]\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  expect(heatmapEndLabel).toContain("justify-self: end;");
+  expect(heatmapEndLabel).toContain("text-align: right;");
+  expect(heatmapEndLabel).toContain("overflow: visible;");
 });
 
 test("pins the Statistics master detail and WKWebView inset contract", () => {
