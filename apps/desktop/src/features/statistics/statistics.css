@@ -428,7 +428,6 @@
 
 .statistics-entity-pane__all-button[aria-current="page"] {
   background: var(--interactive-selected);
-  box-shadow: inset 3px 0 0 var(--statistics-accent);
 }
 
 .statistics-entity-pane__all-button:hover:not([aria-current="page"]) {
@@ -469,7 +468,6 @@
 
 .statistics-entity-pane__row[aria-current="page"] {
   background: var(--interactive-selected);
-  box-shadow: inset 3px 0 0 var(--statistics-accent);
 }
 
 .statistics-entity-pane__row:hover:not([aria-current="page"]) {

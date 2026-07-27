@@ -323,12 +323,10 @@ test("pins the Statistics master detail and WKWebView inset contract", () => {
     expect(detailPane).toContain(declaration);
   }
 
-  expect(selectedAll).toContain(
-    "box-shadow: inset 3px 0 0 var(--statistics-accent);",
-  );
-  expect(selectedRow).toContain(
-    "box-shadow: inset 3px 0 0 var(--statistics-accent);",
-  );
+  expect(selectedAll).toContain("background: var(--interactive-selected);");
+  expect(selectedRow).toContain("background: var(--interactive-selected);");
+  expect(selectedAll).not.toContain("var(--statistics-accent)");
+  expect(selectedRow).not.toContain("var(--statistics-accent)");
 });
 
 test("loads the Statistics stylesheet from the application entry point", () => {
