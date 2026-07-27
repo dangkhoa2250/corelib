@@ -11,7 +11,7 @@ use crate::model::{DocumentSummary, PageTagSummary};
 use uuid::Uuid;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATIONS: [(&str, &str); 10] = [
+const MIGRATIONS: [(&str, &str); 13] = [
     (
         "0001_library",
         include_str!("../migrations/0001_library.sql"),
@@ -51,6 +51,18 @@ const MIGRATIONS: [(&str, &str); 10] = [
     (
         "0010_memora_study",
         include_str!("../migrations/0010_memora_study.sql"),
+    ),
+    (
+        "0011_statistics",
+        include_str!("../migrations/0011_statistics.sql"),
+    ),
+    (
+        "0012_review_local_day",
+        include_str!("../migrations/0012_review_local_day.sql"),
+    ),
+    (
+        "0013_statistics_time_buckets",
+        include_str!("../migrations/0013_statistics_time_buckets.sql"),
     ),
 ];
 const SUMMARY_COLUMNS: &str =
@@ -393,6 +405,11 @@ impl LibraryDatabase {
         transaction.execute(
             "DELETE FROM document_text WHERE document_id = ?1",
             params![id],
+        )?;
+        transaction.execute(
+            "UPDATE activity_sessions SET context_id=NULL,updated_at=?1
+             WHERE context_kind='document' AND context_id=?2",
+            params![portable_timestamp(), id],
         )?;
         transaction.execute("DELETE FROM documents WHERE id = ?1", params![id])?;
         transaction.commit()?;

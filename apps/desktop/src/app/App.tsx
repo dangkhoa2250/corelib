@@ -46,6 +46,8 @@ import { AccountGate, useAccount } from "../features/account/AccountGate";
 import { PocketBaseAccountApiClient } from "../lib/account";
 import type { AccountApi } from "../domain/account";
 import { AdminPage } from "../features/admin/AdminPage";
+import { StatisticsPage } from "../features/statistics/StatisticsPage";
+import { StatisticsAnalyticsSync } from "../features/statistics/StatisticsAnalyticsSync";
 import { AnalyticsClient } from "../lib/analytics";
 import { createCommandRegistry } from "./commandRegistry";
 import type { AppRoute } from "./routes";
@@ -242,6 +244,17 @@ function AnalyticsInstrumentation({
   }, [client]);
 
   return null;
+}
+
+function SyncCoordinator({ accountApi }: { accountApi: AccountApi }) {
+  const account = useAccount();
+  return (
+    <StatisticsAnalyticsSync
+      accountId={account?.session?.profile.id ?? null}
+      enabled={account?.session?.profile.analyticsEnabled ?? false}
+      accountApi={accountApi}
+    />
+  );
 }
 
 export function App({
@@ -750,11 +763,14 @@ export function App({
       ? "trash"
       : route.name === "admin"
       ? "admin"
+      : route.name === "statistics"
+      ? "statistics"
       : "library";
 
   return (
     <AccountGate api={accountApi}>
       <AnalyticsInstrumentation client={analyticsClient} route={route} />
+      <SyncCoordinator accountApi={accountApi} />
       <div className="app-shell">
       <AppSidebar
         active={activeSection}
@@ -768,6 +784,8 @@ export function App({
               ? { name: "memora" }
               : section === "trash"
               ? { name: "trash" }
+              : section === "statistics"
+              ? { name: "statistics" }
               : { name: "library" }
           );
         }}
@@ -775,8 +793,20 @@ export function App({
         onSettingsClick={() => setRoute({ name: "settings" })}
         onAdminClick={() => setRoute({ name: "admin" })}
       />
-      <div className="app-shell__content">
-        {route.name === "memora" ? (
+      <div className={`app-shell__content ${route.name === "statistics" || route.name === "admin" ? "app-shell__content--managed-scroll" : ""}`}>
+        {route.name === "statistics" ? (
+          <StatisticsPage
+            documents={documents ?? []}
+            documentsLoading={loading}
+            listDecks={learning.listDecks}
+            target={route.target}
+            origin={route.origin}
+            onBack={() => {
+              if (route.origin === "memora") setRoute({ name: "memora" });
+              else setRoute({ name: "library" });
+            }}
+          />
+        ) : route.name === "memora" ? (
           <MemoraPage
             listDecks={learning.listDecks}
             getStudyReadyCounts={learning.getStudyReadyCounts}
@@ -808,6 +838,7 @@ export function App({
             }}
             onStudyDeck={handleStudyDeck}
             onPracticeAll={handlePracticeAll}
+            onViewStatistics={(id) => setRoute({ name: "statistics", target: { kind: "deck", deckId: id }, origin: "memora" })}
             onDirtyStateChange={setIsBrowserDirty}
             getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
             getDeckStatistics={learning.getDeckStatistics}
@@ -871,6 +902,7 @@ export function App({
               onOpenDrive={() => void handleOpenDrive()}
               onDelete={(id) => void handleDelete(id)}
               onRename={(id, title) => void handleRename(id, title)}
+              onViewStatistics={(id) => setRoute({ name: "statistics", target: { kind: "document", documentId: id }, origin: "library" })}
               getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
               pendingImports={pendingImports}
             />

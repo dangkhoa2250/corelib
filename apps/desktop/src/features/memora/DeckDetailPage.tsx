@@ -14,6 +14,7 @@ export interface DeckDetailPageProps {
   onBack: () => void;
   onStudyDeck: (deckId: string) => void;
   onPracticeAll: (deckId: string) => void;
+  onViewStatistics?: (deckId: string) => void;
   onDirtyStateChange?: (dirty: boolean) => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
   getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
@@ -39,6 +40,7 @@ export function DeckDetailPage({
   onBack,
   onStudyDeck,
   onPracticeAll,
+  onViewStatistics,
   onDirtyStateChange,
   getDocumentFileUrl,
   getDeckStatistics,
@@ -102,6 +104,14 @@ export function DeckDetailPage({
               headerTitle={`${deck.name} Card Browser`}
               headerActions={(
                 <>
+                  {onViewStatistics && (
+                    <Button
+                      onClick={() => onViewStatistics(deck.id)}
+                      variant="secondary"
+                    >
+                      View statistics
+                    </Button>
+                  )}
                   <Button
                     disabled={!(stats && stats.newCards + stats.dueCards > 0)}
                     onClick={() => onStudyDeck(deck.id)}

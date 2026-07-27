@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Mutex;
 use keyring::Entry;
 
@@ -138,6 +139,102 @@ pub struct MetricErrorCode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DailyStatisticsSnapshot {
+    pub schema_version: i32,
+    pub local_day: String,
+    pub app_key: String,
+    pub active_ms: i64,
+    pub active_day: bool,
+    pub session_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_visit_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unique_page_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real_review_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub again_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hard_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub good_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easy_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lapse_count: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminStatisticsBucket {
+    pub local_day: String,
+    pub contributing_users: i64,
+    pub insufficient_sample: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminAppAggregate {
+    pub active_users: i64,
+    pub active_ms: i64,
+    pub session_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_visit_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub real_review_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub again_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hard_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub good_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub easy_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lapse_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recall_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub returning_user_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub weekly_learning_frequency: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AdminStatistics {
+    pub approved_users: i64,
+    pub analytics_enabled_users: i64,
+    pub opt_in_percentage: f64,
+    pub contributing_users: i64,
+    pub insufficient_sample: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dau: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wau: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mau: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_ms: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_days: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_active_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub average_active_days: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_allocation: Option<HashMap<String, f64>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reading: Option<AdminAppAggregate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memora: Option<AdminAppAggregate>,
+    pub buckets: Vec<AdminStatisticsBucket>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum AccountError {
     InvalidInput,
     EmailTaken,
@@ -146,6 +243,7 @@ pub enum AccountError {
     AdminRequired,
     InvalidEvent,
     AnalyticsDisabled,
+    AccountMismatch,
     SessionExpired,
     AccountServiceNotConfigured,
     NetworkError(String),
@@ -162,6 +260,7 @@ impl std::fmt::Display for AccountError {
             Self::AdminRequired => write!(f, "admin_required"),
             Self::InvalidEvent => write!(f, "invalid_event"),
             Self::AnalyticsDisabled => write!(f, "analytics_disabled"),
+            Self::AccountMismatch => write!(f, "account_mismatch"),
             Self::SessionExpired => write!(f, "session_expired"),
             Self::AccountServiceNotConfigured => write!(f, "account_service_not_configured"),
             Self::NetworkError(msg) => write!(f, "network_error: {}", msg),
@@ -319,41 +418,162 @@ pub trait AccountApi {
     fn admin_set_feature_assignment(&self, input: FeatureAssignmentInput) -> Result<FeatureAssignment, AccountError>;
     fn admin_metrics(&self) -> Result<AdminMetrics, AccountError>;
     fn admin_delete_user(&self, user_id: &str) -> Result<(), AccountError>;
+    fn upsert_daily_statistics(&self, expected_account_id: &str, input: DailyStatisticsSnapshot) -> Result<(), AccountError>;
+    fn admin_statistics(&self, range: &str, app_key: &str) -> Result<AdminStatistics, AccountError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ActiveSession {
+    account_id: String,
+    token: String,
+}
+
+#[derive(Debug, Clone)]
+struct AuthenticatedRequest {
+    token: String,
+    active_session: Option<ActiveSession>,
 }
 
 pub struct PocketBaseAccountApi<S: SessionStore, H: HttpClient> {
     pub base_url: String,
     pub store: S,
     pub http: H,
-    pub ephemeral_token: Mutex<Option<String>>,
+    active_session: Mutex<Option<ActiveSession>>,
 }
 
 impl<S: SessionStore, H: HttpClient> PocketBaseAccountApi<S, H> {
     pub fn new_with_deps(base_url: String, store: S, http: H) -> Self {
-        Self { base_url, store, http, ephemeral_token: Mutex::new(None) }
+        Self { base_url, store, http, active_session: Mutex::new(None) }
     }
 
-    fn get_active_token(&self) -> Result<String, AccountError> {
-        if let Some(t) = self.ephemeral_token.lock().unwrap().as_ref() {
-            return Ok(t.clone());
+    fn authenticated_request(&self) -> Result<AuthenticatedRequest, AccountError> {
+        let active_session = self.active_session.lock().unwrap().clone();
+        if let Some(session) = active_session.as_ref() {
+            return Ok(AuthenticatedRequest {
+                token: session.token.clone(),
+                active_session,
+            });
         }
-        self.store
+
+        let token = self.store
             .get_token()
             .map_err(AccountError::Internal)?
-            .ok_or(AccountError::SessionExpired)
+            .ok_or(AccountError::SessionExpired)?;
+        Ok(AuthenticatedRequest {
+            token,
+            active_session: None,
+        })
+    }
+
+    fn activate_session(
+        &self,
+        profile: &AccountProfile,
+        token: &str,
+        remember: bool,
+    ) -> Result<(), AccountError> {
+        if profile.status != AccountStatus::Approved {
+            return Err(AccountError::AccountNotApproved);
+        }
+
+        let mut active_session = self.active_session.lock().unwrap();
+        if remember {
+            self.store.set_token(token).map_err(AccountError::Internal)?;
+        }
+        *active_session = Some(ActiveSession {
+            account_id: profile.id.clone(),
+            token: token.to_string(),
+        });
+        Ok(())
+    }
+
+    fn bind_current_session(
+        &self,
+        profile: &AccountProfile,
+        token: &str,
+    ) -> Result<(), AccountError> {
+        if profile.status != AccountStatus::Approved {
+            return Err(AccountError::AccountNotApproved);
+        }
+
+        let mut active_session = self.active_session.lock().unwrap();
+        if let Some(current) = active_session.as_ref() {
+            if current.token != token {
+                return Err(AccountError::AccountMismatch);
+            }
+        } else {
+            let persisted_token = self.store.get_token().map_err(AccountError::Internal)?;
+            if persisted_token.as_deref() != Some(token) {
+                return Err(AccountError::SessionExpired);
+            }
+        }
+        *active_session = Some(ActiveSession {
+            account_id: profile.id.clone(),
+            token: token.to_string(),
+        });
+        Ok(())
+    }
+
+    fn authenticated_request_for_account(
+        &self,
+        expected_account_id: &str,
+    ) -> Result<AuthenticatedRequest, AccountError> {
+        let active_session = self.active_session.lock().unwrap();
+        match active_session.as_ref() {
+            Some(session) if session.account_id == expected_account_id => {
+                Ok(AuthenticatedRequest {
+                    token: session.token.clone(),
+                    active_session: Some(session.clone()),
+                })
+            }
+            _ => Err(AccountError::AccountMismatch),
+        }
     }
 
     fn clear_all_tokens(&self) {
-        *self.ephemeral_token.lock().unwrap() = None;
+        let mut active_session = self.active_session.lock().unwrap();
+        *active_session = None;
         let _ = self.store.delete_token();
     }
 
+    fn clear_tokens_if_authenticated_request_matches(&self, request: &AuthenticatedRequest) {
+        let mut active_session = self.active_session.lock().unwrap();
+        let matches_origin = active_session.as_ref() == request.active_session.as_ref();
+        if !matches_origin {
+            return;
+        }
+
+        if self.store.get_token().ok().flatten().as_deref() == Some(request.token.as_str()) {
+            let _ = self.store.delete_token();
+        }
+        *active_session = None;
+    }
+
     fn handle_error_response(&self, status: u16, body: &serde_json::Value) -> AccountError {
+        self.handle_error_response_with_cleanup(status, body, || self.clear_all_tokens())
+    }
+
+    fn handle_error_response_for_authenticated_request(
+        &self,
+        status: u16,
+        body: &serde_json::Value,
+        request: &AuthenticatedRequest,
+    ) -> AccountError {
+        self.handle_error_response_with_cleanup(status, body, || {
+            self.clear_tokens_if_authenticated_request_matches(request)
+        })
+    }
+
+    fn handle_error_response_with_cleanup(
+        &self,
+        status: u16,
+        body: &serde_json::Value,
+        clear_tokens: impl Fn(),
+    ) -> AccountError {
         let msg = body.get("message").and_then(|m| m.as_str()).unwrap_or("");
         match status {
             400 => AccountError::InvalidInput,
             401 => {
-                self.clear_all_tokens();
+                clear_tokens();
                 if msg.contains("invalid_credentials") {
                     AccountError::InvalidCredentials
                 } else {
@@ -366,7 +586,7 @@ impl<S: SessionStore, H: HttpClient> PocketBaseAccountApi<S, H> {
                 } else if msg.contains("analytics_disabled") {
                     AccountError::AnalyticsDisabled
                 } else {
-                    self.clear_all_tokens();
+                    clear_tokens();
                     AccountError::AccountNotApproved
                 }
             }
@@ -420,11 +640,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
                     let profile_val = res.get("profile").cloned().unwrap_or(serde_json::Value::Null);
                     let profile: AccountProfile = serde_json::from_value(profile_val)
                         .map_err(|e| AccountError::Internal(e.to_string()))?;
-                    if remember {
-                        self.store.set_token(token).map_err(AccountError::Internal)?;
-                    } else {
-                        *self.ephemeral_token.lock().unwrap() = Some(token.to_string());
-                    }
+                    self.activate_session(&profile, token, remember)?;
                     Ok(AccountStatusResponse::Approved(SessionSnapshot {
                         profile,
                         entitlements: Entitlements {
@@ -445,15 +661,16 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/me", self.base_url);
-        let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.get(&url, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             let snapshot: SessionSnapshot = serde_json::from_value(res)
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
+            self.bind_current_session(&snapshot.profile, &request.token)?;
             Ok(snapshot)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -466,16 +683,16 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/me/analytics", self.base_url);
         let body = serde_json::json!({ "enabled": enabled });
-        let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.post(&url, body, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             let profile: AccountProfile = serde_json::from_value(res)
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(profile)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -530,7 +747,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
             return Err(AccountError::InvalidEvent);
         }
 
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
 
         let url = format!("{}/api/corelib/analytics", self.base_url);
         let body = serde_json::json!({
@@ -541,13 +758,13 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
             "payload": event.payload,
         });
 
-        let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.post(&url, body, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 204 {
             Ok(())
         } else if status == 400 {
             Err(AccountError::InvalidEvent)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -555,9 +772,9 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/users", self.base_url);
-        let (http_status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (http_status, res) = self.http.get(&url, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if http_status == 200 {
             #[derive(Deserialize)]
             struct UserListItem {
@@ -575,7 +792,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
             }
             Ok(list)
         } else {
-            Err(self.handle_error_response(http_status, &res))
+            Err(self.handle_error_response_for_authenticated_request(http_status, &res, &request))
         }
     }
 
@@ -583,16 +800,16 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/users/{}/status", self.base_url, user_id);
         let body = serde_json::json!({ "status": status.as_str() });
-        let (http_status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (http_status, res) = self.http.post(&url, body, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if http_status == 200 {
             let profile: AccountProfile = serde_json::from_value(res)
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(profile)
         } else {
-            Err(self.handle_error_response(http_status, &res))
+            Err(self.handle_error_response_for_authenticated_request(http_status, &res, &request))
         }
     }
 
@@ -600,14 +817,14 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/users/{}/groups", self.base_url, user_id);
         let body = serde_json::json!({ "groupIds": group_ids });
-        let (http_status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (http_status, res) = self.http.post(&url, body, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if http_status == 200 {
             Ok(())
         } else {
-            Err(self.handle_error_response(http_status, &res))
+            Err(self.handle_error_response_for_authenticated_request(http_status, &res, &request))
         }
     }
 
@@ -615,9 +832,9 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/groups", self.base_url);
-        let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.get(&url, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             #[derive(Deserialize)]
             struct GroupsResponse {
@@ -627,7 +844,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(wrapper.groups)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -635,16 +852,16 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/groups", self.base_url);
         let body = serde_json::json!({ "name": name, "description": description });
-        let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.post(&url, body, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             let group: AccountGroup = serde_json::from_value(res)
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(group)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -652,9 +869,9 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/features", self.base_url);
-        let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.get(&url, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             #[derive(Deserialize)]
             struct FeaturesResponse {
@@ -664,7 +881,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(wrapper.features)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -672,16 +889,16 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/features", self.base_url);
         let body = serde_json::json!({ "key": key, "description": description });
-        let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.post(&url, body, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             let feature: FeatureDefinition = serde_json::from_value(res)
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(feature)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -689,7 +906,7 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/assignments", self.base_url);
         let body = serde_json::json!({
             "featureKey": input.feature_key,
@@ -697,13 +914,13 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
             "subjectId": input.subject_id,
             "enabled": input.enabled,
         });
-        let (status, res) = self.http.post(&url, body, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.post(&url, body, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             let assignment: FeatureAssignment = serde_json::from_value(res)
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(assignment)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -711,15 +928,15 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/metrics", self.base_url);
-        let (status, res) = self.http.get(&url, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.get(&url, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             let metrics: AdminMetrics = serde_json::from_value(res)
                 .map_err(|e| AccountError::Internal(e.to_string()))?;
             Ok(metrics)
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 
@@ -727,13 +944,44 @@ impl<S: SessionStore, H: HttpClient> AccountApi for PocketBaseAccountApi<S, H> {
         if self.base_url.is_empty() {
             return Err(AccountError::AccountServiceNotConfigured);
         }
-        let token = self.get_active_token()?;
+        let request = self.authenticated_request()?;
         let url = format!("{}/api/corelib/admin/users/{}", self.base_url, user_id);
-        let (status, res) = self.http.delete(&url, Some(&token)).map_err(AccountError::NetworkError)?;
+        let (status, res) = self.http.delete(&url, Some(&request.token)).map_err(AccountError::NetworkError)?;
         if status == 200 {
             Ok(())
         } else {
-            Err(self.handle_error_response(status, &res))
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
+        }
+    }
+
+    fn upsert_daily_statistics(&self, expected_account_id: &str, input: DailyStatisticsSnapshot) -> Result<(), AccountError> {
+        if self.base_url.is_empty() {
+            return Err(AccountError::AccountServiceNotConfigured);
+        }
+        let request = self.authenticated_request_for_account(expected_account_id)?;
+        let url = format!("{}/api/corelib/analytics/daily-statistics", self.base_url);
+        let body = serde_json::to_value(&input).map_err(|e| AccountError::Internal(e.to_string()))?;
+        let (status, res) = self.http.post(&url, body, Some(&request.token)).map_err(AccountError::NetworkError)?;
+        if status == 204 {
+            Ok(())
+        } else {
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
+        }
+    }
+
+    fn admin_statistics(&self, range: &str, app_key: &str) -> Result<AdminStatistics, AccountError> {
+        if self.base_url.is_empty() {
+            return Err(AccountError::AccountServiceNotConfigured);
+        }
+        let request = self.authenticated_request()?;
+        let url = format!("{}/api/corelib/admin/statistics?range={}&appKey={}", self.base_url, range, app_key);
+        let (status, res) = self.http.get(&url, Some(&request.token)).map_err(AccountError::NetworkError)?;
+        if status == 200 {
+            let stats: AdminStatistics = serde_json::from_value(res)
+                .map_err(|e| AccountError::Internal(e.to_string()))?;
+            Ok(stats)
+        } else {
+            Err(self.handle_error_response_for_authenticated_request(status, &res, &request))
         }
     }
 }

@@ -1,6 +1,20 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi, beforeAll } from "vitest";
 
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn().mockResolvedValue(undefined),
+  convertFileSrc: vi.fn((path: string) => path),
+}));
+
+vi.mock("../statistics/useActiveTimer", () => ({
+  useActiveTimer: vi.fn().mockReturnValue({
+    activeMs: 0,
+    markActivity: vi.fn(),
+    reset: vi.fn(),
+    snapshot: vi.fn().mockReturnValue(0),
+  }),
+}));
+
 import type { LibraryDocument } from "../../domain/document";
 import {
   clampZoomScale,

@@ -9,9 +9,7 @@ use std::{
     thread,
 };
 
-#[cfg(test)]
-use chrono::DateTime;
-use chrono::Utc;
+use chrono::{DateTime, Timelike, Utc};
 use serde::Deserialize;
 
 use tauri::State;
@@ -1162,6 +1160,14 @@ pub struct StudyRatingPayload {
     pub elapsed_ms: i64,
 }
 
+pub(crate) fn local_review_clock(now: DateTime<Utc>) -> (String, i64) {
+    let local_now = now.with_timezone(&chrono::Local);
+    (
+        local_now.date_naive().to_string(),
+        i64::from(local_now.hour() * 60 + local_now.minute()),
+    )
+}
+
 pub(crate) fn scope_from_payload(payload: StudyScopePayload) -> Result<StudyScope, String> {
     match payload.kind.as_str() {
         "all" => Ok(StudyScope::All),
@@ -1254,7 +1260,7 @@ pub fn rate_study_card(
         return Err("elapsedMs must be nonnegative".to_owned());
     }
     let now = Utc::now();
-    let study_day = chrono::Local::now().date_naive().to_string();
+    let (study_day, local_minute_of_day) = local_review_clock(now);
     learning_lock(&state)?
         .rate_study_card(StudyRating {
             session_id: payload.session_id,
@@ -1266,6 +1272,7 @@ pub fn rate_study_card(
             elapsed_ms: payload.elapsed_ms,
             now,
             study_day,
+            local_minute_of_day,
         })
         .map_err(|e| e.to_string())
 }
@@ -1293,8 +1300,8 @@ pub struct AccountServiceState {
 
 use crate::account::{
     AccountApi, AccountGroup, AccountProfile, AccountStatus, AccountStatusResponse,
-    FeatureAssignment, FeatureAssignmentInput, FeatureDefinition, SessionSnapshot,
-    AdminMetrics, AnalyticsEventInput,
+    DailyStatisticsSnapshot, FeatureAssignment, FeatureAssignmentInput, FeatureDefinition,
+    SessionSnapshot, AdminMetrics, AdminStatistics, AnalyticsEventInput,
 };
 
 #[tauri::command]
@@ -1444,6 +1451,240 @@ pub fn admin_delete_user(
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<(), String> {
     state.api.admin_delete_user(&user_id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn account_upsert_daily_statistics(
+    expected_account_id: String,
+    input: DailyStatisticsSnapshot,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<(), String> {
+    state.api
+        .upsert_daily_statistics(&expected_account_id, input)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn admin_get_statistics(
+    range: String,
+    app_key: String,
+    state: tauri::State<'_, AccountServiceState>,
+) -> Result<AdminStatistics, String> {
+    state.api.admin_statistics(&range, &app_key).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Statistics command input types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetStatisticsOverviewInput {
+    pub period: StatisticsPeriodInput,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatisticsPeriodInput {
+    pub unit: String,
+    pub anchor_local_day: String,
+}
+
+impl StatisticsPeriodInput {
+    fn parse(&self) -> Result<crate::statistics::StatisticsPeriod, String> {
+        crate::statistics::StatisticsPeriod::parse(&self.unit, &self.anchor_local_day)
+            .map_err(|error| error.to_string())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetReadingStatisticsInput {
+    pub period: StatisticsPeriodInput,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDocumentStatisticsInput {
+    pub document_id: String,
+    pub period: StatisticsPeriodInput,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetMemoraStatisticsInput {
+    pub period: StatisticsPeriodInput,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDeckStatisticsDetailInput {
+    pub deck_id: String,
+    pub period: StatisticsPeriodInput,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartActivitySessionInput {
+    pub id: String,
+    pub app_key: String,
+    pub activity_kind: String,
+    pub context_kind: Option<String>,
+    pub context_id: Option<String>,
+    pub occurred_at: String,
+    pub local_day: String,
+    pub timezone_offset_minutes: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityCheckpointInput {
+    pub session_id: String,
+    pub occurred_at: String,
+    pub active_ms: i64,
+    pub document_id: Option<String>,
+    pub page: Option<i64>,
+    pub page_visit_increment: i64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FinishActivitySessionInput {
+    pub session_id: String,
+    pub occurred_at: String,
+}
+
+// ---------------------------------------------------------------------------
+// Statistics commands
+// ---------------------------------------------------------------------------
+
+fn statistics_now() -> (String, String) {
+    let now = Utc::now();
+    let now_utc = now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let today_local_day = chrono::Local::now().date_naive().to_string();
+    (now_utc, today_local_day)
+}
+
+#[tauri::command]
+pub fn get_statistics_overview(
+    input: GetStatisticsOverviewInput,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::statistics::StatisticsOverview, String> {
+    let period = input.period.parse()?;
+    let (now_utc, today_local_day) = statistics_now();
+    learning_lock(&state)?
+        .statistics_overview(&period, &now_utc, &today_local_day)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_reading_statistics(
+    input: GetReadingStatisticsInput,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::statistics::ReadingStatistics, String> {
+    let period = input.period.parse()?;
+    let (now_utc, today_local_day) = statistics_now();
+    learning_lock(&state)?
+        .reading_statistics(&period, &now_utc, &today_local_day)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_document_statistics(
+    input: GetDocumentStatisticsInput,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::statistics::DocumentStatistics, String> {
+    let period = input.period.parse()?;
+    let (now_utc, today_local_day) = statistics_now();
+    learning_lock(&state)?
+        .document_statistics(&input.document_id, &period, &now_utc, &today_local_day)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_memora_statistics(
+    input: GetMemoraStatisticsInput,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::statistics::MemoraStatistics, String> {
+    let period = input.period.parse()?;
+    let (now_utc, today_local_day) = statistics_now();
+    learning_lock(&state)?
+        .memora_statistics(&period, &now_utc, &today_local_day)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_deck_statistics_detail(
+    input: GetDeckStatisticsDetailInput,
+    state: State<'_, LibraryStore>,
+) -> Result<crate::statistics::DeckStatisticsDetail, String> {
+    let period = input.period.parse()?;
+    let (now_utc, today_local_day) = statistics_now();
+    learning_lock(&state)?
+        .deck_statistics_detail(&input.deck_id, &period, &now_utc, &today_local_day)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn start_activity_session(
+    input: StartActivitySessionInput,
+    state: State<'_, LibraryStore>,
+) -> Result<(), String> {
+    learning_lock(&state)?
+        .start_activity_session(crate::statistics::NewActivitySession {
+            id: input.id,
+            app_key: input.app_key,
+            activity_kind: input.activity_kind,
+            context_kind: input.context_kind,
+            context_id: input.context_id,
+            occurred_at: input.occurred_at,
+            local_day: input.local_day,
+            timezone_offset_minutes: input.timezone_offset_minutes,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn checkpoint_activity_session(
+    input: ActivityCheckpointInput,
+    state: State<'_, LibraryStore>,
+) -> Result<(), String> {
+    learning_lock(&state)?
+        .checkpoint_activity_session(crate::statistics::ActivityCheckpoint {
+            session_id: input.session_id,
+            occurred_at: input.occurred_at,
+            active_ms: input.active_ms,
+            document_id: input.document_id,
+            page: input.page,
+            page_visit_increment: input.page_visit_increment,
+        })
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn finish_activity_session(
+    input: FinishActivitySessionInput,
+    state: State<'_, LibraryStore>,
+) -> Result<(), String> {
+    learning_lock(&state)?
+        .finish_activity_session(&input.session_id, &input.occurred_at)
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetDailyStatisticsSnapshotsInput {
+    pub query: crate::statistics::DailySnapshotQuery,
+}
+
+#[tauri::command]
+pub fn get_daily_statistics_snapshots(
+    input: GetDailyStatisticsSnapshotsInput,
+    state: State<'_, LibraryStore>,
+) -> Result<Vec<crate::statistics::DailyStatisticsSnapshot>, String> {
+    let db = learning_lock(&state)?;
+    crate::statistics::get_daily_statistics_snapshots(&db.connection, &input.query)
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]

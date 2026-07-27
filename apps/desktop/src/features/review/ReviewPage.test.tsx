@@ -1,7 +1,14 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi, beforeEach } from "vitest";
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn().mockResolvedValue(undefined),
+  convertFileSrc: vi.fn((path: string) => path),
+}));
+
 import type { LearningCard, StudyGrant, StudySession } from "../../domain/learning";
+import type { StatisticsActivityApi } from "../reader/useReadingActivitySession";
 import { ReviewPage } from "./ReviewPage";
 
 const card: LearningCard = {
@@ -228,6 +235,33 @@ test("rates a grant and refreshes the backend queue", async () => {
   );
   expect(onRefresh).toHaveBeenCalledWith(studySession.sessionId);
   expect(await screen.findByText(/Next learning card/)).toBeInTheDocument();
+});
+
+test("study persists idle-aware answer time instead of wall-clock time", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-18T12:00:00.000Z"));
+  const onRate = vi.fn().mockResolvedValue({ card, reviewLogId: "log-idle" });
+
+  render(
+    <ReviewPage
+      mode="study"
+      session={studySession}
+      onRate={onRate}
+      onRefresh={vi.fn().mockResolvedValue({ ...studySession, cards: [] })}
+    />,
+  );
+
+  act(() => vi.advanceTimersByTime(120_000));
+  fireEvent.click(screen.getByRole("button", { name: /Flashcard/i }));
+  fireEvent.click(screen.getByRole("button", { name: "Good" }));
+  await act(async () => Promise.resolve());
+
+  expect(onRate).toHaveBeenCalledWith(
+    studySession.sessionId,
+    studySession.cards[0],
+    "good",
+    90_000,
+  );
 });
 
 test("stale ratings show an error without refreshing the queue", async () => {
@@ -470,4 +504,168 @@ test("practice never renders interval labels", async () => {
   render(<ReviewPage mode="practice" cards={[card]} />);
   await user.click(screen.getByRole("button", { name: /Flashcard/i }));
   expect(screen.queryByText("10m")).not.toBeInTheDocument();
+});
+
+function makeActivityApi(): StatisticsActivityApi {
+  return {
+    start: vi.fn().mockResolvedValue(undefined),
+    checkpoint: vi.fn().mockResolvedValue(undefined),
+    finish: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+test("practice starts an activity session when cards are present", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-18T12:00:00.000Z"));
+  const activityApi = makeActivityApi();
+  render(
+    <ReviewPage mode="practice" cards={[card]} activityApi={activityApi} />,
+  );
+
+  expect(activityApi.start).toHaveBeenCalledWith({
+    id: expect.any(String),
+    appKey: "memora",
+    activityKind: "practice",
+    contextKind: "deck",
+    contextId: "english",
+    occurredAt: "2026-07-18T12:00:00.000Z",
+    localDay: "2026-07-18",
+    timezoneOffsetMinutes: expect.any(Number),
+  });
+  vi.useRealTimers();
+});
+
+test("practice does not start an activity session without cards", () => {
+  const activityApi = makeActivityApi();
+  render(<ReviewPage mode="practice" cards={[]} activityApi={activityApi} />);
+  expect(activityApi.start).not.toHaveBeenCalled();
+});
+
+test("practice checkpoints every 15 seconds while active", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-18T12:00:00.000Z"));
+  const activityApi = makeActivityApi();
+  const onBack = vi.fn();
+  render(
+    <ReviewPage mode="practice" cards={[card]} onBack={onBack} activityApi={activityApi} />,
+  );
+
+  await act(async () => {
+    vi.advanceTimersByTime(15_000);
+    await Promise.resolve();
+  });
+
+  expect(activityApi.checkpoint).toHaveBeenCalledWith({
+    sessionId: expect.any(String),
+    occurredAt: expect.any(String),
+    activeMs: expect.any(Number),
+    pageVisitIncrement: 0,
+  });
+  vi.useRealTimers();
+});
+
+test("practice sends checkpoint deltas rather than cumulative active time", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-18T12:00:00.000Z"));
+  const activityApi = makeActivityApi();
+  render(<ReviewPage mode="practice" cards={[card]} activityApi={activityApi} />);
+
+  await act(async () => {
+    vi.advanceTimersByTime(15_000);
+    await Promise.resolve();
+  });
+  await act(async () => {
+    vi.advanceTimersByTime(15_000);
+    await Promise.resolve();
+  });
+
+  expect(activityApi.checkpoint).toHaveBeenNthCalledWith(
+    1,
+    expect.objectContaining({ activeMs: 15_000 }),
+  );
+  expect(activityApi.checkpoint).toHaveBeenNthCalledWith(
+    2,
+    expect.objectContaining({ activeMs: 15_000 }),
+  );
+});
+
+test("practice finishes session on back navigation", async () => {
+  const activityApi = makeActivityApi();
+  const onBack = vi.fn();
+  const { container } = render(
+    <ReviewPage mode="practice" cards={[card]} onBack={onBack} activityApi={activityApi} />,
+  );
+
+  expect(activityApi.start).toHaveBeenCalledTimes(1);
+
+  const backBtn = container.querySelector(".review-page__back-btn");
+  expect(backBtn).not.toBeNull();
+  fireEvent.click(backBtn!);
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(onBack).toHaveBeenCalledOnce();
+  expect(activityApi.finish).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+  );
+});
+
+test("practice finishes session when all cards are reviewed", async () => {
+  const activityApi = makeActivityApi();
+  const cards = [card, { ...card, id: "card-2" }];
+
+  render(<ReviewPage mode="practice" cards={cards} activityApi={activityApi} />);
+  await userEvent.click(screen.getByRole("button", { name: /Flashcard/i }));
+  await userEvent.click(screen.getByRole("button", { name: "Good" }));
+  await userEvent.click(screen.getByRole("button", { name: /Flashcard/i }));
+  await userEvent.click(screen.getByRole("button", { name: "Good" }));
+
+  expect(screen.getByText("Practice Complete")).toBeInTheDocument();
+  expect(activityApi.finish).toHaveBeenCalledOnce();
+});
+
+test("practice finishes session on unmount", async () => {
+  const activityApi = makeActivityApi();
+  const { unmount } = render(
+    <ReviewPage mode="practice" cards={[card]} activityApi={activityApi} />,
+  );
+
+  unmount();
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect(activityApi.finish).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.any(String),
+  );
+});
+
+test("practice activity API failures are silent", async () => {
+  const activityApi = makeActivityApi();
+  activityApi.start = vi.fn().mockRejectedValue(new Error("start failed"));
+  activityApi.checkpoint = vi.fn().mockRejectedValue(new Error("checkpoint failed"));
+  activityApi.finish = vi.fn().mockRejectedValue(new Error("finish failed"));
+  const onBack = vi.fn();
+
+  const { unmount } = render(
+    <ReviewPage mode="practice" cards={[card]} onBack={onBack} activityApi={activityApi} />,
+  );
+
+  await userEvent.click(screen.getByRole("button", { name: /Back/ }));
+  expect(onBack).toHaveBeenCalledOnce();
+  unmount();
+});
+
+test("practice never calls rate_study_card", () => {
+  const activityApi = makeActivityApi();
+  render(<ReviewPage mode="practice" cards={[card]} activityApi={activityApi} />);
+
+  expect(activityApi.start).not.toHaveBeenCalledWith(
+    expect.objectContaining({ activityKind: "study" }),
+  );
 });

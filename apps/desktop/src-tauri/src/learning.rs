@@ -294,6 +294,12 @@ impl LibraryDatabase {
             params![deck_name, now, id],
         )?;
 
+        tx.execute(
+            "UPDATE activity_sessions SET context_id=NULL,updated_at=?1
+             WHERE context_kind='deck' AND context_id=?2",
+            params![now, id],
+        )?;
+
         let deleted = tx.execute("DELETE FROM decks WHERE id=?1", params![id])?;
         if deleted == 0 {
             return Err(invalid("deck not found"));
@@ -608,11 +614,12 @@ impl LibraryDatabase {
         }
 
         let reviewed_at = learning_timestamp();
+        let local_day = chrono::Local::now().date_naive().to_string();
         let changed = tx.execute("UPDATE cards SET state = ?1, learning_step = ?2, due_at = ?3, stability = ?4, difficulty = ?5, memory_state_json = ?6, reps = reps + 1, lapses = lapses + CASE WHEN ?7 THEN 1 ELSE 0 END, last_review_at = ?8, updated_at = ?8 WHERE id = ?9 AND state = ?10 AND due_at = ?11 AND deleted_at IS NULL", params![next_state,review.learning_step,next_due_at,review.stability,review.difficulty,review.memory_state_json,review.increment_lapses,reviewed_at,review.card_id,prior_state,prior_due_at])?;
         if changed != 1 {
             return Err(invalid("card review precondition failed"));
         }
-        tx.execute("INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)", params![Uuid::new_v4().to_string(),review.card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,review.interval_seconds,review.elapsed_ms,review.scheduler_version])?;
+        tx.execute("INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version,local_day) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12)", params![Uuid::new_v4().to_string(),review.card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,review.interval_seconds,review.elapsed_ms,review.scheduler_version,local_day])?;
         tx.commit()?;
         self.card_by_id(&review.card_id)?
             .ok_or(LibraryDbError::DocumentNotFound)

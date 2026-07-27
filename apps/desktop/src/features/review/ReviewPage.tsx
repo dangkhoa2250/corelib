@@ -1,7 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { LearningCard, ReviewRating, StudyGrant, StudyRatingResult, StudySession } from "../../domain/learning";
 import { ReviewSessionSurface } from "./ReviewSessionSurface";
 import { useElapsedTime } from "./useElapsedTime";
+import { useActiveTimer } from "../statistics/useActiveTimer";
+import { startActivitySession, checkpointActivitySession, finishActivitySession } from "../../lib/statistics";
+import type { StatisticsActivityApi } from "../reader/useReadingActivitySession";
+
+function getLocalDay(): string {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().split("T")[0];
+}
+
+const defaultActivityApi: StatisticsActivityApi = {
+  start: (input) => startActivitySession(input),
+  checkpoint: (input) => checkpointActivitySession(input),
+  finish: (sessionId, occurredAt) => finishActivitySession({ sessionId, occurredAt }),
+};
 
 export interface StudyReviewPageProps {
   mode: "study";
@@ -17,6 +31,7 @@ export interface PracticeReviewPageProps {
   cards: LearningCard[];
   onBack?: () => void;
   getDocumentFileUrl?: (id: string) => Promise<string>;
+  activityApi?: StatisticsActivityApi;
 }
 
 export type ReviewPageProps = StudyReviewPageProps | PracticeReviewPageProps;
@@ -61,8 +76,9 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
   const [revealed, setRevealed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [startedAt, setStartedAt] = useState(() => Date.now());
-  const elapsed = useElapsedTime(startedAt);
+  const grant = current.cards[index];
+  const answerTimer = useActiveTimer({ running: Boolean(grant) });
+  const elapsed = answerTimer.activeMs;
 
   useEffect(() => {
     setCurrent(session);
@@ -72,8 +88,8 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
   useEffect(() => {
     setRevealed(false);
     setError(null);
-    setStartedAt(Date.now());
-  }, [index, current.sessionId]);
+    answerTimer.reset();
+  }, [index, current.sessionId, answerTimer.reset]);
 
   const refreshSession = useCallback(async () => {
     setError(null);
@@ -97,8 +113,6 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
     return () => window.clearTimeout(timer);
   }, [current.cards.length, current.nextLearningDueAt, refreshSession]);
 
-  const grant = current.cards[index];
-
   if (!grant) {
     if (current.nextLearningDueAt) {
       return (
@@ -110,7 +124,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
             </div>
             {onBack ? (
               <button type="button" onClick={onBack} className="review-page__back-btn">
-                Back to Library
+                &larr; Back
               </button>
             ) : null}
             {error ? <p className="review-page__error" role="alert">{error}</p> : null}
@@ -141,7 +155,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
     setSaving(true);
     setError(null);
     try {
-      await onRate(current.sessionId, grant, rating, Date.now() - startedAt);
+      await onRate(current.sessionId, grant, rating, answerTimer.snapshot());
       await refreshSession();
     } catch (rateError) {
       if (errorMessage(rateError) === STALE_CARD_MESSAGE) {
@@ -209,7 +223,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
   );
 }
 
-function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeReviewPageProps) {
+function PracticeReviewPage({ cards, onBack, getDocumentFileUrl, activityApi }: PracticeReviewPageProps) {
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -219,6 +233,91 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeRevie
 
   const card = cards[index];
   const elapsed = useElapsedTime(cardStartedAt, Boolean(card));
+
+  const sessionTimer = useActiveTimer({ running: cards.length > 0 });
+  const sessionTimerRef = useRef(sessionTimer);
+  sessionTimerRef.current = sessionTimer;
+  const activitySessionIdRef = useRef<string | null>(null);
+  const lastCheckpointedTimeRef = useRef(0);
+  const checkpointInFlightRef = useRef<Promise<void> | null>(null);
+  const finishSessionRef = useRef<() => void>(() => {});
+  const activityApiRef = useRef(activityApi ?? defaultActivityApi);
+  activityApiRef.current = activityApi ?? defaultActivityApi;
+
+  useEffect(() => {
+    if (cards.length === 0) return;
+    const id = crypto.randomUUID();
+    activitySessionIdRef.current = id;
+    lastCheckpointedTimeRef.current = 0;
+    const now = new Date();
+    const deckId = cards[0]!.deckId;
+    activityApiRef.current.start({
+      id,
+      appKey: "memora",
+      activityKind: "practice",
+      contextKind: "deck",
+      contextId: deckId,
+      occurredAt: now.toISOString(),
+      localDay: getLocalDay(),
+      timezoneOffsetMinutes: -now.getTimezoneOffset(),
+    }).catch(() => {});
+    return () => {
+      finishSessionRef.current();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const checkpointPractice = useCallback((id: string): Promise<void> => {
+    const previous = checkpointInFlightRef.current ?? Promise.resolve();
+    const next = previous.then(async () => {
+      const snapshotMs = sessionTimerRef.current.snapshot();
+      const activeMs = Math.max(0, snapshotMs - lastCheckpointedTimeRef.current);
+      if (activeMs === 0) return;
+      await activityApiRef.current.checkpoint({
+        sessionId: id,
+        occurredAt: new Date().toISOString(),
+        activeMs,
+        pageVisitIncrement: 0,
+      });
+      lastCheckpointedTimeRef.current = snapshotMs;
+    });
+    const tracked = next.catch(() => {}).finally(() => {
+      if (checkpointInFlightRef.current === tracked) checkpointInFlightRef.current = null;
+    });
+    checkpointInFlightRef.current = tracked;
+    return next;
+  }, []);
+
+  useEffect(() => {
+    if (cards.length === 0 || !activitySessionIdRef.current) return;
+    const interval = setInterval(() => {
+      const id = activitySessionIdRef.current;
+      if (!id) return;
+      checkpointPractice(id).catch(() => {});
+    }, 15_000);
+    return () => clearInterval(interval);
+  }, [cards.length, checkpointPractice]);
+
+  const finishSession = useCallback(() => {
+    const sid = activitySessionIdRef.current;
+    if (sid) {
+      activitySessionIdRef.current = null;
+      checkpointPractice(sid)
+        .catch(() => {})
+        .then(() => activityApiRef.current.finish(sid, new Date().toISOString()))
+        .catch(() => {});
+    }
+  }, [checkpointPractice]);
+  finishSessionRef.current = finishSession;
+
+  const handleBack = () => {
+    finishSession();
+    onBack?.();
+  };
+
+  useEffect(() => {
+    if (card || cards.length === 0) return;
+    finishSession();
+  }, [card, cards.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!card) return;
@@ -256,7 +355,7 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeRevie
             ))}
           </div>
           {onBack ? (
-            <button type="button" onClick={onBack} className="review-page__back-btn" style={{ marginTop: "24px" }}>
+            <button type="button" onClick={handleBack} className="review-page__back-btn" style={{ marginTop: "24px" }}>
               Back to Deck
             </button>
           ) : null}
@@ -282,7 +381,7 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl }: PracticeRevie
         <header className="review-page__header">
           <div className="review-page__header-left">
             {onBack ? (
-              <button type="button" onClick={onBack} className="review-page__back-btn">
+              <button type="button" onClick={handleBack} className="review-page__back-btn">
                 &larr; Back
               </button>
             ) : null}

@@ -11,17 +11,36 @@ use std::{
 #[cfg(target_os = "macos")]
 use std::process::Command;
 
+use chrono::{TimeZone, Timelike, Utc};
 use tauri::Manager;
 use tempfile::tempdir;
 
 use crate::commands::{
     download_drive_file_async, download_drive_file_async_guarded, get_document_file_url,
-    import_local_documents_for_test, scope_from_payload, validate_import_paths, validate_read_page,
-    IndexTask, IndexWorkerPool, LibraryStore, StudyRatingPayload, INDEX_QUEUE_CAPACITY,
+    import_local_documents_for_test, local_review_clock, scope_from_payload,
+    validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool, LibraryStore,
+    StudyRatingPayload, INDEX_QUEUE_CAPACITY,
 };
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
 use crate::model::StudyScopePayload;
+
+#[test]
+fn local_review_clock_uses_the_supplied_instant_in_the_current_timezone() {
+    let fixed_now = Utc
+        .with_ymd_and_hms(2030, 1, 2, 3, 4, 5)
+        .single()
+        .expect("construct fixed UTC instant");
+    let expected_local = fixed_now.with_timezone(&chrono::Local);
+
+    let (study_day, local_minute_of_day) = local_review_clock(fixed_now);
+
+    assert_eq!(study_day, expected_local.date_naive().to_string());
+    assert_eq!(
+        local_minute_of_day,
+        i64::from(expected_local.hour() * 60 + expected_local.minute())
+    );
+}
 
 #[test]
 fn drive_download_runs_off_command_thread_without_holding_database_lock() {

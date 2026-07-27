@@ -40,6 +40,13 @@ test("registers every public route for Quick Open", async () => {
     breadcrumb: ["Settings"],
     route: { name: "settings" },
   });
+  expect(PUBLIC_ROUTE_CATALOG.statistics).toEqual({
+    id: "route.statistics",
+    title: "Statistics",
+    aliases: ["analytics", "activity", "progress", "insights"],
+    breadcrumb: ["Statistics"],
+    route: { name: "statistics" },
+  });
 
   const registry = createCommandRegistry(createContext());
   const entries = await registry.search("quick-open", "");
@@ -100,6 +107,19 @@ test("keeps card and trash provenance in Quick Open breadcrumbs", async () => {
   const [trash] = await registry.search("quick-open", "old proof");
   expect(card).toEqual(expect.objectContaining({ title: "Eigenvectors", breadcrumb: ["Memora", "Linear Algebra", "Cards"] }));
   expect(trash).toEqual(expect.objectContaining({ title: "Old proof", breadcrumb: ["Trash", "Calculus"] }));
+});
+
+test("finds the statistics route when searching Quick Open for insights", async () => {
+  const openRoute = vi.fn();
+  const registry = createCommandRegistry(createContext({ openRoute }));
+
+  const [entry] = await registry.search("quick-open", "insights");
+  expect(entry).toMatchObject({
+    id: "route.statistics",
+    group: "Navigate",
+  });
+  await entry.execute();
+  expect(openRoute).toHaveBeenCalledWith({ name: "statistics" });
 });
 
 test("executes a Command Palette theme action", async () => {

@@ -72,6 +72,7 @@ pub struct StudyRating {
     pub elapsed_ms: i64,
     pub now: DateTime<Utc>,
     pub study_day: String,
+    pub local_minute_of_day: i64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -612,6 +613,11 @@ impl LibraryDatabase {
     }
 
     pub fn rate_study_card(&mut self, rating: StudyRating) -> Result<StudyRatingResult> {
+        if !(0..1440).contains(&rating.local_minute_of_day) {
+            return Err(LibraryDbError::InvalidLearning(
+                "local review minute must be between 0 and 1439".into(),
+            ));
+        }
         let now_str = rfc3339(rating.now);
         let desired_retention = self.memora_settings()?.desired_retention as f32;
         let scheduler = ReviewScheduler::new(SchedulerConfig {
@@ -798,7 +804,7 @@ fn write_review_in_tx(
 
         let review_log_id = Uuid::new_v4().to_string();
         tx.execute(
-            "INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11)",
+            "INSERT INTO review_logs(id,card_id,reviewed_at,rating,prior_state,next_state,prior_due_at,next_due_at,interval_seconds,elapsed_ms,scheduler_version,local_day,local_minute_of_day) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13)",
             params![
                 review_log_id,
                 rating.card_id,
@@ -811,6 +817,8 @@ fn write_review_in_tx(
                 scheduled.interval_seconds,
                 rating.elapsed_ms,
                 SCHEDULER_VERSION,
+                rating.study_day,
+                rating.local_minute_of_day,
             ],
         )?;
         Ok(review_log_id)

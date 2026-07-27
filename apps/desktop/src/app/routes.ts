@@ -3,6 +3,11 @@ import type { Deck, LearningCard, StudySession } from "../domain/learning";
 
 export type SettingsSection = "account" | "appearance" | "drive" | "model" | "memora";
 
+export type StatisticsRouteTarget =
+  | { kind: "app"; appKey: string }
+  | { kind: "document"; documentId: string }
+  | { kind: "deck"; deckId: string };
+
 export type AppRoute =
   | { name: "library" }
   | { name: "memora" }
@@ -13,9 +18,10 @@ export type AppRoute =
   | { name: "deckDetail"; deck: Deck; searchQuery?: string }
   | { name: "trash" }
   | { name: "settings"; section?: SettingsSection }
-  | { name: "admin" };
+  | { name: "admin" }
+  | { name: "statistics"; target?: StatisticsRouteTarget; origin?: "library" | "memora" };
 
-export const publicRouteNames = ["library", "memora", "trash", "settings"] as const;
+export const publicRouteNames = ["library", "memora", "trash", "settings", "statistics"] as const;
 export type PublicRouteName = (typeof publicRouteNames)[number];
 
 interface PublicRouteDefinition {
@@ -31,4 +37,5 @@ export const PUBLIC_ROUTE_CATALOG = {
   memora: { id: "route.memora", title: "Memora", aliases: ["flashcards", "decks"], breadcrumb: ["Memora"], route: { name: "memora" } },
   trash: { id: "route.trash", title: "Trash", aliases: ["deleted cards"], breadcrumb: ["Trash"], route: { name: "trash" } },
   settings: { id: "route.settings", title: "Settings", aliases: ["preferences"], breadcrumb: ["Settings"], route: { name: "settings" } },
+  statistics: { id: "route.statistics", title: "Statistics", aliases: ["analytics", "activity", "progress", "insights"], breadcrumb: ["Statistics"], route: { name: "statistics" } },
 } satisfies Record<PublicRouteName, PublicRouteDefinition>;

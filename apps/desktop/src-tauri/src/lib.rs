@@ -38,6 +38,7 @@ pub mod library_store;
 pub mod model;
 pub mod scheduler;
 pub mod study_queue;
+pub mod statistics;
 pub mod translation;
 pub mod account;
 
@@ -67,6 +68,9 @@ mod scheduler_tests;
 
 #[cfg(test)]
 mod study_queue_tests;
+
+#[cfg(test)]
+mod statistics_tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -166,6 +170,15 @@ pub fn run() {
             ai::translate_with_ai,
             translation::translate_text,
             translation::apple_translation_available,
+            commands::get_statistics_overview,
+            commands::get_reading_statistics,
+            commands::get_document_statistics,
+            commands::get_memora_statistics,
+            commands::get_deck_statistics_detail,
+            commands::start_activity_session,
+            commands::checkpoint_activity_session,
+            commands::finish_activity_session,
+            commands::get_daily_statistics_snapshots,
             commands::account_register,
             commands::account_sign_in,
             commands::account_session,
@@ -182,6 +195,8 @@ pub fn run() {
             commands::admin_set_feature_assignment,
             commands::admin_get_metrics,
             commands::admin_delete_user,
+            commands::account_upsert_daily_statistics,
+            commands::admin_get_statistics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

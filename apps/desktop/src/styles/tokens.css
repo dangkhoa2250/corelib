@@ -285,6 +285,10 @@ textarea::placeholder {
   background: var(--main-bg);
 }
 
+.app-shell__content--managed-scroll {
+  overflow: hidden;
+}
+
 .app-sidebar {
   position: relative;
   display: flex;
@@ -4024,6 +4028,7 @@ textarea::placeholder {
 
 .combobox__trigger:hover {
   border-color: var(--border-strong);
+  background: var(--interactive-hover);
 }
 
 .combobox__trigger:focus-visible {
@@ -4042,6 +4047,7 @@ textarea::placeholder {
 
 .combobox__trigger:disabled:hover {
   border-color: var(--border-strong);
+  background: var(--surface-1);
 }
 
 .combobox__trigger-label {

@@ -1,14 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
+import { useActiveTimer } from "../statistics/useActiveTimer";
 
 export function useElapsedTime(startedAt: number, running = true): number {
-  const [now, setNow] = useState(startedAt);
+  const timer = useActiveTimer({ running });
 
   useEffect(() => {
-    setNow(Date.now());
-    if (!running) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 100);
-    return () => window.clearInterval(timer);
-  }, [running, startedAt]);
+    timer.reset();
+  }, [startedAt]);
 
-  return Math.max(0, now - startedAt);
+  return timer.activeMs;
 }

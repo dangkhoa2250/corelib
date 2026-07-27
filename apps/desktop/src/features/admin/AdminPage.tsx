@@ -7,8 +7,11 @@ import type {
   AdminMetrics,
   AccountStatus,
 } from "../../domain/account";
+import { AdminAnalyticsPage } from "./AdminAnalyticsPage";
+import { ScrollArea } from "../../components/ScrollArea";
 
 export function AdminPage({ api }: { api: AccountApi }) {
+  const [view, setView] = useState<"management" | "analytics">("management");
   const [users, setUsers] = useState<AccountProfile[]>([]);
   const [groups, setGroups] = useState<AccountGroup[]>([]);
   const [features, setFeatures] = useState<FeatureDefinition[]>([]);
@@ -185,9 +188,11 @@ export function AdminPage({ api }: { api: AccountApi }) {
 
   if (loading) {
     return (
-      <div className="admin-page-container loading">
-        <div className="spinner" />
-      </div>
+      <ScrollArea className="admin-scroll-area" data-testid="admin-scroll-area">
+        <div data-testid="admin-scroll-content" style={{ paddingRight: 20, paddingBottom: 20 }}>
+          <div className="admin-page-container loading"><div className="spinner" /></div>
+        </div>
+      </ScrollArea>
     );
   }
 
@@ -195,14 +200,16 @@ export function AdminPage({ api }: { api: AccountApi }) {
   const processedUsers = users.filter((u) => u.status !== "pending");
 
   return (
-    <div className="admin-page-container">
+    <ScrollArea className="admin-scroll-area" data-testid="admin-scroll-area">
+      <div data-testid="admin-scroll-content" style={{ paddingRight: 20, paddingBottom: 20 }}>
+      <div className="admin-page-container">
       <style>{`
         .admin-page-container {
           padding: 30px;
           max-width: 1200px;
           margin: 0 auto;
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-          color: #f3f4f6;
+          color: var(--text-primary);
         }
 
         .admin-page-container.loading {
@@ -220,13 +227,36 @@ export function AdminPage({ api }: { api: AccountApi }) {
           font-size: 28px;
           font-weight: 700;
           margin: 0 0 8px 0;
-          color: #c084fc;
+          color: var(--purple);
         }
 
         .admin-header p {
           font-size: 14px;
-          color: #9ca3af;
+          color: var(--text-secondary);
           margin: 0;
+        }
+
+        .admin-nav {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 24px;
+        }
+
+        .admin-nav button {
+          padding: 8px 16px;
+          border: 1px solid var(--border-subtle);
+          border-radius: 8px;
+          background: var(--surface-1);
+          color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .admin-nav button[aria-pressed="true"] {
+          background: var(--interactive-selected);
+          border-color: var(--border-strong);
+          color: var(--purple);
         }
 
         .metrics-grid {
@@ -237,8 +267,8 @@ export function AdminPage({ api }: { api: AccountApi }) {
         }
 
         .metric-card {
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--surface-1);
+          border: 1px solid var(--border-subtle);
           border-radius: 12px;
           padding: 20px;
         }
@@ -248,19 +278,19 @@ export function AdminPage({ api }: { api: AccountApi }) {
           font-weight: 600;
           text-transform: uppercase;
           letter-spacing: 0.5px;
-          color: #9ca3af;
+          color: var(--text-secondary);
           margin: 0 0 8px 0;
         }
 
         .metric-value {
           font-size: 28px;
           font-weight: 700;
-          color: #ffffff;
+          color: var(--text-primary);
         }
 
         .admin-section {
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.06);
+          background: var(--surface-1);
+          border: 1px solid var(--border-subtle);
           border-radius: 12px;
           padding: 24px;
           margin-bottom: 30px;
@@ -270,8 +300,8 @@ export function AdminPage({ api }: { api: AccountApi }) {
           font-size: 20px;
           font-weight: 700;
           margin: 0 0 20px 0;
-          color: #ffffff;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          color: var(--text-primary);
+          border-bottom: 1px solid var(--border-subtle);
           padding-bottom: 10px;
         }
 
@@ -283,19 +313,19 @@ export function AdminPage({ api }: { api: AccountApi }) {
 
         .admin-table th, .admin-table td {
           padding: 12px 16px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+          border-bottom: 1px solid var(--border-subtle);
           font-size: 14px;
         }
 
         .admin-table th {
           font-weight: 600;
-          color: #9ca3af;
+          color: var(--text-secondary);
         }
 
         .btn-approve {
-          background: rgba(16, 185, 129, 0.1);
-          color: #34d399;
-          border: 1px solid rgba(16, 185, 129, 0.2);
+          background: var(--color-learning-bg);
+          color: var(--success);
+          border: 1px solid var(--success);
           padding: 6px 12px;
           border-radius: 6px;
           font-size: 12px;
@@ -305,9 +335,9 @@ export function AdminPage({ api }: { api: AccountApi }) {
         }
 
         .btn-reject {
-          background: rgba(239, 68, 68, 0.1);
-          color: #f87171;
-          border: 1px solid rgba(239, 68, 68, 0.2);
+          background: var(--color-danger-bg-soft);
+          color: var(--error);
+          border: 1px solid var(--error);
           padding: 6px 12px;
           border-radius: 6px;
           font-size: 12px;
@@ -316,9 +346,9 @@ export function AdminPage({ api }: { api: AccountApi }) {
         }
 
         .btn-delete {
-          background: rgba(139, 0, 0, 0.15);
-          color: #fca5a5;
-          border: 1px solid rgba(220, 38, 38, 0.35);
+          background: var(--color-danger-bg-soft);
+          color: var(--color-danger-text-strong);
+          border: 1px solid var(--error);
           padding: 6px 12px;
           border-radius: 6px;
           font-size: 12px;
@@ -328,23 +358,23 @@ export function AdminPage({ api }: { api: AccountApi }) {
         }
 
         .btn-delete:hover {
-          background: rgba(220, 38, 38, 0.25);
+          background: var(--color-danger-bg-hover);
         }
 
         .group-input {
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--surface-2);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
           padding: 6px 10px;
-          color: #ffffff;
+          color: var(--text-primary);
           font-size: 12px;
           width: 180px;
         }
 
         .status-select {
-          background: #111827;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          color: #ffffff;
+          background: var(--surface-2);
+          border: 1px solid var(--border-subtle);
+          color: var(--text-primary);
           border-radius: 6px;
           padding: 6px 10px;
           font-size: 12px;
@@ -370,23 +400,23 @@ export function AdminPage({ api }: { api: AccountApi }) {
 
         .form-group label {
           font-size: 12px;
-          color: #9ca3af;
+          color: var(--text-secondary);
           font-weight: 600;
         }
 
         .form-group input, .form-group select {
-          background: rgba(255, 255, 255, 0.04);
-          border: 1px solid rgba(255, 255, 255, 0.08);
+          background: var(--surface-2);
+          border: 1px solid var(--border-subtle);
           border-radius: 6px;
           padding: 8px 12px;
-          color: #ffffff;
+          color: var(--text-primary);
           font-size: 14px;
         }
 
         .btn-submit {
-          background: linear-gradient(135deg, #7c3aed 0%, #db2777 100%);
+          background: var(--button-primary-bg);
           border: none;
-          color: #ffffff;
+          color: var(--button-primary-text);
           font-weight: 600;
           padding: 10px;
           border-radius: 6px;
@@ -400,8 +430,8 @@ export function AdminPage({ api }: { api: AccountApi }) {
           font-weight: 500;
           margin-left: 10px;
         }
-        .row-status.success { color: #34d399; }
-        .row-status.error { color: #f87171; }
+        .row-status.success { color: var(--success); }
+        .row-status.error { color: var(--error); }
       `}</style>
 
       <div className="admin-header">
@@ -409,251 +439,276 @@ export function AdminPage({ api }: { api: AccountApi }) {
         <p>Manage user approvals, group roles, feature gates, and metrics.</p>
       </div>
 
-      {error && <div className="account-gate-error" style={{ marginBottom: "30px" }}>{error}</div>}
+      <nav className="admin-nav">
+        <button
+          type="button"
+          aria-pressed={view === "management"}
+          onClick={() => setView("management")}
+        >
+          Management
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === "analytics"}
+          onClick={() => setView("analytics")}
+        >
+          Analytics
+        </button>
+      </nav>
 
-      {metrics && (
-        <div className="metrics-grid">
-          <div className="metric-card">
-            <h3>Approved Users</h3>
-            <div className="metric-value">{metrics.approvedUsers}</div>
-          </div>
-          <div className="metric-card">
-            <h3>Pending Users</h3>
-            <div className="metric-value">{metrics.pendingUsers}</div>
-          </div>
-          <div className="metric-card">
-            <h3>30-Day Active Users</h3>
-            <div className="metric-value">{metrics.activeUsersLast30Days}</div>
-          </div>
-          <div className="metric-card">
-            <h3>Total Events</h3>
-            <div className="metric-value">
-              {metrics.eventsByName.reduce((acc, curr) => acc + curr.count, 0)}
-            </div>
-          </div>
-        </div>
-      )}
+      {view === "analytics" ? (
+        <AdminAnalyticsPage adminStatistics={(range, appKey) => api.adminStatistics(range, appKey)} />
+      ) : (
+        <>
+          {error && <div className="account-gate-error" style={{ marginBottom: "30px" }}>{error}</div>}
 
-      {/* Section 1: Pending Accounts */}
-      <section className="admin-section">
-        <h2>Pending Accounts</h2>
-        {pendingUsers.length === 0 ? (
-          <p style={{ color: "#9ca3af", fontSize: "14px" }}>No pending account approvals.</p>
-        ) : (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pendingUsers.map((user) => (
-                <tr key={user.id}>
-                  <td>{user.displayName}</td>
-                  <td>{user.email}</td>
-                  <td>
-                    <button className="btn-approve" type="button" onClick={() => handleApprove(user.id)}>Approve</button>
-                    <button className="btn-reject" type="button" onClick={() => handleReject(user.id)}>Reject</button>
-                    <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
-                    {rowStatus[user.id]?.success && (
-                      <span className="row-status success">{rowStatus[user.id].success}</span>
-                    )}
-                    {rowStatus[user.id]?.error && (
-                      <span className="row-status error">{rowStatus[user.id].error}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </section>
+          {metrics && (
+            <div className="metrics-grid">
+              <div className="metric-card">
+                <h3>Approved Users</h3>
+                <div className="metric-value">{metrics.approvedUsers}</div>
+              </div>
+              <div className="metric-card">
+                <h3>Pending Users</h3>
+                <div className="metric-value">{metrics.pendingUsers}</div>
+              </div>
+              <div className="metric-card">
+                <h3>30-Day Active Users</h3>
+                <div className="metric-value">{metrics.activeUsersLast30Days}</div>
+              </div>
+              <div className="metric-card">
+                <h3>Total Events</h3>
+                <div className="metric-value">
+                  {metrics.eventsByName.reduce((acc, curr) => acc + curr.count, 0)}
+                </div>
+              </div>
+            </div>
+          )}
 
-      {/* Section 2: Approved/Rejected Accounts */}
-      <section className="admin-section">
-        <h2>Approved / Rejected Accounts</h2>
-        <table className="admin-table">
-          <thead>
-               <tr>
-                 <th>Name</th>
-                 <th>Email</th>
-                 <th>Status</th>
-                 <th>Groups (comma separated)</th>
-                 <th>Actions</th>
-               </tr>
-          </thead>
-          <tbody>
-            {processedUsers.map((user) => (
-              <tr key={user.id}>
-                <td>{user.displayName}</td>
-                <td>{user.email}</td>
-                <td>
-                  <select
-                    className="status-select"
-                    value={user.status}
-                    onChange={(e) => handleStatusChange(user.id, e.target.value as AccountStatus)}
-                  >
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                    <option value="pending">Pending</option>
-                  </select>
-                </td>
-                <td>
-                  <input
-                    className="group-input"
-                    type="text"
-                    placeholder="Group IDs (comma separated)"
-                    onBlur={(e) => handleSetGroups(user.id, e.target.value)}
-                  />
-                  {rowStatus[user.id]?.success && (
-                    <span className="row-status success">{rowStatus[user.id].success}</span>
-                  )}
-                  {rowStatus[user.id]?.error && (
-                    <span className="row-status error">{rowStatus[user.id].error}</span>
-                  )}
-                </td>
-                <td>
-                  <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {/* Section 3: Feature & Group Access Configurations */}
-      <div className="admin-forms-row">
-        <section className="admin-section">
-          <h2>Create Group</h2>
-          <form className="admin-form" onSubmit={handleCreateGroup}>
-            <div className="form-group">
-              <label htmlFor="group-name">Group Name</label>
-              <input
-                id="group-name"
-                type="text"
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="e.g. beta_testers"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="group-desc">Description</label>
-              <input
-                id="group-desc"
-                type="text"
-                value={newGroupDesc}
-                onChange={(e) => setNewGroupDesc(e.target.value)}
-                placeholder="Beta testing users group"
-              />
-            </div>
-            <button className="btn-submit" type="submit">Create Group</button>
-          </form>
-        </section>
-
-        <section className="admin-section">
-          <h2>Create Feature</h2>
-          <form className="admin-form" onSubmit={handleCreateFeature}>
-            <div className="form-group">
-              <label htmlFor="feat-key">Feature Key</label>
-              <input
-                id="feat-key"
-                type="text"
-                value={newFeatureKey}
-                onChange={(e) => setNewFeatureKey(e.target.value)}
-                placeholder="e.g. advanced_search"
-                required
-              />
-            </div>
-            <div className="form-group">
-              <label htmlFor="feat-desc">Description</label>
-              <input
-                id="feat-desc"
-                type="text"
-                value={newFeatureDesc}
-                onChange={(e) => setNewFeatureDesc(e.target.value)}
-                placeholder="Allows users to use FTS search fields"
-              />
-            </div>
-            <button className="btn-submit" type="submit">Create Feature</button>
-          </form>
-        </section>
-
-        <section className="admin-section">
-          <h2>Assign Feature Access Rule</h2>
-          <form className="admin-form" onSubmit={handleAssignFeature}>
-            <div className="form-group">
-              <label htmlFor="rule-feat">Feature</label>
-              <select
-                id="rule-feat"
-                value={assignFeatureKey}
-                onChange={(e) => setAssignFeatureKey(e.target.value)}
-                required
-              >
-                <option value="">Select Feature</option>
-                {features.map((f) => (
-                  <option key={f.id} value={f.key}>{f.key}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="rule-subject-type">Subject Type</label>
-              <select
-                id="rule-subject-type"
-                value={assignSubjectType}
-                onChange={(e) => {
-                  setAssignSubjectType(e.target.value as "user" | "group");
-                  setAssignSubjectId("");
-                }}
-                required
-              >
-                <option value="user">User ID</option>
-                <option value="group">Group ID</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label htmlFor="rule-subject-id">Subject ID (User or Group ID)</label>
-              {assignSubjectType === "user" ? (
-                <input
-                  id="rule-subject-id"
-                  type="text"
-                  value={assignSubjectId}
-                  onChange={(e) => setAssignSubjectId(e.target.value)}
-                  placeholder="Paste User ID here"
-                  required
-                />
-              ) : (
-                <select
-                  id="rule-subject-id"
-                  value={assignSubjectId}
-                  onChange={(e) => setAssignSubjectId(e.target.value)}
-                  required
-                >
-                  <option value="">Select Group</option>
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name} ({g.id})</option>
+          {/* Section 1: Pending Accounts */}
+          <section className="admin-section">
+            <h2>Pending Accounts</h2>
+            {pendingUsers.length === 0 ? (
+              <p style={{ color: "var(--text-secondary)", fontSize: "14px" }}>No pending account approvals.</p>
+            ) : (
+              <table className="admin-table">
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingUsers.map((user) => (
+                    <tr key={user.id}>
+                      <td>{user.displayName}</td>
+                      <td>{user.email}</td>
+                      <td>
+                        <button className="btn-approve" type="button" onClick={() => handleApprove(user.id)}>Approve</button>
+                        <button className="btn-reject" type="button" onClick={() => handleReject(user.id)}>Reject</button>
+                        <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
+                        {rowStatus[user.id]?.success && (
+                          <span className="row-status success">{rowStatus[user.id].success}</span>
+                        )}
+                        {rowStatus[user.id]?.error && (
+                          <span className="row-status error">{rowStatus[user.id].error}</span>
+                        )}
+                      </td>
+                    </tr>
                   ))}
-                </select>
-              )}
-            </div>
-            <div className="form-group">
-              <label htmlFor="rule-enabled">Assignment State</label>
-              <select
-                id="rule-enabled"
-                value={assignEnabled ? "true" : "false"}
-                onChange={(e) => setAssignEnabled(e.target.value === "true")}
-                required
-              >
-                <option value="true">Enable Access</option>
-                <option value="false">Disable Access</option>
-              </select>
-            </div>
-            <button className="btn-submit" type="submit">Assign Rule</button>
-          </form>
-        </section >
+                </tbody>
+              </table>
+            )}
+          </section>
+
+          {/* Section 2: Approved/Rejected Accounts */}
+          <section className="admin-section">
+            <h2>Approved / Rejected Accounts</h2>
+            <table className="admin-table">
+              <thead>
+                   <tr>
+                     <th>Name</th>
+                     <th>Email</th>
+                     <th>Status</th>
+                     <th>Groups (comma separated)</th>
+                     <th>Actions</th>
+                   </tr>
+              </thead>
+              <tbody>
+                {processedUsers.map((user) => (
+                  <tr key={user.id}>
+                    <td>{user.displayName}</td>
+                    <td>{user.email}</td>
+                    <td>
+                      <select
+                        className="status-select"
+                        value={user.status}
+                        onChange={(e) => handleStatusChange(user.id, e.target.value as AccountStatus)}
+                      >
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="pending">Pending</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        className="group-input"
+                        type="text"
+                        placeholder="Group IDs (comma separated)"
+                        onBlur={(e) => handleSetGroups(user.id, e.target.value)}
+                      />
+                      {rowStatus[user.id]?.success && (
+                        <span className="row-status success">{rowStatus[user.id].success}</span>
+                      )}
+                      {rowStatus[user.id]?.error && (
+                        <span className="row-status error">{rowStatus[user.id].error}</span>
+                      )}
+                    </td>
+                    <td>
+                      <button className="btn-delete" type="button" onClick={() => handleDelete(user.id, user.displayName)}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          {/* Section 3: Feature & Group Access Configurations */}
+          <div className="admin-forms-row">
+            <section className="admin-section">
+              <h2>Create Group</h2>
+              <form className="admin-form" onSubmit={handleCreateGroup}>
+                <div className="form-group">
+                  <label htmlFor="group-name">Group Name</label>
+                  <input
+                    id="group-name"
+                    type="text"
+                    value={newGroupName}
+                    onChange={(e) => setNewGroupName(e.target.value)}
+                    placeholder="e.g. beta_testers"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="group-desc">Description</label>
+                  <input
+                    id="group-desc"
+                    type="text"
+                    value={newGroupDesc}
+                    onChange={(e) => setNewGroupDesc(e.target.value)}
+                    placeholder="Beta testing users group"
+                  />
+                </div>
+                <button className="btn-submit" type="submit">Create Group</button>
+              </form>
+            </section>
+
+            <section className="admin-section">
+              <h2>Create Feature</h2>
+              <form className="admin-form" onSubmit={handleCreateFeature}>
+                <div className="form-group">
+                  <label htmlFor="feat-key">Feature Key</label>
+                  <input
+                    id="feat-key"
+                    type="text"
+                    value={newFeatureKey}
+                    onChange={(e) => setNewFeatureKey(e.target.value)}
+                    placeholder="e.g. advanced_search"
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="feat-desc">Description</label>
+                  <input
+                    id="feat-desc"
+                    type="text"
+                    value={newFeatureDesc}
+                    onChange={(e) => setNewFeatureDesc(e.target.value)}
+                    placeholder="Allows users to use FTS search fields"
+                  />
+                </div>
+                <button className="btn-submit" type="submit">Create Feature</button>
+              </form>
+            </section>
+
+            <section className="admin-section">
+              <h2>Assign Feature Access Rule</h2>
+              <form className="admin-form" onSubmit={handleAssignFeature}>
+                <div className="form-group">
+                  <label htmlFor="rule-feat">Feature</label>
+                  <select
+                    id="rule-feat"
+                    value={assignFeatureKey}
+                    onChange={(e) => setAssignFeatureKey(e.target.value)}
+                    required
+                  >
+                    <option value="">Select Feature</option>
+                    {features.map((f) => (
+                      <option key={f.id} value={f.key}>{f.key}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="rule-subject-type">Subject Type</label>
+                  <select
+                    id="rule-subject-type"
+                    value={assignSubjectType}
+                    onChange={(e) => {
+                      setAssignSubjectType(e.target.value as "user" | "group");
+                      setAssignSubjectId("");
+                    }}
+                    required
+                  >
+                    <option value="user">User ID</option>
+                    <option value="group">Group ID</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="rule-subject-id">Subject ID (User or Group ID)</label>
+                  {assignSubjectType === "user" ? (
+                    <input
+                      id="rule-subject-id"
+                      type="text"
+                      value={assignSubjectId}
+                      onChange={(e) => setAssignSubjectId(e.target.value)}
+                      placeholder="Paste User ID here"
+                      required
+                    />
+                  ) : (
+                    <select
+                      id="rule-subject-id"
+                      value={assignSubjectId}
+                      onChange={(e) => setAssignSubjectId(e.target.value)}
+                      required
+                    >
+                      <option value="">Select Group</option>
+                      {groups.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name} ({g.id})</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div className="form-group">
+                  <label htmlFor="rule-enabled">Assignment State</label>
+                  <select
+                    id="rule-enabled"
+                    value={assignEnabled ? "true" : "false"}
+                    onChange={(e) => setAssignEnabled(e.target.value === "true")}
+                    required
+                  >
+                    <option value="true">Enable Access</option>
+                    <option value="false">Disable Access</option>
+                  </select>
+                </div>
+                <button className="btn-submit" type="submit">Assign Rule</button>
+              </form>
+            </section >
+          </div>
+        </>
+      )}
       </div>
-    </div>
+      </div>
+    </ScrollArea>
   );
 }

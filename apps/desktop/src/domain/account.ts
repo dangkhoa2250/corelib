@@ -1,5 +1,6 @@
 export type AccountStatus = "pending" | "approved" | "rejected";
 export type AccountRole = "member" | "admin";
+export type AdminAnalyticsRange = "7d" | "30d" | "1y" | "all";
 
 export interface AccountProfile {
   id: string;
@@ -81,6 +82,67 @@ export interface AdminMetrics {
   errorsByCode: MetricErrorCode[];
 }
 
+export interface DailyStatisticsSnapshot {
+  schemaVersion: 1;
+  localDay: string;
+  appKey: "reading" | "memora";
+  activeMs: number;
+  activeDay: boolean;
+  sessionCount: number;
+  pageVisitCount?: number;
+  uniquePageCount?: number;
+  realReviewCount?: number;
+  againCount?: number;
+  hardCount?: number;
+  goodCount?: number;
+  easyCount?: number;
+  lapseCount?: number;
+}
+
+export interface AdminStatisticsBucket {
+  localDay: string;
+  contributingUsers: number;
+  insufficientSample: boolean;
+  activeMs?: number;
+}
+
+export interface AdminAppAggregate {
+  contributingUsers: number;
+  insufficientSample: boolean;
+  activeUsers?: number;
+  activeMs?: number;
+  sessionCount?: number;
+  pageVisitCount?: number;
+  realReviewCount?: number;
+  againCount?: number;
+  hardCount?: number;
+  goodCount?: number;
+  easyCount?: number;
+  lapseCount?: number;
+  recallRate?: number | null;
+  returningUserRate?: number | null;
+  weeklyLearningFrequency?: number | null;
+}
+
+export interface AdminStatistics {
+  approvedUsers: number;
+  analyticsEnabledUsers: number;
+  optInPercentage: number;
+  contributingUsers: number;
+  insufficientSample: boolean;
+  dau?: number;
+  wau?: number;
+  mau?: number;
+  activeMs?: number;
+  activeDays?: number;
+  averageActiveMs?: number | null;
+  averageActiveDays?: number | null;
+  appAllocation?: Record<string, number>;
+  reading?: AdminAppAggregate;
+  memora?: AdminAppAggregate;
+  buckets: AdminStatisticsBucket[];
+}
+
 export interface AccountApi {
   register(displayName: string, email: string, password: string): Promise<AccountStatusResponse>;
   signIn(email: string, password: string, remember: boolean): Promise<AccountStatusResponse>;
@@ -98,6 +160,8 @@ export interface AccountApi {
   adminSetFeatureAssignment(input: FeatureAssignmentInput): Promise<FeatureAssignment>;
   adminMetrics(): Promise<AdminMetrics>;
   adminDeleteUser(userId: string): Promise<void>;
+  upsertDailyStatistics(expectedAccountId: string, input: DailyStatisticsSnapshot): Promise<void>;
+  adminStatistics(range: string, appKey: string): Promise<AdminStatistics>;
 }
 
 export function hasFeature(entitlements: Entitlements | null | undefined, key: string): boolean {

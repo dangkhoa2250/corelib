@@ -10,6 +10,8 @@ import { CardSelectionToolbar } from "./CardSelectionToolbar";
 import { CardComposer, type CardSaveInput, type CardComposerDeck } from "../cards/CardComposer";
 import { createPageRenderQueue, PageRenderQueueError, type PageRenderQueueToken } from "./pageRenderQueue";
 import { ScrollArea } from "../../components/ScrollArea";
+import { useReadingActivitySession, type StatisticsActivityApi } from "./useReadingActivitySession";
+import { startActivitySession, checkpointActivitySession, finishActivitySession } from "../../lib/statistics";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -775,6 +777,13 @@ export function ReaderPage({
 
   const [pageTags, setPageTags] = useState<PageTag[]>([]);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
+
+  const readingActivityApi: StatisticsActivityApi = useMemo(() => ({
+    start: (input) => startActivitySession(input),
+    checkpoint: (input) => checkpointActivitySession(input),
+    finish: (sessionId, occurredAt) => finishActivitySession({ sessionId, occurredAt }),
+  }), []);
+  useReadingActivitySession(document.id, currentPage, readingActivityApi);
 
   useEffect(() => {
     if (sidebarTab !== "pages") return;
