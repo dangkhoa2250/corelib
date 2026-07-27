@@ -109,7 +109,7 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
   const kpiCard = desktopCss.match(/\.statistics-kpi-card\s*\{([^}]*)\}/)?.[1] ?? "";
   const section = desktopCss.match(/\.statistics-section \{\n  padding: 22px;\n  border-radius: 16px;\n\}/)?.[0] ?? "";
   const appCard = desktopCss.match(/\.statistics-app-card\s*\{([^}]*)\}/)?.[1] ?? "";
-  expect(shellContent).toContain("padding: 28px 20px 38px 28px;");
+  expect(shellContent).toContain("padding: 0 20px 38px 28px;");
   expect(kpiCard).toContain("min-height: 156px;");
   expect(section).toContain("padding: 22px;");
   expect(section).toContain("border-radius: 16px;");
@@ -180,7 +180,7 @@ test("pins every approved desktop Statistics density token", () => {
   expect(screenReaderOnly).toContain("height: 1px;");
   expect(screenReaderOnly).toContain("overflow: hidden;");
   expect(screenReaderOnly).toContain("clip: rect(0,0,0,0);");
-  expect(shellPaddings).toEqual(["28px 20px 38px 28px", "26px 20px 36px 24px", "22px 20px 34px 18px"]);
+  expect(shellPaddings).toEqual(["0 20px 38px 28px", "0 20px 36px 24px", "0 20px 34px 18px"]);
   expect(shellPaddings.map((padding) => padding.split(/\s+/)[1])).toEqual(["20px", "20px", "20px"]);
 });
 
@@ -212,10 +212,10 @@ test("keeps the statistics dashboard flat, responsive, and token-correct", () =>
   expect(statCss).toContain("@media (max-width: 720px)");
   expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-kpi-grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-kpi-grid,\s*\.statistics-app-grid \{ grid-template-columns: minmax\(0, 1fr\);/);
-  expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-shell__content \{ padding: 26px 20px 36px 24px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-shell__content \{ padding: 0 20px 36px 24px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-kpi-card \{ min-height: 146px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 900px\)\s*\{[\s\S]*?\.statistics-section \{ padding: 20px; \}/);
-  expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-shell__content \{ padding: 22px 20px 34px 18px; \}/);
+  expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-shell__content \{ padding: 0 20px 34px 18px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-control \{ min-height: 36px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-range-picker > div:last-child \.statistics-control \{ width: 36px; min-height: 36px; \}/);
   expect(statCss).toMatch(/@media \(max-width: 720px\)\s*\{[\s\S]*?\.statistics-kpi-card \{ min-height: 148px; \}/);
