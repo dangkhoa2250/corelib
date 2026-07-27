@@ -427,6 +427,7 @@
 
 .statistics-entity-pane__all-button[aria-current="page"] {
   background: var(--interactive-selected);
+  box-shadow: inset 3px 0 0 var(--statistics-accent);
 }
 
 .statistics-entity-pane__all-button:hover:not([aria-current="page"]) {
@@ -467,6 +468,7 @@
 
 .statistics-entity-pane__row[aria-current="page"] {
   background: var(--interactive-selected);
+  box-shadow: inset 3px 0 0 var(--statistics-accent);
 }
 
 .statistics-entity-pane__row:hover:not([aria-current="page"]) {
@@ -552,6 +554,11 @@
 
 .statistics-master-detail__detail {
   min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-card);
 }
 
 /* Compact metric strip */

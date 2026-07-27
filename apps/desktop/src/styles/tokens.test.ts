@@ -276,6 +276,15 @@ test("pins the Statistics master detail and WKWebView inset contract", () => {
   const embeddedActivity = css.match(
     /\.statistics-activity-card--embedded\s*\{([^}]*)\}/,
   )?.[1] ?? "";
+  const detailPane = css.match(
+    /\.statistics-master-detail__detail\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  const selectedAll = css.match(
+    /\.statistics-entity-pane__all-button\[aria-current="page"\]\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
+  const selectedRow = css.match(
+    /\.statistics-entity-pane__row\[aria-current="page"\]\s*\{([^}]*)\}/,
+  )?.[1] ?? "";
 
   expect(workspace).toContain(
     "grid-template-columns: 272px minmax(0, 1fr);",
@@ -296,6 +305,23 @@ test("pins the Statistics master detail and WKWebView inset contract", () => {
   expect(css).not.toMatch(/linear-gradient|radial-gradient|conic-gradient/);
   expect(css).not.toMatch(/overflow-x\s*:\s*(auto|scroll)/);
   expect(css).not.toContain("width: max-content");
+
+  for (const declaration of [
+    "padding: 20px;",
+    "border: 1px solid var(--border-subtle);",
+    "border-radius: 14px;",
+    "background: var(--surface-1);",
+    "box-shadow: var(--shadow-card);",
+  ]) {
+    expect(detailPane).toContain(declaration);
+  }
+
+  expect(selectedAll).toContain(
+    "box-shadow: inset 3px 0 0 var(--statistics-accent);",
+  );
+  expect(selectedRow).toContain(
+    "box-shadow: inset 3px 0 0 var(--statistics-accent);",
+  );
 });
 
 test("loads the Statistics stylesheet from the application entry point", () => {
