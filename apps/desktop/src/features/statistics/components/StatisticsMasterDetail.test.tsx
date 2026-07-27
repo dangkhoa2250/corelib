@@ -158,3 +158,16 @@ test("renders independent list loading, error, retry, and empty-filter states", 
   await user.type(screen.getByRole("searchbox", { name: "Search books" }), "missing");
   expect(screen.getByText("No books found")).toBeInTheDocument();
 });
+
+test("exposes entity buttons as items in a semantic list", () => {
+  renderMasterDetail();
+
+  const navigation = screen.getByRole("navigation", {
+    name: "Reading statistics scopes",
+  });
+  const list = within(navigation).getByRole("list");
+
+  expect(within(list).getAllByRole("listitem")).toHaveLength(items.length);
+  expect(within(list).getByRole("button", { name: /Atomic Habits/ }))
+    .not.toHaveAttribute("aria-current");
+});

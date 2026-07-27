@@ -94,6 +94,8 @@ test("switches between All Reading and a selected document in place", async () =
 
   expect(await screen.findByRole("heading", { name: "All Reading" }))
     .toBeInTheDocument();
+  expect(screen.getByRole("searchbox", { name: "Search books" }))
+    .toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: /Document A/ }));
   expect(onSelectDocument).toHaveBeenCalledWith("doc-a");
 
@@ -130,4 +132,26 @@ test("shows an unavailable state for a missing deep-linked document", () => {
   expect(screen.getByRole("status"))
     .toHaveTextContent("This book is no longer available");
   expect(screen.getByRole("button", { name: "All Reading" })).toBeInTheDocument();
+});
+
+test("uses approved book copy for an empty Reading filter", async () => {
+  const user = userEvent.setup();
+
+  render(
+    <ReadingStatisticsWorkspace
+      documents={[documentA]}
+      documentsLoading={false}
+      selectedDocumentId={null}
+      onSelectDocument={vi.fn()}
+      period={period}
+      getReadingStats={getReadingStats}
+      getDocumentStats={getDocumentStats}
+    />,
+  );
+
+  await user.type(
+    screen.getByRole("searchbox", { name: "Search books" }),
+    "not-present",
+  );
+  expect(screen.getByText("No books found")).toBeInTheDocument();
 });

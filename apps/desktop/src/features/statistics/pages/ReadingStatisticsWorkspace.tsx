@@ -66,8 +66,8 @@ export function ReadingStatisticsWorkspace({
     <StatisticsMasterDetail
       allLabel="All Reading"
       ariaLabel="Reading statistics scopes"
-      searchLabel="Search documents"
-      noResultsLabel="No documents found"
+      searchLabel="Search books"
+      noResultsLabel="No books found"
       items={items}
       selectedId={selectedDocumentId}
       onSelect={onSelectDocument}

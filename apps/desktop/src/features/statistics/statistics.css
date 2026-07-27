@@ -441,6 +441,13 @@
 .statistics-entity-pane__list {
   display: grid;
   gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.statistics-entity-pane__list-item {
+  min-width: 0;
 }
 
 .statistics-entity-pane__row {

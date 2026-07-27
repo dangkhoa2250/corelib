@@ -98,29 +98,35 @@ export function StatisticsMasterDetail({
               >
                 {allLabel}
               </button>
-              <div className="statistics-entity-pane__list" role="list">
+              <ul className="statistics-entity-pane__list">
                 {filteredItems.map((item) => (
-                  <button
-                    className="statistics-entity-pane__row"
-                    aria-current={selectedId === item.id ? "page" : undefined}
-                    key={item.id}
-                    onClick={() => onSelect(item.id)}
-                  >
-                    {item.visual ? (
-                      <span aria-hidden="true" className="statistics-entity-pane__visual">
-                        {item.visual}
-                      </span>
-                    ) : null}
-                    <span className="statistics-entity-pane__label">{item.label}</span>
-                    {item.description ? (
-                      <span className="statistics-entity-pane__description">{item.description}</span>
-                    ) : null}
-                    {item.meta ? (
-                      <span className="statistics-entity-pane__meta">{item.meta}</span>
-                    ) : null}
-                  </button>
+                  <li className="statistics-entity-pane__list-item" key={item.id}>
+                    <button
+                      className="statistics-entity-pane__row"
+                      aria-current={selectedId === item.id ? "page" : undefined}
+                      onClick={() => onSelect(item.id)}
+                    >
+                      {item.visual ? (
+                        <span
+                          aria-hidden="true"
+                          className="statistics-entity-pane__visual"
+                        >
+                          {item.visual}
+                        </span>
+                      ) : null}
+                      <span className="statistics-entity-pane__label">{item.label}</span>
+                      {item.description ? (
+                        <span className="statistics-entity-pane__description">
+                          {item.description}
+                        </span>
+                      ) : null}
+                      {item.meta ? (
+                        <span className="statistics-entity-pane__meta">{item.meta}</span>
+                      ) : null}
+                    </button>
+                  </li>
                 ))}
-              </div>
+              </ul>
               {filteredItems.length === 0 ? (
                 <p className="statistics-entity-pane__no-results">{noResultsLabel}</p>
               ) : null}
