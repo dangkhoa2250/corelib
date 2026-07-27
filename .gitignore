@@ -1,8 +1,13 @@
 .DS_Store
 .worktrees/
 .superpowers/
+.qoder/
 math
 
+# PocketBase data (root-level and services/)
+pb_data/
+pb_datacd/
 services/pocketbase/.env
 services/pocketbase/pb_data/
+services/pocketbase/pb_datacd/
 services/pocketbase/pocketbase
