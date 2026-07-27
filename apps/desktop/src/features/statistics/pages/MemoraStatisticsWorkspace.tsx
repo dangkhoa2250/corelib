@@ -72,6 +72,11 @@ export function MemoraStatisticsWorkspace({
       ? decks.find((d) => d.id === selectedDeckId) ?? undefined
       : undefined;
 
+  const showUnavailable =
+    selectedDeckId !== null
+    && listState === "loaded"
+    && selectedDeck === undefined;
+
   return (
     <StatisticsMasterDetail
       allLabel="All Memora"
@@ -84,7 +89,13 @@ export function MemoraStatisticsWorkspace({
       listState={listState}
       onRetry={() => void loadDecks()}
     >
-      {selectedDeckId !== null ? (
+      {showUnavailable ? (
+        <div className="statistics-page">
+          <div className="statistics-unavailable" role="status">
+            <p>This deck is no longer available.</p>
+          </div>
+        </div>
+      ) : selectedDeckId !== null ? (
         <DeckStatisticsPage
           deckId={selectedDeckId}
           deck={selectedDeck}

@@ -133,3 +133,27 @@ test("loads a deep-linked deck by ID while its list metadata is pending", () => 
     .toBeInTheDocument();
   expect(getDeckStats).toHaveBeenCalledWith("deck-a", period);
 });
+
+test("shows an unavailable state after a deep-linked deck is absent from the resolved list", async () => {
+  const missingDeckStats = vi.fn().mockResolvedValue({
+    ...deckStats,
+    deckId: "missing",
+  });
+
+  render(
+    <MemoraStatisticsWorkspace
+      listDecks={vi.fn().mockResolvedValue([deckA])}
+      selectedDeckId="missing"
+      onSelectDeck={vi.fn()}
+      period={period}
+      getMemoraStats={getMemoraStats}
+      getDeckStats={missingDeckStats}
+    />,
+  );
+
+  expect(await screen.findByRole("status"))
+    .toHaveTextContent("This deck is no longer available");
+  expect(screen.getByRole("button", { name: "All Memora" }))
+    .toBeInTheDocument();
+  expect(missingDeckStats).toHaveBeenCalledWith("missing", period);
+});
