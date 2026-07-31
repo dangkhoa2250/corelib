@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-01
 
-**Status:** Approved design, pending written-spec review
+**Status:** Approved
 
 **Scope:** `apps/desktop` React/Tauri styling architecture
 
@@ -53,7 +53,7 @@ Responsibilities:
 
 - `tokens.css`: `:root` and `[data-theme="dark"]` theme definitions. It may set root typography and semantic root color as part of the theme contract, but it must not contain class selectors, keyframes, media queries, component layout, or feature selectors.
 - `base.css`: box sizing, document/root sizing, form-element defaults, focus-visible behavior, Tauri drag-region behavior, and the existing native scrollbar fallback contract.
-- `primitives.css`: global reusable primitives such as `.ui-button`, `.action-menu`, `.combobox`, `.scroll-area`, `.model-brand-icon`, and `.provider-brand-icon`.
+- `primitives.css`: global reusable primitives such as `.ui-button`, `.action-menu`, `.combobox`, `.scroll-area`, `.model-brand-icon`, and `.provider-brand-icon`, plus the shared `fadeIn` keyframe used by more than one feature.
 
 ### Application shell
 
@@ -88,9 +88,9 @@ The files have the following ownership:
 | --- | --- |
 | `settings/settings.css` | `.settings-page` and Settings provider/editor/modal styles |
 | `library/library.css` | `.library-page`, `.library-import-menu`, `.document-grid`, `.document-card`, and cover-loading animation styles |
-| `drive/drive.css` | `.drive-picker`, `.drive-setup-modal`, their overlays, and modal keyframes |
+| `drive/drive.css` | `.drive-picker`, `.drive-setup-modal`, their overlays, and the Drive-only `modalScaleUp` keyframe |
 | `memora/memora.css` | `.memora-*`, `.deck-detail-page`, and `.deck-learning-dialog` |
-| `cards/cards.css` | `.card-browser`, `.card-side-panel`, `.source-viewer`, and their keyframes |
+| `cards/cards.css` | `.card-browser`, `.card-side-panel`, `.source-viewer`, and the Cards-only `slideIn` keyframe |
 | `reader/reader.css` | `.reader-*`, reader PDF/canvas/outline helpers, and reader-responsive rules |
 | `review/review.css` | `.review-page` styles and Review overrides targeting shared children such as `.source-viewer` |
 | `search/search.css` | `.command-palette` styles and responsive rules |
@@ -154,7 +154,6 @@ apps/desktop/src/styles/
 
 apps/desktop/src/features/
 ├── library/libraryStyles.test.ts
-├── cards/cardsStyles.test.ts
 ├── reader/readerStyles.test.ts
 ├── review/reviewStyles.test.ts
 ├── search/searchStyles.test.ts
@@ -162,6 +161,8 @@ apps/desktop/src/features/
 ```
 
 The migration retains the meaning of existing assertions. It updates the stylesheet paths and moves the assertions to the owning test file. It does not create empty style-test files for features without existing CSS-specific assertions.
+
+The existing `features/cards/SourceViewer.test.ts` remains the Cards-owned regression file; its stylesheet fixture path changes from the monolithic `tokens.css` to `cards.css`, so a second Cards style-test file is unnecessary.
 
 An architecture-level test must verify:
 
