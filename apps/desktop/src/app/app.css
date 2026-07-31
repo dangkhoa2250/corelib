@@ -1,0 +1,148 @@
+.app-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-shell__content {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--main-bg);
+}
+
+.app-shell__content--managed-scroll {
+  overflow: hidden;
+}
+
+.app-sidebar {
+  position: relative;
+  display: flex;
+  flex: 0 0 220px;
+  flex-direction: column;
+  gap: 18px;
+  width: 220px;
+  min-width: 160px;
+  max-width: 360px;
+  /* Extra top padding clears the overlaid macOS traffic lights (see trafficLightPosition
+     in tauri.conf.json) since the titlebar no longer reserves its own space. */
+  padding: 40px 12px 16px;
+  border-right: 1px solid var(--border-subtle);
+  background: var(--sidebar-bg);
+  backdrop-filter: blur(24px) saturate(1.15);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
+}
+
+.app-sidebar__drag-region {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+}
+
+.app-sidebar__resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
+}
+
+.app-sidebar__resize-handle:hover,
+.app-sidebar__resize-handle:active {
+  background-color: var(--border-strong);
+}
+
+.app-sidebar__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--main-bg);
+  color: var(--text-disabled);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.app-sidebar__search:hover {
+  border-color: var(--border-strong);
+}
+
+.app-sidebar__search-icon {
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.app-sidebar__search-label {
+  flex: 1;
+  text-align: left;
+}
+
+.app-sidebar__search-kbd {
+  padding: 1px 5px;
+  border-radius: 4px;
+  color: var(--text-disabled);
+  background: var(--surface-2);
+  font-size: 11px;
+  font-family: inherit;
+}
+
+.app-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app-sidebar__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-sidebar__nav-item:hover {
+  background: var(--interactive-hover);
+}
+
+.app-sidebar__nav-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--text-disabled);
+}
+
+.app-sidebar__nav-item.is-active .app-sidebar__nav-icon {
+  color: var(--text-primary);
+}
+
+.app-sidebar__nav-item.is-active {
+  color: var(--text-primary);
+  background: var(--interactive-selected);
+}
+
+.app-sidebar__footer {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.app-sidebar__logout:hover {
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.12);
+}

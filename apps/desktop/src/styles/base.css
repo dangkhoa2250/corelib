@@ -1,0 +1,96 @@
+
+* {
+  box-sizing: border-box;
+}
+
+/* Shared scrollbar primitive: no track background in any scrollable surface. */
+:where(*) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+:where(*)::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+  background: var(--scrollbar-track);
+}
+
+:where(*)::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+/* WebKit paints the visible gutter through track-piece, not track, in desktop
+   webviews. Reset both so the thumb floats over the owning surface. */
+:where(*)::-webkit-scrollbar-track-piece {
+  background: var(--scrollbar-track);
+}
+
+:where(*)::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+:where(*)::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+:where(*)::-webkit-scrollbar-corner {
+  background: var(--scrollbar-track);
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+}
+
+[data-tauri-drag-region] {
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+input,
+textarea,
+select {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 8px 12px;
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-disabled);
+}
+
+/* Global focus-visible ring — neutral, no blue */
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}

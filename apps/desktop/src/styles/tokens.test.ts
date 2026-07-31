@@ -5,14 +5,14 @@ import { expect, test } from "vitest";
 
 test("does not apply global color transitions to every element", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "base.css"), "utf8");
 
   expect(css).not.toContain("transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;");
 });
 
 test("moves lowered review states down responsively", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "../features/review/review.css"), "utf8");
   const lowered = css.match(/\.review-page--lowered \.review-page__done-content \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(lowered).toContain("transform: translateY(clamp(32px, 6vh, 64px));");
@@ -20,7 +20,7 @@ test("moves lowered review states down responsively", () => {
 
 test("uses a dark-theme-safe compact surface for the import trigger", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "../features/library/library.css"), "utf8");
   const trigger = css.match(/\.library-import-menu__trigger \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(trigger).toContain("border: 1px solid var(--border-strong);");
@@ -34,7 +34,7 @@ test("uses a dark-theme-safe compact surface for the import trigger", () => {
 
 test("uses a semantic flat hover surface for shared comboboxes", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "primitives.css"), "utf8");
   const hover = css.match(/\.combobox__trigger:hover\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(hover).toContain("background: var(--interactive-hover);");
@@ -43,9 +43,9 @@ test("uses a semantic flat hover surface for shared comboboxes", () => {
 
 test("keeps disabled Statistics and shared combobox controls on their normal surfaces", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const tokensCss = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const primitivesCss = readFileSync(join(currentDir, "primitives.css"), "utf8");
   const statisticsCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
-  const comboboxDisabledHover = tokensCss.match(/\.combobox__trigger:disabled:hover\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const comboboxDisabledHover = primitivesCss.match(/\.combobox__trigger:disabled:hover\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
   const statisticsDisabled = statisticsCss.match(/\.statistics-control:disabled,\s*\.statistics-control:disabled:hover,\s*\.statistics-control:disabled\[aria-pressed="true"\]\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(comboboxDisabledHover).toContain("background: var(--surface-1);");
@@ -76,7 +76,8 @@ test("keeps the native window transparent for the sidebar glass surface", () => 
 test("uses a tinted glass fallback instead of a fully transparent sidebar", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
-  const sidebar = css.match(/\.app-sidebar \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const appCss = readFileSync(join(currentDir, "../app/app.css"), "utf8");
+  const sidebar = appCss.match(/\.app-sidebar \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(css).toMatch(/--sidebar-bg:\s*rgb\([^)]*\/\s*\d+%\);/);
   expect(sidebar).toContain("background: var(--sidebar-bg);");
@@ -86,7 +87,10 @@ test("uses a tinted glass fallback instead of a fully transparent sidebar", () =
 
 test("uses one transparent-track scrollbar primitive across the app", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = [
+    readFileSync(join(currentDir, "tokens.css"), "utf8"),
+    readFileSync(join(currentDir, "base.css"), "utf8"),
+  ].join("\n");
 
   expect(css).toContain("--scrollbar-track: transparent;");
   expect(css).toContain("--scrollbar-thumb:");
@@ -350,7 +354,10 @@ test("uses only public macOS view APIs to enable overlay scrollers", () => {
 
 test("anchors the review route and source split to the viewport height", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = [
+    readFileSync(join(currentDir, "base.css"), "utf8"),
+    readFileSync(join(currentDir, "../features/review/review.css"), "utf8"),
+  ].join("\n");
   const root = css.match(/html,\nbody,\n#root \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const reviewPage = css.match(/\.review-page \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const reviewSplit = css.match(/\.review-page__split \{([\s\S]*?)\n\}/)?.[1] ?? "";
@@ -364,7 +371,7 @@ test("anchors the review route and source split to the viewport height", () => {
 
 test("keeps the flashcard compact while the source panel can fill the viewport", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "../features/review/review.css"), "utf8");
   const card = css.match(/\.review-page__card \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const sourcePanel = css.match(/\.review-page__split > \.source-viewer \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
@@ -376,7 +383,7 @@ test("keeps the flashcard compact while the source panel can fill the viewport",
 
 test("splits the review and source panes evenly", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "../features/review/review.css"), "utf8");
   const reviewPane = css.match(/\.review-page__split--with-source \.review-page__body \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const sourcePane = css.match(/\.review-page__split--with-source > \.source-viewer \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
@@ -387,7 +394,7 @@ test("splits the review and source panes evenly", () => {
 
 test("keeps the flashcard geometry stable while a video is open", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "../features/review/review.css"), "utf8");
   const videoCard = css.match(/\.review-page__body--with-video \.review-page__card \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(videoCard).toBe("");
@@ -401,7 +408,7 @@ test("keeps the flashcard geometry stable while a video is open", () => {
 
 test("uses compact review rating controls", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "../features/review/review.css"), "utf8");
   const ratings = css.match(/\.review-page__ratings \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const ratingButton = css.match(/\.review-page__rating-btn \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
@@ -421,7 +428,7 @@ test("uses the reusable ScrollArea for the reader's thumbnail and PDF panes", ()
 
 test("uses neutral palette-specific scrollbars and match highlights", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "../features/search/search.css"), "utf8");
   const paletteStart = css.indexOf(".command-palette__backdrop");
   const paletteEnd = css.indexOf("@media", paletteStart);
   const paletteCss = css.slice(paletteStart, paletteEnd);

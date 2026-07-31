@@ -15,7 +15,7 @@ test("opens the saved source page before showing search results from the whole d
 test("marks highlights on the saved source page separately", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
-  const css = readFileSync(join(currentDir, "../../styles/tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "cards.css"), "utf8");
 
   expect(viewer).toContain("source-viewer__highlight--source");
   expect(css).toContain(".source-viewer__highlight--source,");

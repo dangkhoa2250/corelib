@@ -1,0 +1,746 @@
+.deck-learning-dialog__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--overlay);
+}
+
+.deck-learning-dialog {
+  display: grid;
+  gap: 16px;
+  width: min(440px, 100%);
+  max-height: min(640px, calc(100vh - 48px));
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  background: var(--main-bg);
+  box-shadow: var(--shadow-xl);
+}
+
+.deck-learning-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.deck-learning-dialog__header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.deck-learning-dialog__close {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: var(--surface-2);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.deck-learning-dialog__close:hover {
+  color: var(--text-primary);
+  background: var(--border-strong);
+}
+
+.deck-learning-dialog__options {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.deck-learning-dialog__option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.deck-learning-dialog__field {
+  display: grid;
+  gap: 7px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.deck-learning-dialog__field > input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  font-size: 14px;
+}
+
+.deck-learning-dialog__field > input:disabled {
+  opacity: 0.5;
+}
+
+.deck-learning-dialog__actions {
+  display: flex;
+  gap: 10px;
+}
+
+.deck-learning-dialog__error {
+  margin: 0;
+  color: var(--danger, #d92d20);
+  font-size: 13px;
+}
+
+.deck-learning-dialog :focus-visible {
+  outline: 2px solid var(--focus-ring, var(--border-strong));
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .deck-learning-dialog {
+    width: 100%;
+  }
+}
+
+.memora-page {
+  min-height: 100%;
+  padding: clamp(24px, 5vw, 72px);
+}
+
+.memora-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 auto 36px;
+  max-width: 1280px;
+}
+
+.memora-page__header h1 {
+  margin: 0;
+  font-size: clamp(30px, 4vw, 44px);
+  letter-spacing: -0.04em;
+}
+
+.memora-page__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.memora-new-deck {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.memora-new-deck input {
+  padding: 9px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+.memora-page__empty {
+  margin: 18vh auto 0;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.memora-deck-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.memora-deck-list__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 8px 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--surface-1);
+  box-shadow: var(--shadow-sm);
+}
+
+.memora-deck-list__item--confirm {
+  justify-content: space-between;
+  color: var(--text-primary);
+}
+
+.memora-deck-list__confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.memora-deck-list__confirm-actions button {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--main-bg);
+  cursor: pointer;
+}
+
+.memora-deck-list__delete-confirm {
+  color: var(--button-primary-text) !important;
+  background: var(--error) !important;
+  border-color: var(--error) !important;
+}
+
+.memora-deck-list__edit-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.memora-deck-list__edit-form input {
+  flex: 1;
+  padding: 7px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.memora-deck-list__edit-form button {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 14px;
+  background: var(--main-bg);
+  cursor: pointer;
+}
+
+.memora-deck-list__menu {
+  position: relative;
+  margin-left: auto;
+}
+
+.memora-deck-list__menu-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+}
+
+.memora-deck-list__menu-trigger:hover {
+  background: var(--interactive-hover);
+}
+
+.memora-deck-list__menu-popover {
+  position: absolute;
+  top: 34px;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--main-bg);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+}
+
+.memora-deck-list__menu-popover button {
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-primary);
+  background: transparent;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memora-deck-list__menu-popover button:hover {
+  background: var(--interactive-selected);
+}
+
+.memora-deck-list__menu-delete {
+  color: var(--error) !important;
+}
+
+.memora-deck-list__menu-delete:hover {
+  background: var(--color-danger-bg-hover) !important;
+}
+
+.memora-deck-list__name {
+  color: var(--text-primary);
+  font-weight: 550;
+}
+
+.memora-deck-list__description {
+  color: var(--text-disabled);
+  font-size: 13px;
+}
+
+.memora-deck-list__content {
+  flex: 1;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+}
+
+.memora-deck-list__statistics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(64px, 1fr));
+  gap: 8px;
+  min-width: 250px;
+}
+
+.memora-deck-list__stat {
+  display: grid;
+  gap: 2px;
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
+.memora-deck-list__stat strong {
+  color: var(--text-primary);
+  font-size: 18px;
+}
+
+.memora-deck-list__stat--new { color: var(--color-new-text); }
+.memora-deck-list__stat--learning { color: var(--color-learning-text); }
+.memora-deck-list__stat--due { color: var(--color-relearning-text); }
+
+.memora-deck-list__open {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text-primary);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memora-deck-list__item .action-menu__trigger {
+  padding: 7px 12px;
+}
+
+@media (max-width: 760px) {
+  .memora-page__header,
+  .memora-page__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .memora-deck-list__statistics {
+    display: none;
+  }
+}
+
+.deck-detail-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.deck-detail-page__split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 16px;
+  padding-right: 16px;
+}
+
+.deck-detail-page__body {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.deck-detail-page__split > .source-viewer {
+  margin: 16px 0;
+}
+
+.deck-detail-page__error {
+  margin: 12px 24px;
+  color: var(--error);
+  font-size: 14px;
+}
+
+.deck-detail-page__card-browser {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.memora-deck-cards__back {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--link);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.memora-card-form {
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
+  margin: 0 auto 24px;
+  padding: 16px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.memora-card-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.memora-card-form textarea,
+.memora-card-form input {
+  padding: 8px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  font: inherit;
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.memora-card-form__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.memora-card-form__actions button {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 8px 16px;
+  background: var(--main-bg);
+  cursor: pointer;
+}
+
+.memora-card-form__actions button[type="submit"] {
+  color: var(--button-primary-text);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
+}
+
+.memora-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.memora-card-slideshow {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.memora-card-slideshow__counter {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.memora-card-slideshow__nav {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.memora-card-slideshow__btn {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 8px 20px;
+  background: var(--main-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.memora-card-slideshow__btn:hover:not(:disabled) {
+  background: var(--window-bg);
+  border-color: var(--border-strong);
+}
+
+.memora-card-slideshow__btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: var(--surface-2);
+}
+
+.memora-card-slideshow__wrapper {
+  perspective: 1000px;
+  width: 100%;
+  max-width: 580px;
+  margin: 0 auto;
+}
+
+.memora-flashcard {
+  width: 100%;
+  height: 280px;
+  cursor: pointer;
+  perspective: 1000px;
+}
+
+.memora-flashcard__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-style: preserve-3d;
+}
+
+.memora-flashcard.is-flipped .memora-flashcard__inner {
+  transform: rotateY(180deg);
+}
+
+.memora-flashcard__front,
+.memora-flashcard__back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  border-radius: 20px;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 6%);
+  background: var(--surface-1);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 32px 40px;
+  box-sizing: border-box;
+  overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.memora-flashcard__front:hover,
+.memora-flashcard__back:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+.memora-flashcard__back {
+  transform: rotateY(180deg);
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+}
+
+.memora-flashcard__content {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+  margin-bottom: 12px;
+  word-break: break-word;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.memora-flashcard__content--back {
+  color: var(--link);
+}
+
+.memora-flashcard__delete-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  color: var(--text-disabled);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.memora-flashcard__delete-btn:hover {
+  color: var(--error);
+  background: var(--color-danger-bg-hover);
+}
+
+.memora-flashcard--confirm .memora-flashcard__front {
+  background: var(--color-danger-bg-soft);
+  border-color: var(--color-danger-bg);
+}
+
+/* FSRS Ratings Container below card */
+.memora-card-slideshow__ratings {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  max-width: 580px;
+  width: 100%;
+  margin: 16px auto 0;
+}
+
+.memora-card-slideshow__rate-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-1);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  box-shadow: var(--shadow-sm);
+}
+
+.memora-card-slideshow__rate-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.memora-card-slideshow__rate-interval {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* Custom coloring per rating button type like Anki */
+.memora-card-slideshow__rate-btn--again {
+  border-color: color-mix(in srgb, var(--error) 20%, transparent);
+}
+.memora-card-slideshow__rate-btn--again .memora-card-slideshow__rate-label {
+  color: var(--error);
+}
+.memora-card-slideshow__rate-btn--again:hover {
+  background: var(--color-danger-bg-soft);
+  border-color: var(--error);
+}
+
+.memora-card-slideshow__rate-btn--hard {
+  border-color: color-mix(in srgb, var(--warning) 20%, transparent);
+}
+.memora-card-slideshow__rate-btn--hard .memora-card-slideshow__rate-label {
+  color: var(--warning);
+}
+.memora-card-slideshow__rate-btn--hard:hover {
+  background: color-mix(in srgb, var(--warning) 6%, transparent);
+  border-color: var(--warning);
+}
+
+.memora-card-slideshow__rate-btn--good {
+  border-color: color-mix(in srgb, var(--success) 20%, transparent);
+}
+.memora-card-slideshow__rate-btn--good .memora-card-slideshow__rate-label {
+  color: var(--success);
+}
+.memora-card-slideshow__rate-btn--good:hover {
+  background: color-mix(in srgb, var(--success) 6%, transparent);
+  border-color: var(--success);
+}
+
+.memora-card-slideshow__rate-btn--easy {
+  border-color: color-mix(in srgb, var(--link) 20%, transparent);
+}
+.memora-card-slideshow__rate-btn--easy .memora-card-slideshow__rate-label {
+  color: var(--link);
+}
+.memora-card-slideshow__rate-btn--easy:hover {
+  background: color-mix(in srgb, var(--link) 6%, transparent);
+  border-color: var(--link);
+}
+
+
+
+.memora-card-list__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.memora-card-list__item--confirm {
+  justify-content: space-between;
+  color: var(--text-primary);
+}
+
+.memora-card-list__flip {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.memora-card-list__front {
+  font-weight: 550;
+}
+
+.memora-card-list__back {
+  padding-top: 5px;
+  border-top: 1px dashed var(--border-subtle);
+  color: var(--link);
+  font-size: 13px;
+}
+
+.memora-card-list__hint {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.memora-card-list__tags {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
