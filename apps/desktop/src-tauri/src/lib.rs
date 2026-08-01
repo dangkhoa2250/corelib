@@ -36,6 +36,7 @@ pub mod learning;
 pub mod library_db;
 pub mod library_store;
 pub mod model;
+pub mod rich_document;
 pub mod scheduler;
 pub mod study_queue;
 pub mod statistics;
@@ -71,6 +72,9 @@ mod study_queue_tests;
 
 #[cfg(test)]
 mod statistics_tests;
+
+#[cfg(test)]
+mod rich_document_tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
