@@ -251,6 +251,23 @@ pub struct CardPagePayload {
     pub next_cursor: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PixabayImage {
+    pub id: i64,
+    pub page_url: String,
+    pub preview_url: String,
+    pub image_url: String,
+    pub preview_width: u32,
+    pub preview_height: u32,
+    pub width: u32,
+    pub height: u32,
+    pub tags: String,
+    pub user: String,
+    pub user_id: i64,
+    pub media_type: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MemoraSettingsPayload {

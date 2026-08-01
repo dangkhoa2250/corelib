@@ -36,6 +36,7 @@ pub mod learning;
 pub mod library_db;
 pub mod library_store;
 pub mod model;
+pub mod pixabay;
 pub mod rich_document;
 pub mod scheduler;
 pub mod study_queue;
@@ -75,6 +76,9 @@ mod statistics_tests;
 
 #[cfg(test)]
 mod rich_document_tests;
+
+#[cfg(test)]
+mod pixabay_tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -174,6 +178,10 @@ pub fn run() {
             ai::translate_with_ai,
             translation::translate_text,
             translation::apple_translation_available,
+            pixabay::save_pixabay_key,
+            pixabay::check_pixabay_key,
+            pixabay::delete_pixabay_key,
+            pixabay::search_pixabay_images,
             commands::get_statistics_overview,
             commands::get_reading_statistics,
             commands::get_document_statistics,
