@@ -524,3 +524,55 @@ test("settings search finds Memora by learning and FSRS terms", async () => {
   await user.type(screen.getByLabelText("Search settings"), "fsrs");
   expect(screen.getByRole("button", { name: "Memora" })).toBeInTheDocument();
 });
+
+test("shows Media under Apps and opens the Pixabay key settings", async () => {
+  const user = userEvent.setup();
+  renderSettings({
+    checkPixabayKey: vi.fn().mockResolvedValue(false),
+    savePixabayKey: vi.fn().mockResolvedValue(undefined),
+    clearPixabayKey: vi.fn().mockResolvedValue(undefined),
+  });
+
+  expect(screen.getByText("Apps")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Media" }));
+  expect(screen.getByRole("heading", { name: "Media" })).toBeInTheDocument();
+  expect(await screen.findByLabelText("Pixabay API key")).toBeInTheDocument();
+});
+
+test("opens the images section directly from its route section", async () => {
+  renderSettings({
+    initialSection: "images",
+    checkPixabayKey: vi.fn().mockResolvedValue(true),
+  });
+
+  expect(await screen.findByLabelText("Pixabay API key")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Remove" })).toBeInTheDocument();
+});
+
+test("settings search finds Media by pixabay terms", async () => {
+  const user = userEvent.setup();
+  renderSettings({
+    checkPixabayKey: vi.fn().mockResolvedValue(false),
+    savePixabayKey: vi.fn().mockResolvedValue(undefined),
+    clearPixabayKey: vi.fn().mockResolvedValue(undefined),
+  });
+
+  await user.type(screen.getByLabelText("Search settings"), "pixabay");
+  expect(screen.getByRole("button", { name: "Media" })).toBeInTheDocument();
+});
+
+test("saves a Pixabay key from the Media settings section", async () => {
+  const user = userEvent.setup();
+  const savePixabayKey = vi.fn().mockResolvedValue(undefined);
+  renderSettings({
+    checkPixabayKey: vi.fn().mockResolvedValue(false),
+    savePixabayKey,
+    clearPixabayKey: vi.fn().mockResolvedValue(undefined),
+  });
+
+  await user.click(screen.getByRole("button", { name: "Media" }));
+  await user.type(await screen.findByLabelText("Pixabay API key"), "pixabay-test-key");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  await waitFor(() => expect(savePixabayKey).toHaveBeenCalledWith("pixabay-test-key"));
+});

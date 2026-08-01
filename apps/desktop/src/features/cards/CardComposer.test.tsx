@@ -60,17 +60,45 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof CardCompo
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onCancel = vi.fn();
   const user = userEvent.setup();
-  render(
-    <CardComposer
-      draft={draft}
-      decks={decks}
-      onSave={onSave}
-      onCancel={onCancel}
-      {...overrides}
-    />,
-  );
-  return { onSave, onCancel, user };
+  const props: React.ComponentProps<typeof CardComposer> = {
+    draft,
+    decks,
+    onSave,
+    onCancel,
+    stageCardMedia: vi.fn().mockResolvedValue({
+      id: "media-1",
+      cardId: null,
+      mimeType: "image/png",
+      relativePath: "media/media-1.png",
+      sourceType: "file",
+      pixabayAttribution: null,
+      createdAt: "",
+      updatedAt: "",
+    }),
+    discardMediaDraft: vi.fn().mockResolvedValue(undefined),
+    checkPixabayKey: vi.fn().mockResolvedValue(false),
+    searchPixabayImages: vi.fn().mockResolvedValue([]),
+    downloadPixabayPreview: vi.fn().mockResolvedValue("aGVsbG8="),
+    ...overrides,
+  };
+  render(<CardComposer {...props} />);
+  return { onSave, onCancel, user, props };
 }
+
+const pixabayImage = {
+  id: 1,
+  pageUrl: "https://pixabay.com/photos/1",
+  previewUrl: "https://cdn.pixabay.com/preview-1.jpg",
+  imageUrl: "https://cdn.pixabay.com/full-1.jpg",
+  previewWidth: 150,
+  previewHeight: 100,
+  width: 640,
+  height: 427,
+  tags: "algebra, board",
+  user: "JaneDoe",
+  userId: 42,
+  mediaType: "photo",
+};
 
 /** The Tiptap contenteditable backing a labeled editor face. */
 function editor(name: string): HTMLElement {
@@ -155,12 +183,20 @@ test("hydrates the first loaded deck when the composer opened before decks resol
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onCancel = vi.fn();
   const user = userEvent.setup();
+  const bridges = {
+    stageCardMedia: vi.fn().mockResolvedValue({ id: "media-1" }),
+    discardMediaDraft: vi.fn().mockResolvedValue(undefined),
+    checkPixabayKey: vi.fn().mockResolvedValue(false),
+    searchPixabayImages: vi.fn().mockResolvedValue([]),
+    downloadPixabayPreview: vi.fn().mockResolvedValue("aGVsbG8="),
+  };
   const view = render(
     <CardComposer
       draft={draft}
       decks={[]}
       onSave={onSave}
       onCancel={onCancel}
+      {...bridges}
     />,
   );
 
@@ -172,6 +208,7 @@ test("hydrates the first loaded deck when the composer opened before decks resol
       decks={[decks[0]]}
       onSave={onSave}
       onCancel={onCancel}
+      {...bridges}
     />,
   );
 
@@ -203,12 +240,20 @@ test("does not replace an explicit new deck choice when decks finish loading", a
   const onSave = vi.fn().mockResolvedValue(undefined);
   const onCancel = vi.fn();
   const user = userEvent.setup();
+  const bridges = {
+    stageCardMedia: vi.fn().mockResolvedValue({ id: "media-1" }),
+    discardMediaDraft: vi.fn().mockResolvedValue(undefined),
+    checkPixabayKey: vi.fn().mockResolvedValue(false),
+    searchPixabayImages: vi.fn().mockResolvedValue([]),
+    downloadPixabayPreview: vi.fn().mockResolvedValue("aGVsbG8="),
+  };
   const view = render(
     <CardComposer
       draft={draft}
       decks={decks}
       onSave={onSave}
       onCancel={onCancel}
+      {...bridges}
     />,
   );
 
@@ -220,6 +265,7 @@ test("does not replace an explicit new deck choice when decks finish loading", a
       decks={[decks[0]]}
       onSave={onSave}
       onCancel={onCancel}
+      {...bridges}
     />,
   );
 
@@ -415,4 +461,135 @@ test("prevents a second save while the first one is pending", async () => {
 test("offers a pronunciation button beside the Front label", () => {
   renderComposer();
   expect(screen.getByRole("button", { name: "Play pronunciation" })).toBeInTheDocument();
+});
+
+test("stages a dropped file through the media bridge under the composer draft", async () => {
+  const stageCardMedia = vi.fn().mockResolvedValue({
+    id: "media-1",
+    cardId: null,
+    mimeType: "image/png",
+    relativePath: "media/media-1.png",
+    sourceType: "file",
+    pixabayAttribution: null,
+    createdAt: "",
+    updatedAt: "",
+  });
+  renderComposer({ stageCardMedia });
+  const back = editor("Back");
+  const backRoot = back.closest(".card-rich-text-editor") as HTMLElement;
+  const fileInput = backRoot.querySelector(
+    '[data-testid="card-rich-text-editor-file-input"]',
+  ) as HTMLInputElement;
+  const imageFile = new File(["fake-image-bytes"], "diagram.png", { type: "image/png" });
+
+  fireEvent.change(fileInput, { target: { files: [imageFile] } });
+
+  await waitFor(() => {
+    expect(backRoot.querySelector("[data-card-image]")).not.toBeNull();
+  });
+  expect(stageCardMedia).toHaveBeenCalledWith(
+    expect.objectContaining({ draftId: expect.any(String), sourceType: "file" }),
+  );
+});
+
+test("discards the media draft when the composer is cancelled", async () => {
+  const discardMediaDraft = vi.fn().mockResolvedValue(undefined);
+  const { user, onCancel } = renderComposer({ discardMediaDraft });
+
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+  await waitFor(() => expect(onCancel).toHaveBeenCalledExactlyOnceWith());
+  expect(discardMediaDraft).toHaveBeenCalledExactlyOnceWith(expect.any(String));
+});
+
+test("discards the media draft after a successful save", async () => {
+  const discardMediaDraft = vi.fn().mockResolvedValue(undefined);
+  const { user } = renderComposer({ discardMediaDraft });
+
+  await user.click(editor("Back"));
+  await user.keyboard("A set with vector operations.");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  await waitFor(() => expect(discardMediaDraft).toHaveBeenCalledExactlyOnceWith(expect.any(String)));
+});
+
+test("toggles the Pixabay picker from the Back header", async () => {
+  const { user } = renderComposer({
+    checkPixabayKey: vi.fn().mockResolvedValue(true),
+    searchPixabayImages: vi.fn().mockResolvedValue([pixabayImage]),
+  });
+
+  expect(screen.queryByText(/Photo by JaneDoe on Pixabay/i)).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Pixabay" }));
+  expect(await screen.findByRole("button", { name: /Photo by JaneDoe on Pixabay/i })).toBeInTheDocument();
+});
+
+test("auto-searches the front text when the picker opens", async () => {
+  const searchPixabayImages = vi.fn().mockResolvedValue([pixabayImage]);
+  const { user } = renderComposer({
+    checkPixabayKey: vi.fn().mockResolvedValue(true),
+    searchPixabayImages,
+  });
+
+  await user.click(screen.getByRole("button", { name: "Pixabay" }));
+  await waitFor(() => expect(searchPixabayImages).toHaveBeenCalledWith(draft.quote, 1));
+});
+
+test("shows the no-key CTA when no Pixabay key is configured", async () => {
+  const searchPixabayImages = vi.fn().mockResolvedValue([]);
+  const { user } = renderComposer({
+    checkPixabayKey: vi.fn().mockResolvedValue(false),
+    searchPixabayImages,
+  });
+
+  await user.click(screen.getByRole("button", { name: "Pixabay" }));
+  expect(await screen.findByText(/Settings › Media/i)).toBeInTheDocument();
+  expect(searchPixabayImages).not.toHaveBeenCalled();
+});
+
+test("stages a Pixabay result and inserts it into the back face", async () => {
+  const downloadPixabayPreview = vi.fn().mockResolvedValue("aGVsbG8=");
+  const stageCardMedia = vi.fn().mockResolvedValue({
+    id: "media-9",
+    cardId: null,
+    mimeType: "image/jpeg",
+    relativePath: "media/media-9.jpg",
+    sourceType: "pixabay",
+    pixabayAttribution: "Photo by JaneDoe on Pixabay",
+    createdAt: "",
+    updatedAt: "",
+  });
+  const { user, onSave } = renderComposer({
+    checkPixabayKey: vi.fn().mockResolvedValue(true),
+    searchPixabayImages: vi.fn().mockResolvedValue([pixabayImage]),
+    downloadPixabayPreview,
+    stageCardMedia,
+  });
+
+  await user.click(screen.getByRole("button", { name: "Pixabay" }));
+  await user.click(await screen.findByRole("button", { name: /Photo by JaneDoe on Pixabay/i }));
+
+  await waitFor(() => expect(downloadPixabayPreview).toHaveBeenCalledWith(pixabayImage.previewUrl));
+  await waitFor(() => expect(stageCardMedia).toHaveBeenCalledWith(
+    expect.objectContaining({
+      draftId: expect.any(String),
+      sourceType: "pixabay",
+      bytesBase64: "aGVsbG8=",
+      pixabayAttribution: "Photo by JaneDoe on Pixabay",
+    }),
+  ));
+
+  const back = editor("Back");
+  await waitFor(() => {
+    expect(back.querySelector("[data-card-image]")).not.toBeNull();
+  });
+
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+  const input = onSave.mock.calls[0][0];
+  const imageBlock = input.backDoc.content.find((block: any) => block.type === "image");
+  expect(imageBlock).toEqual({
+    type: "image",
+    attrs: { mediaId: "media-9", alt: "algebra, board", widthPercent: 100 },
+  });
 });

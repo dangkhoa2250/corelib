@@ -25,6 +25,12 @@ import { AccountContext } from "../account/AccountGate";
 import { AccountSettingsSection } from "../account/AccountSettingsSection";
 import type { SettingsSection } from "../../app/routes";
 import { MemoraSettingsSection } from "./MemoraSettingsSection";
+import { PixabaySettingsSection } from "./PixabaySettingsSection";
+import {
+  checkPixabayKey,
+  deletePixabayKey,
+  savePixabayKey,
+} from "../../lib/media";
 import type { MemoraSettings } from "../../domain/learning";
 
 interface SettingsNavItem {
@@ -38,6 +44,7 @@ const SETTINGS_NAV_KEYWORDS: Record<SettingsSection, string[]> = {
   drive: ["drive", "google", "cloud"],
   model: ["model", "provider", "translate", "ai"],
   memora: ["memora", "learning", "fsrs", "cards", "retention"],
+  images: ["images", "media", "pixabay", "stock", "photo"],
 };
 
 function matchesSearch(item: SettingsNavItem, query: string): boolean {
@@ -80,6 +87,10 @@ export interface SettingsPageProps {
   saveDriveCredentials?: (clientId: string, clientSecret: string) => Promise<void>;
   loadDriveCredentials?: () => Promise<{ clientId: string; clientSecret: string } | null>;
   clearDriveCredentials?: () => Promise<void>;
+  /** Pixabay media key bridge; defaults to the typed Tauri wrappers. */
+  checkPixabayKey?: () => Promise<boolean>;
+  savePixabayKey?: (key: string) => Promise<void>;
+  clearPixabayKey?: () => Promise<void>;
   initialSection?: SettingsSection;
 }
 
@@ -98,7 +109,7 @@ export function readTranslationPreference(): { engineId: TranslationEngineId | n
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, initialSection = "model" }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, checkPixabayKey: checkPixabayKeyBridge = checkPixabayKey, savePixabayKey: savePixabayKeyBridge = savePixabayKey, clearPixabayKey: clearPixabayKeyBridge = deletePixabayKey, initialSection = "model" }: SettingsPageProps) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
@@ -154,6 +165,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
   const showDriveSettings = section === "drive";
   const showModelSettings = section === "model";
   const showMemoraSettings = section === "memora";
+  const showImagesSettings = section === "images";
 
   const accountContext = useContext(AccountContext);
 
@@ -441,10 +453,20 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
             Memora
           </button>
         )}
+        {isNavVisible("images") && (
+          <button
+            className={`settings-page__nav-item ${showImagesSettings ? "is-active" : ""}`}
+            onClick={() => setSection("images")}
+            type="button"
+          >
+            <span className="settings-page__nav-icon"><IconCloud /></span>
+            Media
+          </button>
+        )}
       </aside>
 
       <section className="settings-page__main">
-        {showMemoraSettings ? null : (
+        {showMemoraSettings || showImagesSettings ? null : (
           <header className="settings-page__header">
             <p className="settings-page__eyebrow">
               {showAccountSettings ? "Account" : showAppearanceSettings ? "General" : showDriveSettings ? "General" : "Models"}
@@ -466,6 +488,12 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
 
         {showMemoraSettings ? (
           <MemoraSettingsSection load={getMemoraSettings} save={updateMemoraSettings} />
+        ) : showImagesSettings ? (
+          <PixabaySettingsSection
+            check={checkPixabayKeyBridge}
+            save={savePixabayKeyBridge}
+            remove={clearPixabayKeyBridge}
+          />
         ) : showAccountSettings && accountContext ? (
           <AccountSettingsSection
             session={accountContext.session!}
