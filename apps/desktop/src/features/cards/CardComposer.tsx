@@ -631,7 +631,7 @@ export function CardComposer({
           </h2>
           <button
             type="button"
-            onClick={onCancel}
+            onClick={close}
             aria-label="Close composer"
             style={{
               background: "transparent",

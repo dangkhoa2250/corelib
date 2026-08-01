@@ -856,6 +856,11 @@ pub fn list_deck_cards(
 pub fn delete_card(id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
     learning_lock(&state)?
         .delete_card(&id)
+        .map_err(|e| e.to_string())?;
+    // Remove the committed media directory so a hard-deleted card never
+    // orphans image files on disk (the rows are already gone via CASCADE).
+    media_store(&state)
+        .delete_card_media_files(&id)
         .map_err(|e| e.to_string())
 }
 
@@ -1189,6 +1194,10 @@ pub fn delete_cards_permanently(
     let res = learning_lock(&state)?
         .delete_cards_permanently(&card_ids)
         .map_err(|e| e.to_string())?;
+    let store = media_store(&state);
+    for id in &res.affected_ids {
+        store.delete_card_media_files(id)?;
+    }
     Ok(crate::model::BulkResultPayload {
         affected_ids: res.affected_ids,
         affected_count: res.affected_count,
@@ -1202,6 +1211,10 @@ pub fn empty_trash(
     let res = learning_lock(&state)?
         .empty_trash()
         .map_err(|e| e.to_string())?;
+    let store = media_store(&state);
+    for id in &res.affected_ids {
+        store.delete_card_media_files(id)?;
+    }
     Ok(crate::model::BulkResultPayload {
         affected_ids: res.affected_ids,
         affected_count: res.affected_count,

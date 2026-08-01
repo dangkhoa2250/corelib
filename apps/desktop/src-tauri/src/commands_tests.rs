@@ -1226,3 +1226,147 @@ fn update_card_command_removes_unreferenced_media_only_after_successful_save() {
     assert_eq!(rows.len(), 1, "only the still-referenced media row remains");
     assert_eq!(rows[0].0, second.id);
 }
+
+/// Seeds a trashed card whose committed media file lives on disk, returning
+/// `(card_id, media_file, media_id)`.
+fn seed_trashed_card_with_media(
+    library_root: &Path,
+    app: &tauri::App<tauri::test::MockRuntime>,
+) -> (String, std::path::PathBuf, String) {
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            pixabay_attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage blob");
+
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "front".into(),
+            back: "back".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(image_doc(&staged.id, "photo")),
+            back_doc: None,
+            media_draft_id: Some("draft-1".into()),
+        },
+        app.state(),
+    )
+    .expect("create card referencing staged blob");
+
+    let media_file = library_root
+        .join("card-media")
+        .join(&card.id)
+        .join(format!("{}.png", staged.id));
+    assert!(media_file.is_file(), "committed media file must exist on disk");
+
+    crate::commands::trash_cards(vec![card.id.clone()], app.state())
+        .expect("trash the card");
+    assert!(
+        media_file.is_file(),
+        "trashing a card must keep its media files for restore"
+    );
+
+    (card.id, media_file, staged.id)
+}
+
+#[test]
+fn delete_card_command_removes_committed_media_files() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            pixabay_attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage blob");
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "front".into(),
+            back: "back".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(image_doc(&staged.id, "photo")),
+            back_doc: None,
+            media_draft_id: Some("draft-1".into()),
+        },
+        app.state(),
+    )
+    .expect("create card referencing staged blob");
+    let media_file = library_root
+        .join("card-media")
+        .join(&card.id)
+        .join(format!("{}.png", staged.id));
+    assert!(media_file.is_file(), "committed media file must exist on disk");
+
+    crate::commands::delete_card(card.id.clone(), app.state()).expect("delete card");
+
+    assert!(
+        !media_file.exists(),
+        "delete_card must remove the card media directory"
+    );
+    let rows = media_rows(&library_root);
+    assert!(
+        rows.iter().all(|(id, _, _, _)| *id != staged.id),
+        "media rows must be removed via CASCADE on delete_card"
+    );
+}
+
+#[test]
+fn delete_cards_permanently_command_removes_committed_media_files() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let (card_id, media_file, media_id) =
+        seed_trashed_card_with_media(&library_root, &app);
+
+    crate::commands::delete_cards_permanently(vec![card_id.clone()], app.state())
+        .expect("permanently delete trashed card");
+
+    assert!(
+        !media_file.exists(),
+        "permanent delete must remove the card media directory"
+    );
+    let rows = media_rows(&library_root);
+    assert!(
+        rows.iter().all(|(id, _, _, _)| *id != media_id),
+        "media rows must be removed via CASCADE on permanent delete"
+    );
+}
+
+#[test]
+fn empty_trash_command_removes_committed_media_files() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let (_card_id, media_file, media_id) =
+        seed_trashed_card_with_media(&library_root, &app);
+
+    crate::commands::empty_trash(app.state()).expect("empty trash");
+
+    assert!(
+        !media_file.exists(),
+        "empty trash must remove the card media directory"
+    );
+    let rows = media_rows(&library_root);
+    assert!(
+        rows.iter().all(|(id, _, _, _)| *id != media_id),
+        "media rows must be removed via CASCADE on empty trash"
+    );
+}

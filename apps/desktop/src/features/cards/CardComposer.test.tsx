@@ -513,6 +513,30 @@ test("discards the media draft after a successful save", async () => {
   await waitFor(() => expect(discardMediaDraft).toHaveBeenCalledExactlyOnceWith(expect.any(String)));
 });
 
+test("discards the media draft when the panel composer is closed via its X button", async () => {
+  const discardMediaDraft = vi.fn().mockResolvedValue(undefined);
+  const onCancel = vi.fn();
+  render(
+    <CardComposer
+      draft={draft}
+      decks={decks}
+      onSave={vi.fn().mockResolvedValue(undefined)}
+      onCancel={onCancel}
+      variant="panel"
+      stageCardMedia={vi.fn().mockResolvedValue({ id: "media-1", cardId: null, mimeType: "image/png", relativePath: "media/media-1.png", sourceType: "file", pixabayAttribution: null, createdAt: "", updatedAt: "" })}
+      discardMediaDraft={discardMediaDraft}
+      checkPixabayKey={vi.fn().mockResolvedValue(false)}
+      searchPixabayImages={vi.fn().mockResolvedValue([])}
+      downloadPixabayPreview={vi.fn().mockResolvedValue("aGVsbG8=")}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "Close composer" }));
+
+  await waitFor(() => expect(onCancel).toHaveBeenCalledTimes(1));
+  expect(discardMediaDraft).toHaveBeenCalledExactlyOnceWith(expect.any(String));
+});
+
 test("toggles the Pixabay picker from the Back header", async () => {
   const { user } = renderComposer({
     checkPixabayKey: vi.fn().mockResolvedValue(true),
