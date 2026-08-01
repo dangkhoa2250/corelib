@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
@@ -34,6 +34,17 @@ import "./CardRichTextEditor.css";
  */
 
 export type MediaSourceType = "file" | "clipboard" | "pixabay";
+
+/** Imperative control surface for hosts that drive the editor externally. */
+export interface CardRichTextEditorHandle {
+  /**
+   * Inserts plain text at the current editor selection without replacing the
+   * surrounding rich content. Returns false when the editor is unavailable.
+   */
+  insertTextAtSelection(text: string): boolean;
+  /** Focuses the editor body. */
+  focus(): void;
+}
 
 export interface CardRichTextEditorProps {
   /** Accessible label for the editor's textbox. */
@@ -364,15 +375,19 @@ function ToolbarButton({
   );
 }
 
-export function CardRichTextEditor({
-  ariaLabel,
-  value,
-  disabled = false,
-  onChange,
-  onStageMedia,
-  onDiscardMedia,
-  resolveMedia,
-}: CardRichTextEditorProps) {
+export const CardRichTextEditor = forwardRef<CardRichTextEditorHandle, CardRichTextEditorProps>(
+  function CardRichTextEditor(
+    {
+      ariaLabel,
+      value,
+      disabled = false,
+      onChange,
+      onStageMedia,
+      onDiscardMedia,
+      resolveMedia,
+    }: CardRichTextEditorProps,
+    ref,
+  ) {
   const latest = useRef({ onChange, onStageMedia, onDiscardMedia, resolveMedia });
   latest.current = { onChange, onStageMedia, onDiscardMedia, resolveMedia };
 
@@ -479,6 +494,31 @@ export function CardRichTextEditor({
   });
   editorRef.current = editor;
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      insertTextAtSelection(text: string): boolean {
+        const current = editorRef.current;
+        if (!current) return false;
+        return current
+          .chain()
+          .focus()
+          .insertContent({ type: "text", text })
+          .run();
+      },
+      focus(): void {
+        const current = editorRef.current;
+        if (!current) return;
+        // `view.focus()` focuses the contenteditable and maps the ProseMirror
+        // selection to the DOM synchronously. `editor.commands.focus()` defers
+        // to requestAnimationFrame, which never runs in test environments and
+        // can steal focus back to the front face long after the mount effect.
+        current.view.focus();
+      },
+    }),
+    [],
+  );
+
   useEffect(() => {
     // `emitUpdate: false` so toggling read-only never fires a spurious
     // onChange with an unchanged document.
@@ -486,20 +526,30 @@ export function CardRichTextEditor({
   }, [editor, disabled]);
 
   // Seed the media tracking and "last emitted" marker from the initial value.
-  useEffect(() => {
+  // A layout effect so the marker exists before the external-sync layout
+  // effect checks it on the first commit.
+  useLayoutEffect(() => {
     mediaIdsRef.current = collectMediaIds(value);
     lastEmittedRef.current = JSON.stringify(value);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // External value sync: adopt a new `value` only when it did not originate
-  // from this editor (so typing is never clobbered).
-  useEffect(() => {
+  // from this editor (so typing is never clobbered). `emitUpdate: false`
+  // keeps an external adoption from echoing back through `onChange`, which
+  // would otherwise re-enter the parent's state (and any side effects such
+  // as language detection) with a document the parent already knows about.
+  // Layout timing matters: under rapid typing React may defer passive
+  // effects past the next editor transaction, which would misread a stale
+  // echoed value as an external replacement. A layout effect runs
+  // synchronously per commit, before the next keystroke can move the
+  // document forward.
+  useLayoutEffect(() => {
     if (!editor) return;
     const incoming = JSON.stringify(value);
     if (incoming === lastEmittedRef.current) return;
     if (incoming === JSON.stringify(editor.getJSON())) return;
-    editor.commands.setContent(value);
+    editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
 
   const toolbar = useEditorState({
@@ -754,4 +804,5 @@ export function CardRichTextEditor({
       ) : null}
     </div>
   );
-}
+  },
+);

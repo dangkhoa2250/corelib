@@ -5,7 +5,13 @@ import { PronunciationButton } from "../../components/PronunciationButton";
 import { Combobox } from "../../components/Combobox";
 import type { CardSource, NewCardSource } from "../reader/readerSelection";
 import { detectLanguage } from "../../lib/languageDetector";
+import { derivePlainText, type RichDocument } from "../../domain/richDocument";
 import { LanguagePicker } from "./LanguagePicker";
+import {
+  CardRichTextEditor,
+  type CardRichTextEditorHandle,
+  type MediaSourceType,
+} from "./CardRichTextEditor";
 
 const NEW_DECK_VALUE = "__new_deck__";
 const SOURCE_UNAVAILABLE_MESSAGE = "Source document is no longer available. Select text from an open document to create a card.";
@@ -29,6 +35,9 @@ export interface CardSaveInput {
   deckName: string;
   front: string;
   back: string;
+  frontDoc?: RichDocument | null;
+  backDoc?: RichDocument | null;
+  mediaDraftId?: string | null;
   source?: NewCardSource;
   tags: string[];
   frontLanguage?: string | null;
@@ -45,6 +54,14 @@ export interface CardComposerProps {
   onSave: (input: CardSaveInput) => Promise<void>;
   onCancel: () => void;
   onTranslate?: (text: string) => Promise<string>;
+  /**
+   * Stages media inserted into either face. When omitted, a stub generates a
+   * throwaway media id so images stay in the document without hitting storage.
+   */
+  onStageMedia?: (
+    file: File | Blob,
+    sourceType: MediaSourceType,
+  ) => Promise<{ id: string; attribution?: string }>;
   variant?: "modal" | "panel";
   externalError?: string | null;
 }
@@ -61,18 +78,35 @@ function hasRequiredDocumentId(source: CardSource): source is NewCardSource {
   return typeof source.documentId === "string" && source.documentId.trim().length > 0;
 }
 
+/** Builds a rich document from plain text, one paragraph per line. */
+function paragraphDocFromText(text: string): RichDocument {
+  const content = text.split("\n").map((line) => ({
+    type: "paragraph" as const,
+    content: line.length > 0 ? [{ type: "text" as const, text: line }] : [],
+  }));
+  return { type: "doc" as const, content };
+}
+
+/** Per-composer-session draft id; images staged under it survive a save retry. */
+function createDraftId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function CardComposer({
   draft,
   decks,
   onSave,
   onCancel,
   onTranslate,
+  onStageMedia,
   variant = "modal",
   externalError,
 }: CardComposerProps) {
   const activeDecks = decks.filter((deck) => !deck.archived);
-  const [front, setFront] = useState(draft.quote);
-  const [back, setBack] = useState("");
+  const [frontDoc, setFrontDoc] = useState<RichDocument>(() => paragraphDocFromText(draft.quote));
+  const [backDoc, setBackDoc] = useState<RichDocument>(() => paragraphDocFromText(""));
   const [tags, setTags] = useState("");
   const [deckValue, setDeckValue] = useState(() => activeDecks[0]?.id ?? NEW_DECK_VALUE);
   const [newDeckName, setNewDeckName] = useState("");
@@ -80,6 +114,10 @@ export function CardComposer({
   const [translating, setTranslating] = useState(false);
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mediaDraftId] = useState(() => createDraftId());
+
+  const frontText = derivePlainText(frontDoc);
+  const backText = derivePlainText(backDoc);
 
   const [frontLanguage, setFrontLanguage] = useState<string | null>(() => detectLanguage(draft.quote));
   const [isManualLanguage, setIsManualLanguage] = useState(false);
@@ -93,10 +131,10 @@ export function CardComposer({
     }
   }, [draft.quote, isManualLanguage]);
 
-  const handleFrontChange = (text: string) => {
-    setFront(text);
+  const handleFrontDocChange = (doc: RichDocument) => {
+    setFrontDoc(doc);
     if (!isManualLanguage) {
-      const lang = detectLanguage(text);
+      const lang = detectLanguage(derivePlainText(doc));
       setDetectedLanguage(lang);
       setFrontLanguage(lang);
     }
@@ -107,7 +145,8 @@ export function CardComposer({
     setIsManualLanguage(true);
   };
   const dialogRef = useRef<HTMLElement | null>(null);
-  const frontRef = useRef<HTMLTextAreaElement | null>(null);
+  const frontEditorRef = useRef<CardRichTextEditorHandle | null>(null);
+  const backEditorRef = useRef<CardRichTextEditorHandle | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const deckSelectionTouchedRef = useRef(false);
 
@@ -127,7 +166,7 @@ export function CardComposer({
       previousFocusRef.current = document.activeElement instanceof HTMLElement
         ? document.activeElement
         : null;
-      frontRef.current?.focus();
+      frontEditorRef.current?.focus();
     }
 
     return () => {
@@ -187,10 +226,10 @@ export function CardComposer({
       return;
     }
 
-    const trimmedFront = front.trim();
-    const trimmedBack = back.trim();
+    const front = derivePlainText(frontDoc);
+    const back = derivePlainText(backDoc);
     const deckName = usingNewDeck ? newDeckName.trim() : selectedDeck?.name ?? "";
-    if (!trimmedFront || !trimmedBack) {
+    if (!front || !back) {
       setError("Front and Back are required.");
       return;
     }
@@ -204,8 +243,11 @@ export function CardComposer({
     try {
       await onSave({
         deckName,
-        front: trimmedFront,
-        back: trimmedBack,
+        front,
+        back,
+        frontDoc,
+        backDoc,
+        mediaDraftId,
         source: draft,
         tags: tagsFromInput(tags),
         frontLanguage,
@@ -220,12 +262,18 @@ export function CardComposer({
   };
 
   const handleTranslate = async () => {
-    if (!onTranslate || translating || saving || !front.trim()) return;
+    if (!onTranslate || translating || saving || !frontText) return;
     setTranslating(true);
     setError(null);
     try {
-      const translation = await onTranslate(front.trim());
-      setBack(translation);
+      const translation = await onTranslate(frontText);
+      if (backText.trim().length === 0) {
+        // An empty back (no text, no images) becomes a single new paragraph.
+        setBackDoc(paragraphDocFromText(translation));
+      } else {
+        // A back with content gets the translation at the current selection.
+        backEditorRef.current?.insertTextAtSelection(translation);
+      }
     } catch (translateError) {
       setError(errorMessage(translateError));
     } finally {
@@ -236,6 +284,10 @@ export function CardComposer({
   if (closed) {
     return null;
   }
+
+  const stageMedia =
+    onStageMedia ??
+    (async (): Promise<{ id: string; attribution?: string }> => ({ id: createDraftId() }));
 
   const form = (
     <form
@@ -280,20 +332,25 @@ export function CardComposer({
           </label>
         ) : null}
 
-        <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+        {/* Not a <label>: a label forwards clicks to the first labelable
+            control inside it, so wrapping the editor together with the
+            Translate/Pronunciation buttons steals focus from the
+            contenteditable. The editors carry their own aria-labels. */}
+        <div style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
           <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             Front
-            <PronunciationButton text={front} />
+            <PronunciationButton text={frontText} />
           </span>
-          <textarea
-            aria-label="Front"
+          <CardRichTextEditor
+            ariaLabel="Front"
             disabled={saving}
-            onChange={(event) => handleFrontChange(event.target.value)}
-            ref={frontRef}
-            rows={5}
-            value={front}
+            onChange={handleFrontDocChange}
+            onDiscardMedia={() => {}}
+            onStageMedia={stageMedia}
+            ref={frontEditorRef}
+            value={frontDoc}
           />
-        </label>
+        </div>
 
         <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
           Front Language
@@ -306,13 +363,13 @@ export function CardComposer({
           />
         </label>
 
-        <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+        <div style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
           <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
             Back
             {onTranslate ? (
               <button
                 aria-label="Translate"
-                disabled={saving || translating || !front.trim()}
+                disabled={saving || translating || !frontText}
                 onClick={() => void handleTranslate()}
                 style={{ border: 0, borderRadius: "999px", padding: "5px 10px", color: "var(--link)", background: "var(--interactive-hover)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}
                 type="button"
@@ -321,14 +378,16 @@ export function CardComposer({
               </button>
             ) : null}
           </span>
-          <textarea
-            aria-label="Back"
+          <CardRichTextEditor
+            ariaLabel="Back"
             disabled={saving || translating}
-            onChange={(event) => setBack(event.target.value)}
-            rows={5}
-            value={back}
+            onChange={setBackDoc}
+            onDiscardMedia={() => {}}
+            onStageMedia={stageMedia}
+            ref={backEditorRef}
+            value={backDoc}
           />
-        </label>
+        </div>
 
         <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
           Tags
@@ -341,16 +400,6 @@ export function CardComposer({
             value={tags}
           />
         </label>
-
-        <section
-          aria-label="Source preview"
-          style={{ padding: "12px", borderRadius: "12px", background: "var(--surface-2)" }}
-        >
-          <strong style={{ display: "block", marginBottom: "4px", fontSize: "13px" }}>Source</strong>
-          <span style={{ color: "var(--text-secondary)", fontSize: "13px" }}>
-            Document {draft.documentId ?? "Unavailable"} · Page {draft.page}
-          </span>
-        </section>
 
         {visibleError ? (
           <div

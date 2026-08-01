@@ -1,9 +1,14 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import type { Deck, CardBrowserRow } from "../../domain/learning";
 import { createCard, updateAndMoveCard } from "../../lib/learning";
 import { detectLanguage } from "../../lib/languageDetector";
+import { derivePlainText, type RichDocument } from "../../domain/richDocument";
 import { LanguagePicker } from "./LanguagePicker";
 import { Combobox } from "../../components/Combobox";
+import {
+  CardRichTextEditor,
+} from "./CardRichTextEditor";
 
 export interface CardSidePanelProps {
   card: CardBrowserRow | null;
@@ -15,6 +20,22 @@ export interface CardSidePanelProps {
   updateAndMoveCard?: typeof updateAndMoveCard;
 }
 
+/** Builds a rich document from plain text, one paragraph per line. */
+function paragraphDocFromText(text: string): RichDocument {
+  const content = text.split("\n").map((line) => ({
+    type: "paragraph" as const,
+    content: line.length > 0 ? [{ type: "text" as const, text: line }] : [],
+  }));
+  return { type: "doc" as const, content };
+}
+
+/** Per-panel-session draft id; images staged under it survive a save retry. */
+function createDraftId(): string {
+  return typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export function CardSidePanel({
   card,
   decks,
@@ -24,8 +45,12 @@ export function CardSidePanel({
   createCard: customCreate = createCard,
   updateAndMoveCard: customUpdateAndMove = updateAndMoveCard,
 }: CardSidePanelProps) {
-  const [front, setFront] = useState("");
-  const [back, setBack] = useState("");
+  const [frontDoc, setFrontDoc] = useState<RichDocument>(() =>
+    paragraphDocFromText(card?.front ?? ""),
+  );
+  const [backDoc, setBackDoc] = useState<RichDocument>(() =>
+    paragraphDocFromText(card?.back ?? ""),
+  );
   const [tags, setTags] = useState("");
   const [deckId, setDeckId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -33,11 +58,15 @@ export function CardSidePanel({
   const [frontLanguage, setFrontLanguage] = useState<string | null>(null);
   const [isManualLanguage, setIsManualLanguage] = useState(false);
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
+  const [mediaDraftId] = useState(() => createDraftId());
+
+  const frontText = derivePlainText(frontDoc);
+  const backText = derivePlainText(backDoc);
 
   useEffect(() => {
     if (card) {
-      setFront(card.front);
-      setBack(card.back);
+      setFrontDoc(card.frontDoc ?? paragraphDocFromText(card.front));
+      setBackDoc(card.backDoc ?? paragraphDocFromText(card.back));
       setTags(card.tags.join(", "));
       setDeckId(card.deckId ?? decks[0]?.id ?? "");
       setError(null);
@@ -47,10 +76,10 @@ export function CardSidePanel({
     }
   }, [card, decks]);
 
-  const handleFrontChange = (text: string) => {
-    setFront(text);
+  const handleFrontDocChange = (doc: RichDocument) => {
+    setFrontDoc(doc);
     if (!isManualLanguage) {
-      const lang = detectLanguage(text);
+      const lang = detectLanguage(derivePlainText(doc));
       setDetectedLanguage(lang);
       setFrontLanguage(lang);
     }
@@ -61,11 +90,18 @@ export function CardSidePanel({
     setIsManualLanguage(true);
   };
 
+  const originalFrontDoc = card
+    ? (card.frontDoc ?? paragraphDocFromText(card.front))
+    : null;
+  const originalBackDoc = card
+    ? (card.backDoc ?? paragraphDocFromText(card.back))
+    : null;
+
   const isDirty =
-    !card
+    !card || !originalFrontDoc || !originalBackDoc
       ? false
-      : front !== (card.front ?? "") ||
-        back !== (card.back ?? "") ||
+      : JSON.stringify(frontDoc) !== JSON.stringify(originalFrontDoc) ||
+        JSON.stringify(backDoc) !== JSON.stringify(originalBackDoc) ||
         tags !== (card.tags.join(", ") ?? "") ||
         deckId !== (card.deckId ?? decks[0]?.id ?? "") ||
         frontLanguage !== (card.frontLanguage ?? null);
@@ -89,13 +125,19 @@ export function CardSidePanel({
 
   if (!card) return null;
 
-  const handleSave = async (e: React.FormEvent) => {
+  // Default staged-media stub: a throwaway id keeps images in the document
+  // without hitting storage until the Pixabay/media pipeline lands.
+  const stageMedia = async (): Promise<{ id: string; attribution?: string }> => ({
+    id: createDraftId(),
+  });
+
+  const handleSave = async (e: FormEvent) => {
     e.preventDefault();
-    if (!front.trim()) {
+    if (!frontText.trim()) {
       setError("Front is required");
       return;
     }
-    if (!back.trim()) {
+    if (!backText.trim()) {
       setError("Back is required");
       return;
     }
@@ -116,8 +158,11 @@ export function CardSidePanel({
         // Edit mode: update content + optional deck move in one atomic operation.
         await customUpdateAndMove({
           cardId: card.id,
-          front,
-          back,
+          front: frontText,
+          back: backText,
+          frontDoc,
+          backDoc,
+          mediaDraftId,
           tags: tagList,
           destinationDeckId: deckId !== card.deckId ? deckId : null,
           frontLanguage,
@@ -128,8 +173,11 @@ export function CardSidePanel({
         const deckName = deck ? deck.name : "";
         await customCreate({
           deckName,
-          front,
-          back,
+          front: frontText,
+          back: backText,
+          frontDoc,
+          backDoc,
+          mediaDraftId,
           tags: tagList,
           frontLanguage,
         });
@@ -177,14 +225,14 @@ export function CardSidePanel({
           </div>
 
           <div className="card-side-panel__field">
-            <label className="card-side-panel__label">Front</label>
-            <textarea
-              className="card-side-panel__textarea"
-              rows={4}
-              value={front}
-              onChange={e => handleFrontChange(e.target.value)}
-              placeholder="Card front content"
-              aria-label="Front"
+            <div className="card-side-panel__label">Front</div>
+            <CardRichTextEditor
+              ariaLabel="Front"
+              value={frontDoc}
+              onChange={handleFrontDocChange}
+              onDiscardMedia={() => {}}
+              onStageMedia={stageMedia}
+              disabled={saving}
             />
           </div>
 
@@ -200,14 +248,14 @@ export function CardSidePanel({
           </div>
 
           <div className="card-side-panel__field">
-            <label className="card-side-panel__label">Back</label>
-            <textarea
-              className="card-side-panel__textarea"
-              rows={4}
-              value={back}
-              onChange={e => setBack(e.target.value)}
-              placeholder="Card back content"
-              aria-label="Back"
+            <div className="card-side-panel__label">Back</div>
+            <CardRichTextEditor
+              ariaLabel="Back"
+              value={backDoc}
+              onChange={setBackDoc}
+              onDiscardMedia={() => {}}
+              onStageMedia={stageMedia}
+              disabled={saving}
             />
           </div>
 

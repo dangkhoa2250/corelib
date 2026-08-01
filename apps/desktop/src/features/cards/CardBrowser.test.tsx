@@ -1,7 +1,43 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { CardBrowser } from "./CardBrowser";
 import { queryDeckCards } from "../../lib/learning";
+
+// ---------------------------------------------------------------------------
+// jsdom shims. ProseMirror (and user-event) need APIs jsdom does not provide:
+// Text/Range geometry queries and document.elementFromPoint.
+// ---------------------------------------------------------------------------
+function rectListPolyfill() {
+  return { length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] };
+}
+function zeroRect() {
+  return new DOMRect(0, 0, 0, 0);
+}
+if (typeof Text !== "undefined" && !(Text.prototype as any).getClientRects) {
+  (Text.prototype as any).getClientRects = rectListPolyfill;
+}
+if (typeof Text !== "undefined" && !(Text.prototype as any).getBoundingClientRect) {
+  (Text.prototype as any).getBoundingClientRect = zeroRect;
+}
+if (typeof Range !== "undefined" && !(Range.prototype as any).getClientRects) {
+  (Range.prototype as any).getClientRects = rectListPolyfill;
+}
+if (typeof Range !== "undefined" && !(Range.prototype as any).getBoundingClientRect) {
+  (Range.prototype as any).getBoundingClientRect = zeroRect;
+}
+if (typeof document !== "undefined" && typeof document.elementFromPoint !== "function") {
+  (document as any).elementFromPoint = () => document.body;
+}
+
+/** The Tiptap contenteditable backing a labeled editor face. */
+function editor(name: string): HTMLElement {
+  const found = screen
+    .getAllByLabelText(name)
+    .find((el) => el.hasAttribute("contenteditable"));
+  if (!found) throw new Error(`No rich editor contenteditable found for label "${name}"`);
+  return found;
+}
 
 vi.mock("../../lib/learning", () => ({
   queryDeckCards: vi.fn(),
@@ -61,9 +97,9 @@ describe("CardBrowser component", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Add Card" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "Front" }), {
-      target: { value: "unsaved question" },
-    });
+    const user = userEvent.setup();
+    await user.click(editor("Front"));
+    await user.keyboard("unsaved question");
     fireEvent.click(screen.getByRole("button", { name: "← Back" }));
 
     expect(onBack).toHaveBeenCalledTimes(1);
@@ -178,7 +214,7 @@ describe("CardBrowser component", () => {
     fireEvent.doubleClick(row!);
 
     expect(screen.getByRole("dialog", { name: "Edit Card" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Card front content")).toHaveValue("ATP front");
+    expect(editor("Front")).toHaveTextContent("ATP front");
 
     fireEvent.click(screen.getByText("✕"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
