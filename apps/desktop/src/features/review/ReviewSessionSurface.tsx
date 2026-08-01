@@ -10,6 +10,7 @@ import { LanguagePicker } from "../cards/LanguagePicker";
 import { SourceViewer } from "../cards/SourceViewer";
 import { ClickableFrontText } from "./ClickableFrontText";
 import { ReviewFlashcard } from "./ReviewFlashcard";
+import { ReviewMediaModal } from "./ReviewMediaModal";
 import { YouGlishPanel } from "./YouGlishPanel";
 
 interface ReviewSessionSurfaceProps {
@@ -43,6 +44,11 @@ function SourceButton({ source, onOpen }: { source?: CardSource | null; onOpen: 
   );
 }
 
+type ActiveReviewMedia =
+  | { kind: "source"; source: CardSource }
+  | { kind: "youglish"; word: string }
+  | null;
+
 export function ReviewSessionSurface({
   ariaLabel,
   card,
@@ -53,16 +59,14 @@ export function ReviewSessionSurface({
   getDocumentFileUrl,
   onError,
 }: ReviewSessionSurfaceProps) {
-  const [selectedWord, setSelectedWord] = useState<string | null>(null);
-  const [showYouGlish, setShowYouGlish] = useState(false);
-  const [sourceView, setSourceView] = useState<CardSource | null>(null);
+  const [activeMedia, setActiveMedia] = useState<ActiveReviewMedia>(null);
   const [refreshCounter, setRefreshCounter] = useState(0);
 
   useEffect(() => {
-    setSelectedWord(null);
-    setShowYouGlish(false);
-    setSourceView(null);
+    setActiveMedia(null);
   }, [card.id, refreshCounter]);
+
+  const selectedWord = activeMedia?.kind === "youglish" ? activeMedia.word : null;
 
   const handleSelectLanguage = async (lang: string | null) => {
     if (!lang) return;
@@ -89,23 +93,19 @@ export function ReviewSessionSurface({
           frontLanguage={card.frontLanguage}
           selectedWord={selectedWord}
           onWordSelect={(word) => {
-            setSelectedWord(word);
-            setShowYouGlish(true);
+            setActiveMedia({ kind: "youglish", word });
           }}
         />
       </div>
       <PronunciationButton text={card.front} lang={detectSpeechLanguage(card.front)} />
-      <SourceButton source={card.source} onOpen={setSourceView} />
+      <SourceButton source={card.source} onOpen={(source) => setActiveMedia({ kind: "source", source })} />
     </div>
   );
 
   return (
     <main className="review-page" aria-label={ariaLabel}>
-      <div className={`review-page__split${sourceView ? " review-page__split--with-source" : ""}`}>
-        <ScrollArea
-          className={`review-page__body${showYouGlish && selectedWord ? " review-page__body--with-video" : ""}`}
-          data-testid="review-session-surface"
-        >
+      <div className="review-page__split">
+        <ScrollArea className="review-page__body" data-testid="review-session-surface">
           {header}
           <ReviewFlashcard
             revealed={revealed}
@@ -130,26 +130,34 @@ export function ReviewSessionSurface({
 
           {footer}
 
-          {showYouGlish && selectedWord ? (
-            <YouGlishPanel
-              word={selectedWord}
-              frontLanguage={card.frontLanguage}
-              onClose={() => {
-                setSelectedWord(null);
-                setShowYouGlish(false);
-              }}
-            />
-          ) : null}
         </ScrollArea>
-
-        {sourceView && getDocumentFileUrl ? (
-          <SourceViewer
-            source={sourceView}
-            getDocumentFileUrl={getDocumentFileUrl}
-            onClose={() => setSourceView(null)}
-          />
-        ) : null}
       </div>
+      {activeMedia?.kind === "source" && getDocumentFileUrl ? (
+        <ReviewMediaModal
+          title="Source PDF"
+          kind="pdf"
+          onClose={() => setActiveMedia(null)}
+        >
+          <SourceViewer
+            source={activeMedia.source}
+            getDocumentFileUrl={getDocumentFileUrl}
+            onClose={() => setActiveMedia(null)}
+            presentation="modal"
+          />
+        </ReviewMediaModal>
+      ) : null}
+      {activeMedia?.kind === "youglish" ? (
+        <ReviewMediaModal
+          title={`Pronunciation for ‘${activeMedia.word}’`}
+          kind="video"
+          onClose={() => setActiveMedia(null)}
+        >
+          <YouGlishPanel
+            word={activeMedia.word}
+            frontLanguage={card.frontLanguage ?? undefined}
+          />
+        </ReviewMediaModal>
+      ) : null}
     </main>
   );
 }

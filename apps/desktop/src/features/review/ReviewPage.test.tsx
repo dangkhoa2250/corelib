@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi, beforeEach } from "vitest";
 
@@ -383,48 +383,66 @@ test("practice keeps YouGlish available from the front text after the card flips
   expect(screen.getByTitle("YouGlish pronunciation for bonjour")).toBeInTheDocument();
 });
 
-test("practice keeps an open YouGlish panel visible when the card flips", async () => {
+test("practice source opens a Source PDF modal without a split source pane", async () => {
+  const user = userEvent.setup();
+  const sourcedCard = {
+    ...card,
+    source: { documentId: "linear-algebra", page: 3, quote: "A vector space", rects: [] },
+  };
+  const getDocumentFileUrl = vi.fn().mockResolvedValue("/tmp/linear-algebra.pdf");
+  const { container } = render(
+    <ReviewPage mode="practice" cards={[sourcedCard]} getDocumentFileUrl={getDocumentFileUrl} />,
+  );
+
+  await user.click(screen.getAllByRole("button", { name: "View source" })[0]);
+
+  expect(await screen.findByRole("dialog", { name: "Source PDF" })).toBeInTheDocument();
+  expect(container.querySelector(".review-page__split--with-source")).toBeNull();
+  expect(document.querySelector(".source-viewer--modal")).toBeInTheDocument();
+});
+
+test("closing source modal keeps the flipped card and restores source trigger focus", async () => {
+  vi.stubGlobal("matchMedia", () => ({ matches: true, media: "", addListener: vi.fn(), removeListener: vi.fn() }));
+  const user = userEvent.setup();
+  const sourcedCard = {
+    ...card,
+    source: { documentId: "linear-algebra", page: 3, quote: "A vector space", rects: [] },
+  };
+  const getDocumentFileUrl = vi.fn().mockResolvedValue("/tmp/linear-algebra.pdf");
+  render(<ReviewPage mode="practice" cards={[sourcedCard]} getDocumentFileUrl={getDocumentFileUrl} />);
+  await user.click(screen.getByRole("button", { name: /Flashcard/i }));
+  const sourceTrigger = screen.getAllByRole("button", { name: "View source" })[1];
+  await user.click(sourceTrigger);
+  await user.click(await screen.findByRole("button", { name: "Close Source PDF" }));
+
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Source PDF" })).not.toBeInTheDocument());
+  expect(screen.getByRole("button", { name: /Flashcard/i })).toHaveClass("review-page__card--flipped");
+  expect(document.activeElement).toBe(sourceTrigger);
+});
+
+test("study word opens pronunciation modal and closing it clears highlight and restores focus", async () => {
+  vi.stubGlobal("matchMedia", () => ({ matches: true, media: "", addListener: vi.fn(), removeListener: vi.fn() }));
   const user = userEvent.setup();
   const cardWithLanguage = { ...card, frontLanguage: "en" };
-  render(<ReviewPage mode="practice" cards={[cardWithLanguage]} />);
+  render(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, cards: [{ ...grant, card: cardWithLanguage }] }}
+      onRate={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
 
-  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
-  await user.click(screen.getByRole("button", { name: /Flashcard/i }));
-
+  const wordTrigger = screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0];
+  await user.click(wordTrigger);
+  expect(await screen.findByRole("dialog", { name: "Pronunciation for ‘bonjour’" })).toBeInTheDocument();
   expect(screen.getByTitle("YouGlish pronunciation for bonjour")).toBeInTheDocument();
-});
+  expect(wordTrigger).toHaveStyle({ background: "rgba(14, 165, 233, 0.2)" });
 
-test("uses the compact review layout while a YouGlish video is open", async () => {
-  const user = userEvent.setup();
-  const cardWithLanguage = { ...card, frontLanguage: "en" };
-  const { container } = render(<ReviewPage mode="practice" cards={[cardWithLanguage]} />);
-
-  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
-
-  expect(container.querySelector(".review-page__body")).toHaveClass("review-page__body--with-video");
-});
-
-test("uses the app scroll area for review content while a YouGlish video is open", async () => {
-  const user = userEvent.setup();
-  const cardWithLanguage = { ...card, frontLanguage: "en" };
-  render(<ReviewPage mode="practice" cards={[cardWithLanguage]} />);
-
-  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
-
-  expect(screen.getByTestId("review-session-surface")).toHaveStyle({ overflow: "hidden" });
-});
-
-test("places rating controls before an open YouGlish video", async () => {
-  const user = userEvent.setup();
-  const cardWithLanguage = { ...card, frontLanguage: "en" };
-  render(<ReviewPage mode="practice" cards={[cardWithLanguage]} />);
-
-  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
-  await user.click(screen.getByRole("button", { name: /Flashcard/i }));
-
-  const ratings = screen.getByRole("group", { name: "Rate card" });
-  const video = screen.getByTitle("YouGlish pronunciation for bonjour");
-  expect(ratings.compareDocumentPosition(video) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "Close Pronunciation for ‘bonjour’" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Pronunciation for ‘bonjour’" })).not.toBeInTheDocument());
+  expect(document.activeElement).toBe(wordTrigger);
+  expect(wordTrigger).not.toHaveStyle({ background: "rgba(14, 165, 233, 0.2)" });
 });
 
 test("shows generic study rating failures", async () => {
