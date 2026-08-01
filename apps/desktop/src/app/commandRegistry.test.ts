@@ -97,6 +97,30 @@ test("registers Memora settings as an Apps destination in Quick Open", async () 
   expect(openRoute).toHaveBeenCalledWith({ name: "settings", section: "memora" });
 });
 
+test("registers Media settings as a Quick Open destination and never as a palette action", async () => {
+  const openRoute = vi.fn();
+  const registry = createCommandRegistry(createContext({ openRoute }));
+
+  for (const query of ["pixabay", "images", "media"]) {
+    const entries = await registry.search("quick-open", query);
+    const images = entries.find((entry) => entry.id === "route.settings.images");
+    expect(images).toEqual(expect.objectContaining({
+      id: "route.settings.images",
+      title: "Media",
+      aliases: ["images", "pixabay"],
+      breadcrumb: ["Settings", "Media"],
+      surface: "quick-open",
+    }));
+  }
+
+  // The editor's image insertion must not surface as a command-palette action.
+  await expect(registry.search("command-palette", "pixabay")).resolves.toEqual([]);
+
+  const [entry] = await registry.search("quick-open", "pixabay");
+  await entry.execute();
+  expect(openRoute).toHaveBeenCalledWith({ name: "settings", section: "images" });
+});
+
 test("keeps card and trash provenance in Quick Open breadcrumbs", async () => {
   const registry = createCommandRegistry(createContext({
     searchCards: vi.fn().mockResolvedValue([{ kind: "card", id: "card-1", title: "Eigenvectors", subtitle: "Linear Algebra" }]),

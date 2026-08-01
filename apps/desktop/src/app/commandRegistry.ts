@@ -99,6 +99,7 @@ function staticDestinations(context: CommandContext): CommandEntry[] {
     settingsDestination(context, "drive", "Google Drive", ["cloud", "oauth"], ["Settings", "General"],),
     settingsDestination(context, "model", "Model", ["provider", "translation"], ["Settings", "Models"],),
     settingsDestination(context, "memora", "Memora", ["learning", "fsrs", "retention", "new cards"], ["Settings", "Apps"],),
+    settingsDestination(context, "images", "Media", ["images", "pixabay"], ["Settings", "Media"],),
     settingsDestination(context, "account", "Account", ["profile"], ["Settings", "General"],),
   ];
 }

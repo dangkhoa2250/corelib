@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
@@ -159,4 +162,14 @@ test("hides Load more while the next page is loading", async () => {
 
   pending.resolve([]);
   await waitFor(() => expect(screen.getByRole("button", { name: /Load more/i })).toBeInTheDocument());
+});
+
+test("keeps the results grid inside the parent scroll surface without a nested scrollbar", async () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const picker = readFileSync(join(currentDir, "MediaPicker.tsx"), "utf8");
+
+  // The grid renders inside the composer's own scroll container (Task 10); it
+  // must not create its own WKWebView scroll surface or overlay thumb.
+  expect(picker).not.toContain("ScrollArea");
+  expect(picker).not.toMatch(/overflow[A-Za-z]*\s*:\s*(auto|scroll)/);
 });
