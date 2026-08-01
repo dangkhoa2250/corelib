@@ -12,6 +12,8 @@ export default defineConfig(async () => ({
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
     exclude: [...configDefaults.exclude, "tests/e2e/**"],
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

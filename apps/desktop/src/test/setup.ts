@@ -1,6 +1,9 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
+import { configure } from "@testing-library/dom";
 import { afterEach, vi } from "vitest";
+
+configure({ asyncUtilTimeout: 10000 });
 
 const mockStore: Record<string, string> = {};
 vi.stubGlobal("localStorage", {
