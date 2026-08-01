@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { IconPhoto } from "@tabler/icons-react";
 
 import { PronunciationButton } from "../../components/PronunciationButton";
 import { Combobox } from "../../components/Combobox";
@@ -64,7 +65,7 @@ export interface CardComposerProps {
    */
   onSave: (input: CardSaveInput) => Promise<void>;
   onCancel: () => void;
-  onTranslate?: (text: string) => Promise<string>;
+  onTranslate?: (text: string, sourceLanguage?: string | null) => Promise<string>;
   /**
    * Stages media inserted into either face. When omitted, a stub generates a
    * throwaway media id so images stay in the document without hitting storage.
@@ -396,7 +397,7 @@ export function CardComposer({
     setTranslating(true);
     setError(null);
     try {
-      const translation = await onTranslate(frontText);
+      const translation = await onTranslate(frontText, frontLanguage);
       if (backText.trim().length === 0) {
         // An empty back (no text, no images) becomes a single new paragraph.
         setBackDoc(paragraphDocFromText(translation));
@@ -562,10 +563,23 @@ export function CardComposer({
                 aria-expanded={pickerOpen}
                 disabled={saving || translating}
                 onClick={() => setPickerOpen((open) => !open)}
-                style={{ border: 0, borderRadius: "999px", padding: "5px 10px", color: "var(--link)", background: "var(--interactive-hover)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}
+                style={{
+                  border: 0,
+                  borderRadius: "999px",
+                  padding: "5px 10px",
+                  color: "var(--link)",
+                  background: "var(--interactive-hover)",
+                  cursor: "pointer",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
                 type="button"
               >
-                {pickerOpen ? "Close Pixabay" : "Pixabay"}
+                <IconPhoto size={15} />
+                <span>{pickerOpen ? "Close" : "Image"}</span>
               </button>
               {onTranslate ? (
                 <button

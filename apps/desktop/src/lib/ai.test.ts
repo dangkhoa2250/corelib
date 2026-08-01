@@ -39,6 +39,7 @@ describe("AI bridge", () => {
       engineId: "apple-translation",
       text: "Hello",
       targetLanguage: "Vietnamese",
+      sourceLanguage: null,
     });
   });
 

@@ -35,9 +35,17 @@ export function translateText(
   engineId: TranslationEngineId,
   text: string,
   targetLanguage: string,
+  sourceLanguage?: string | null | Invoke,
   call: Invoke = invoke,
 ): Promise<TranslationResult> {
-  return call("translate_text", { engineId, text, targetLanguage });
+  const actualCall: Invoke = typeof sourceLanguage === "function" ? sourceLanguage : call;
+  const actualSourceLanguage: string | null = typeof sourceLanguage === "string" ? sourceLanguage : null;
+  return actualCall("translate_text", {
+    engineId,
+    text,
+    targetLanguage,
+    sourceLanguage: actualSourceLanguage,
+  });
 }
 
 export function appleTranslationAvailable(call: Invoke = invoke): Promise<boolean> {

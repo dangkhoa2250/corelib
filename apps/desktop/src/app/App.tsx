@@ -197,7 +197,12 @@ interface AiApi {
   clearApiKey: (provider: AiProviderId) => Promise<void>;
   listModels: (provider: AiProviderId) => Promise<AiModel[]>;
   appleTranslationAvailable: () => Promise<boolean>;
-  translate: (engineId: TranslationEngineId, text: string, targetLanguage: string) => Promise<{ translation: string }>;
+  translate: (
+    engineId: TranslationEngineId,
+    text: string,
+    targetLanguage: string,
+    sourceLanguage?: string | null,
+  ) => Promise<{ translation: string }>;
 }
 
 const nativeAiApi: AiApi = {
@@ -470,7 +475,7 @@ export function App({
     setComposerSource(null);
   }, []);
 
-  const handleTranslate = useCallback(async (text: string) => {
+  const handleTranslate = useCallback(async (text: string, sourceLanguage?: string | null) => {
     if (!translationPreference.engineId) {
       throw new Error("Choose a translation engine in Settings first.");
     }
@@ -478,6 +483,7 @@ export function App({
       translationPreference.engineId,
       text,
       translationPreference.targetLanguage,
+      sourceLanguage,
     );
     return result.translation;
   }, [aiApi, translationPreference]);

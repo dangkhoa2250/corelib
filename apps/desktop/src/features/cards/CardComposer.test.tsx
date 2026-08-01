@@ -212,8 +212,8 @@ test("translates the derived plain text into a new back paragraph when the back 
 
   await user.click(screen.getByRole("button", { name: "Translate" }));
 
-  // The translate call receives the plain text derived from the front document.
-  expect(onTranslate).toHaveBeenCalledWith(draft.quote);
+  // The translate call receives the plain text derived from the front document and detected source language.
+  expect(onTranslate).toHaveBeenCalledWith(draft.quote, expect.anything());
   const back = await waitFor(() => {
     const element = editor("Back");
     expect(element).toHaveTextContent("Tôi đã định gọi cho bạn.");
@@ -235,7 +235,7 @@ test("inserts the translation at the current back selection without losing exist
 
   await user.click(screen.getByRole("button", { name: "Translate" }));
 
-  expect(onTranslate).toHaveBeenCalledWith(draft.quote);
+  expect(onTranslate).toHaveBeenCalledWith(draft.quote, expect.anything());
   await waitFor(() => {
     expect(back).toHaveTextContent("XHello world");
   });

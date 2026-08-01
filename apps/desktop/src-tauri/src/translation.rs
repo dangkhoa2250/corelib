@@ -192,6 +192,7 @@ pub mod apple {
             request_id: u64,
             source: *const c_char,
             target: *const c_char,
+            source_language: *const c_char,
             callback: extern "C" fn(u64, *const c_char, *const c_char),
         );
     }
@@ -235,12 +236,18 @@ pub mod apple {
         unsafe { library_apple_translation_available() }
     }
 
-    pub fn translate(text: &str, target_language: &str) -> AppleResult {
+    pub fn translate(
+        text: &str,
+        target_language: &str,
+        source_language: Option<&str>,
+    ) -> AppleResult {
         let target = target_language_code(target_language)
             .ok_or_else(|| format!("unsupported_language_pair: Unsupported target language: {target_language}"))?;
+        let source_code = source_language.and_then(target_language_code);
         let source = CString::new(text)
             .map_err(|_| "malformed_response: Text contains an unsupported null character.".to_owned())?;
         let target = CString::new(target).expect("static language codes never contain null bytes");
+        let source_c = source_code.and_then(|code| CString::new(code).ok());
         let request_id = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
         let (sender, receiver) = mpsc::channel();
         pending_requests()
@@ -253,6 +260,7 @@ pub mod apple {
                 request_id,
                 source.as_ptr(),
                 target.as_ptr(),
+                source_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
                 handle_translation,
             );
         }
@@ -277,7 +285,7 @@ pub mod apple {
         false
     }
 
-    pub fn translate(_text: &str, _target_language: &str) -> Result<TranslationResult, String> {
+    pub fn translate(_text: &str, _target_language: &str, _source_language: Option<&str>) -> Result<TranslationResult, String> {
         Err("engine_unavailable: Apple Translation is only available on macOS.".to_owned())
     }
 }
@@ -286,12 +294,13 @@ pub fn translate(
     engine_id: &str,
     text: &str,
     target_language: &str,
+    source_language: Option<&str>,
 ) -> Result<TranslationResult, String> {
     if text.trim().is_empty() {
         return Err("malformed_response: Text to translate cannot be empty.".to_owned());
     }
     match engine_id {
-        "apple-translation" => apple::translate(text, target_language),
+        "apple-translation" => apple::translate(text, target_language, source_language),
         "google-translation" => translate_with_google(text, target_language),
         value if value.starts_with("ai:") => {
             let (provider, model) = parse_ai_engine_id(value)?;
@@ -306,8 +315,9 @@ pub async fn translate_text(
     engine_id: String,
     text: String,
     target_language: String,
+    source_language: Option<String>,
 ) -> Result<TranslationResult, String> {
-    tauri::async_runtime::spawn_blocking(move || translate(&engine_id, &text, &target_language))
+    tauri::async_runtime::spawn_blocking(move || translate(&engine_id, &text, &target_language, source_language.as_deref()))
         .await
         .map_err(|error| format!("engine_unavailable: Translation task failed: {error}"))?
 }
