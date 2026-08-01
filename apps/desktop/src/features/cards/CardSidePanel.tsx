@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import type { Deck, CardBrowserRow } from "../../domain/learning";
 import { createCard, updateAndMoveCard } from "../../lib/learning";
 import { detectLanguage } from "../../lib/languageDetector";
@@ -9,6 +10,7 @@ import { Combobox } from "../../components/Combobox";
 import {
   CardRichTextEditor,
   type CardRichTextEditorHandle,
+  type MediaSourceType,
 } from "./CardRichTextEditor";
 import { CardRichTextToolbar } from "./CardRichTextToolbar";
 
@@ -61,6 +63,9 @@ export function CardSidePanel({
   const [isManualLanguage, setIsManualLanguage] = useState(false);
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [mediaDraftId] = useState(() => createDraftId());
+  const [stagedMediaUrls, setStagedMediaUrls] = useState<Record<string, string>>({});
+
+  const resolveMedia = (mediaId: string): string => stagedMediaUrls[mediaId] ?? "";
 
   const frontEditorRef = useRef<CardRichTextEditorHandle | null>(null);
   const backEditorRef = useRef<CardRichTextEditorHandle | null>(null);
@@ -156,11 +161,19 @@ export function CardSidePanel({
 
   if (!card) return null;
 
-  // Default staged-media stub: a throwaway id keeps images in the document
-  // without hitting storage until the Pixabay/media pipeline lands.
-  const stageMedia = async (): Promise<{ id: string; attribution?: string }> => ({
-    id: createDraftId(),
-  });
+  const stageMedia = async (
+    file: File | Blob,
+  ): Promise<{ id: string; attribution?: string }> => {
+    const id = createDraftId();
+    let previewUrl = "";
+    if (typeof window !== "undefined" && window.URL && typeof window.URL.createObjectURL === "function") {
+      previewUrl = URL.createObjectURL(file);
+    }
+    if (previewUrl) {
+      setStagedMediaUrls((prev) => ({ ...prev, [id]: previewUrl }));
+    }
+    return { id };
+  };
 
   const handleSave = async (e: FormEvent) => {
     e.preventDefault();
@@ -273,6 +286,7 @@ export function CardSidePanel({
               onDiscardMedia={() => {}}
               onFocusChange={handleFaceFocus("front")}
               onStageMedia={stageMedia}
+              resolveMedia={resolveMedia}
               ref={frontEditorRef}
               showToolbar={false}
               disabled={saving}
@@ -299,6 +313,7 @@ export function CardSidePanel({
               onDiscardMedia={() => {}}
               onFocusChange={handleFaceFocus("back")}
               onStageMedia={stageMedia}
+              resolveMedia={resolveMedia}
               ref={backEditorRef}
               showToolbar={false}
               disabled={saving}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
 
 import { PronunciationButton } from "../../components/PronunciationButton";
 import { Combobox } from "../../components/Combobox";
@@ -222,6 +223,10 @@ export function CardComposer({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const deckSelectionTouchedRef = useRef(false);
 
+  const [stagedMediaUrls, setStagedMediaUrls] = useState<Record<string, string>>({});
+
+  const resolveMedia = (mediaId: string): string => stagedMediaUrls[mediaId] ?? "";
+
   const [focusedFace, setFocusedFace] = useState<"front" | "back" | null>(null);
 
   const activeEditor =
@@ -415,13 +420,25 @@ export function CardComposer({
     sourceType: MediaSourceType,
   ): Promise<{ id: string; attribution?: string }> => {
     const input: StageMediaInput = { draftId: mediaDraftId, sourceType };
+    let previewUrl = "";
     if (sourceType === "file") {
       const filePath = (file as File & { path?: string }).path;
       input.filePath = typeof filePath === "string" && filePath.length > 0 ? filePath : null;
+      if (typeof window !== "undefined" && window.URL && typeof window.URL.createObjectURL === "function") {
+        previewUrl = URL.createObjectURL(file);
+      }
     } else {
-      input.bytesBase64 = await blobToBase64(file);
+      const base64 = await blobToBase64(file);
+      input.bytesBase64 = base64;
+      previewUrl = `data:${file.type || "image/png"};base64,${base64}`;
     }
     const media = await stageCardMediaBridge(input);
+    if (!previewUrl && media.relativePath) {
+      previewUrl = convertFileSrc(media.relativePath);
+    }
+    if (previewUrl) {
+      setStagedMediaUrls((prev) => ({ ...prev, [media.id]: previewUrl }));
+    }
     return { id: media.id, attribution: media.pixabayAttribution ?? undefined };
   };
 
@@ -438,6 +455,8 @@ export function CardComposer({
       pixabayAttribution: `Photo by ${result.user} on Pixabay`,
     });
     const alt = result.tags || `Photo by ${result.user} on Pixabay`;
+    const dataUrl = `data:image/jpeg;base64,${bytesBase64}`;
+    setStagedMediaUrls((prev) => ({ ...prev, [media.id]: dataUrl }));
     setBackDoc((current) => ({
       ...current,
       content: [
@@ -516,6 +535,7 @@ export function CardComposer({
             onDiscardMedia={() => {}}
             onFocusChange={handleFaceFocus("front")}
             onStageMedia={stageMedia}
+            resolveMedia={resolveMedia}
             ref={frontEditorRef}
             showToolbar={false}
             value={frontDoc}
@@ -567,6 +587,7 @@ export function CardComposer({
             onDiscardMedia={() => {}}
             onFocusChange={handleFaceFocus("back")}
             onStageMedia={stageMedia}
+            resolveMedia={resolveMedia}
             ref={backEditorRef}
             showToolbar={false}
             value={backDoc}
