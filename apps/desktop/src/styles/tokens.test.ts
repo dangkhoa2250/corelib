@@ -362,41 +362,41 @@ test("anchors the review route and source split to the viewport height", () => {
   expect(reviewSplit).toContain("height: 100%;");
 });
 
-test("keeps the flashcard compact while the source panel can fill the viewport", () => {
+test("sizes review media modals by content and keeps them inside the viewport", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
-  const card = css.match(/\.review-page__card \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  const sourcePanel = css.match(/\.review-page__split > \.source-viewer \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const backdrop = css.match(/\.review-media-modal__backdrop \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const pdf = css.match(/\.review-media-modal__dialog--pdf \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const video = css.match(/\.review-media-modal__dialog--video \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
-  expect(card).toContain("flex: 0 0 min(440px, calc(100vh - 180px));");
-  expect(card).toContain("height: min(440px, calc(100vh - 180px));");
-  expect(sourcePanel).toContain("align-self: stretch;");
-  expect(sourcePanel).not.toContain("margin-bottom");
+  expect(backdrop).toContain("position: fixed;");
+  expect(backdrop).toContain("inset: 0;");
+  expect(pdf).toContain("width: min(1200px, calc(100vw - 48px));");
+  expect(pdf).toContain("height: calc(100vh - 48px);");
+  expect(video).toContain("width: min(900px, calc(100vw - 48px));");
+  expect(video).toContain("max-height: calc(100vh - 48px);");
 });
 
-test("splits the review and source panes evenly", () => {
+test("keeps the review PDF on ScrollArea with thumb-side content inset", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
-  const reviewPane = css.match(/\.review-page__split--with-source \.review-page__body \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  const sourcePane = css.match(/\.review-page__split--with-source > \.source-viewer \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const sourceViewer = readFileSync(join(currentDir, "../features/cards/SourceViewer.tsx"), "utf8");
+  const container = css.match(/\.source-viewer__pdf-container \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const content = css.match(/\.source-viewer__pdf-content \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
-  expect(reviewPane).toContain("flex: 1 1 0;");
-  expect(reviewPane).not.toContain("max-width");
-  expect(sourcePane).toContain("flex: 1 1 0;");
+  expect(sourceViewer).toContain("<ScrollArea");
+  expect(sourceViewer).toContain('className="source-viewer__pdf-content"');
+  expect(container).not.toContain("overflow: auto;");
+  expect(content).toContain("padding-right: 20px;");
 });
 
-test("keeps the flashcard geometry stable while a video is open", () => {
+test("removes nonessential review media motion for reduced-motion users", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
-  const videoCard = css.match(/\.review-page__body--with-video \.review-page__card \{([\s\S]*?)\n\}/)?.[1] ?? "";
-
-  expect(videoCard).toBe("");
-  const reviewBody = css.match(/\.review-page__body \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  expect(reviewBody).toContain("padding-right: 20px;");
-
-  const cardFace = css.match(/\.review-page__card-face-scroll \{([\s\S]*?)\n\}/)?.[1] ?? "";
-  expect(cardFace).toContain("padding-right: 20px;");
-  expect(cardFace).not.toContain("overflow-y: auto;");
+  const media = css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  expect(media).toContain(".review-media-modal__backdrop");
+  expect(media).toContain("animation: none;");
+  expect(media).toContain("transition: none;");
 });
 
 test("uses compact review rating controls", () => {
