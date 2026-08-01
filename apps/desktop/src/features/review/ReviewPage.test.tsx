@@ -237,6 +237,32 @@ test("rates a grant and refreshes the backend queue", async () => {
   expect(await screen.findByText(/Next learning card/)).toBeInTheDocument();
 });
 
+test("shows the front of the next due card when refresh keeps the same session and index", async () => {
+  const user = userEvent.setup();
+  const onRefresh = vi.fn().mockResolvedValue({
+    ...studySession,
+    cards: [replacementGrant],
+  });
+
+  render(
+    <ReviewPage
+      mode="study"
+      session={studySession}
+      onRate={vi.fn().mockResolvedValue({ card, reviewLogId: "log-next-card" })}
+      onRefresh={onRefresh}
+    />,
+  );
+
+  const flashcard = screen.getByRole("button", { name: "Flashcard" });
+  await user.click(flashcard);
+  expect(flashcard).toHaveClass("review-page__card--flipped");
+  await user.click(screen.getByRole("button", { name: "Good" }));
+
+  expect(await screen.findAllByText(replacementGrant.card.front)).toHaveLength(2);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Flashcard" })).not.toHaveClass("review-page__card--flipped"));
+  expect(screen.queryByRole("group", { name: "Rate card" })).not.toBeInTheDocument();
+});
+
 test("study persists idle-aware answer time instead of wall-clock time", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-07-18T12:00:00.000Z"));

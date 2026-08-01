@@ -121,7 +121,7 @@ export function ReviewMediaModal({ children, kind, onClose, title }: ReviewMedia
         onKeyDown={handleKeyDown}
       >
         <div className="review-media-modal__header">
-          <h2 className="review-media-modal__header" id={titleId}>{title}</h2>
+          <h2 className="review-media-modal__title" id={titleId}>{title}</h2>
           <button className="review-media-modal__close" aria-label={`Close ${title}`} onClick={close} type="button">
             ×
           </button>

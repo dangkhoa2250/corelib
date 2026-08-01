@@ -35,13 +35,12 @@ test("anchors the viewer at the start of the saved page and uses saved selection
   expect(viewer).not.toContain("savedHighlightElsRef.current.length > 0");
 });
 
-test("fits the complete source page within the available viewer display", () => {
+test("keeps whole-page fit for the non-modal source viewer", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
 
-  expect(viewer).toContain('currentScaleValue = "page-fit"');
-  expect(viewer).not.toContain('currentScaleValue = "page-width"');
-  expect(viewer).not.toContain("SOURCE_PAGE_FIT_SCALE");
+  expect(viewer).toContain('presentation === "modal" ? "1.5" : "page-fit"');
+  expect(viewer).toContain('presentation === "modal"');
   expect(viewer).not.toContain("pdfViewer.currentScale = pdfViewer.currentScale *");
 });
 
@@ -80,4 +79,20 @@ test("supports panel and modal presentation without duplicating modal chrome", (
   expect(viewer).toContain("source-viewer--${presentation}");
   expect(viewer).toContain('presentation === "panel"');
   expect(viewer).toContain('className="source-viewer__pdf-content"');
+});
+
+test("uses a fixed 1.5x PDF scale for modal presentation while the panel keeps whole-page fit", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+
+  expect(viewer).toContain('presentation === "modal" ? "1.5" : "page-fit"');
+});
+
+test("reapplies the presentation-aware scale when the source viewer is resized", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const resizeObserver = viewer.match(/const resizeObserver = new ResizeObserver\(\(\) => \{([\s\S]*?)\n        \}\);/)?.[1] ?? "";
+
+  expect(resizeObserver).toContain("setSourceFitScale");
+  expect(resizeObserver).toContain("presentation");
 });

@@ -19,7 +19,20 @@ test("uses the same surface color as the flashcard and source viewer", () => {
   expect(container.firstElementChild).toHaveStyle({ background: "var(--main-bg)" });
 });
 
-test("locks the player height at the first resize after a caption change", () => {
+test("keeps only a small inset around the embedded viewer", () => {
+  const { container } = render(<YouGlishPanel word="Algorithms" frontLanguage="en" />);
+
+  expect(container.firstElementChild).toHaveStyle({ marginTop: "0px", padding: "8px" });
+  expect((container.firstElementChild as HTMLElement).style.borderStyle).toBe("none");
+});
+
+test("starts with a viewer that is 20px taller than the previous default", () => {
+  render(<YouGlishPanel word="Algorithms" frontLanguage="en" />);
+
+  expect(screen.getByTestId("youglish-video-viewport")).toHaveStyle({ height: "660px" });
+});
+
+test("keeps enough caption height at the first resize after a caption change", () => {
   render(<YouGlishPanel word="Algorithms" frontLanguage="en" />);
 
   const player = screen.getByTitle("YouGlish pronunciation for Algorithms");
@@ -33,7 +46,7 @@ test("locks the player height at the first resize after a caption change", () =>
   send(2, 690);
   send(2, 980);
 
-  expect(screen.getByTestId("youglish-video-viewport")).toHaveStyle({ height: "480px" });
+  expect(screen.getByTestId("youglish-video-viewport")).toHaveStyle({ height: "560px" });
 });
 
 test("renders as a chrome-free panel with attribution", () => {

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -65,7 +68,9 @@ test("opens an accessible video dialog and makes the original render inert", asy
   expect(screen.getByTestId("review-media-modal-backdrop")).toHaveClass("review-media-modal__backdrop");
   expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
   expect(screen.getByRole("dialog")).toHaveAttribute("aria-labelledby");
-  expect(screen.getByRole("heading", { name: "Pronunciation for algorithm" })).toHaveClass("review-media-modal__header");
+  const heading = screen.getByRole("heading", { name: "Pronunciation for algorithm" });
+  expect(heading).not.toHaveClass("review-media-modal__header");
+  expect(heading).toHaveClass("review-media-modal__title");
   expect(screen.getByText("First media action").parentElement).toHaveClass("review-media-modal__body");
 });
 
@@ -151,4 +156,24 @@ test("closes immediately when reduced motion is preferred", async () => {
   expect(screen.getByRole("dialog")).toBeInTheDocument();
   fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test("gives review media dialogs a wider video surface and a balanced borderless header", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = readFileSync(join(currentDir, "../../styles/tokens.css"), "utf8");
+  const video = css.match(/\.review-media-modal__dialog--video \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const header = css.match(/\.review-media-modal__header \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const close = css.match(/\.review-media-modal__close \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const viewport = css.match(/\.youglish-panel__viewport \{([\s\S]*?)\n\}/)?.[1] ?? "";
+
+  expect(video).toContain("width: min(916px, calc(100vw - 48px));");
+  expect(header).toContain("box-sizing: border-box;");
+  expect(header).toContain("height: 48px;");
+  expect(header).toContain("padding: 8px 16px;");
+  expect(header).not.toContain("border-bottom");
+  expect(close).toContain("display: grid;");
+  expect(close).toContain("place-items: center;");
+  expect(close).toContain("height: 28px;");
+  expect(viewport).toContain("calc(100vh - 140px)");
+  expect(viewport).toContain("min(560px, calc(100vh - 140px))");
 });

@@ -89,7 +89,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
     setRevealed(false);
     setError(null);
     answerTimer.reset();
-  }, [index, current.sessionId, answerTimer.reset]);
+  }, [grant?.card.id, current.sessionId, answerTimer.reset]);
 
   const refreshSession = useCallback(async () => {
     setError(null);

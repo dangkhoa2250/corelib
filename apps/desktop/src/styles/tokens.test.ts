@@ -373,7 +373,7 @@ test("sizes review media modals by content and keeps them inside the viewport", 
   expect(backdrop).toContain("inset: 0;");
   expect(pdf).toContain("width: min(1200px, calc(100vw - 48px));");
   expect(pdf).toContain("height: calc(100vh - 48px);");
-  expect(video).toContain("width: min(900px, calc(100vw - 48px));");
+  expect(video).toContain("width: min(916px, calc(100vw - 48px));");
   expect(video).toContain("max-height: calc(100vh - 48px);");
 });
 

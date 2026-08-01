@@ -3517,7 +3517,7 @@ textarea::placeholder {
 }
 
 .review-media-modal__dialog--video {
-  width: min(900px, calc(100vw - 48px));
+  width: min(916px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
 }
 
@@ -3526,21 +3526,27 @@ textarea::placeholder {
   flex: 0 0 auto;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-subtle);
+  box-sizing: border-box;
+  height: 48px;
+  padding: 8px 16px;
 }
 
-.review-media-modal__header h2 {
+.review-media-modal__title {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
+  line-height: 1;
 }
 
 .review-media-modal__close {
+  display: grid;
+  width: 28px;
+  height: 28px;
   margin-left: auto;
+  place-items: center;
   border: 0;
   border-radius: 6px;
-  padding: 2px 8px;
+  padding: 0;
   background: transparent;
   color: var(--text-secondary);
   font-size: 20px;
@@ -3577,8 +3583,8 @@ textarea::placeholder {
 }
 
 .youglish-panel__viewport {
-  height: min(var(--youglish-viewport-height), calc(100vh - 160px));
-  min-height: min(480px, calc(100vh - 160px));
+  height: min(var(--youglish-viewport-height), calc(100vh - 140px));
+  min-height: min(560px, calc(100vh - 140px));
   overflow: hidden;
   border-radius: 8px;
   background: var(--surface-1);

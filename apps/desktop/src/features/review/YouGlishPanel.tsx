@@ -8,7 +8,7 @@ interface YouGlishPanelProps {
 }
 
 const FLUENT_FOOTER_HEIGHT = 240;
-const MIN_VIEWPORT_HEIGHT = 480;
+const MIN_VIEWPORT_HEIGHT = 560;
 
 export function youGlishEmbedUrl(word: string, language: string, widgetId: string): string {
   return `https://youglish.com/pronounce/${encodeURIComponent(word)}/${language.toLowerCase()}/all/emb=1&e_id=${encodeURIComponent(widgetId)}&e_comp=8&e_notif_h=1`;
@@ -17,7 +17,7 @@ export function youGlishEmbedUrl(word: string, language: string, widgetId: strin
 export function YouGlishPanel({ word, frontLanguage }: YouGlishPanelProps) {
   const rawWidgetId = useId();
   const widgetId = `youglish-${rawWidgetId.replace(/[^a-z0-9]/gi, "")}`;
-  const [viewportHeight, setViewportHeight] = useState(640);
+  const [viewportHeight, setViewportHeight] = useState(660);
   const awaitingCaptionResizeRef = useRef(false);
 
   useLayoutEffect(() => {
@@ -59,11 +59,11 @@ export function YouGlishPanel({ word, frontLanguage }: YouGlishPanelProps) {
     <section
       className="youglish-panel"
       style={{
-        marginTop: "16px",
-        padding: "16px",
+        marginTop: "0",
+        padding: "8px",
         borderRadius: "12px",
         background: "var(--main-bg)",
-        border: "1px solid var(--border-subtle)",
+        border: "none",
         display: "flex",
         flexDirection: "column",
         gap: "12px",

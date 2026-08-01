@@ -15,8 +15,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 let pdfViewerModulePromise: Promise<typeof import("pdfjs-dist/web/pdf_viewer.mjs")> | null = null;
 const SOURCE_SEARCH_CONCURRENCY = 8;
 
-function setSourceFitScale(pdfViewer: PDFViewerType) {
-  pdfViewer.currentScaleValue = "page-fit";
+function setSourceFitScale(pdfViewer: PDFViewerType, presentation: SourceViewerProps["presentation"]) {
+  pdfViewer.currentScaleValue = presentation === "modal" ? "1.5" : "page-fit";
 }
 
 function loadPdfViewerModule() {
@@ -330,7 +330,7 @@ export function SourceViewer({
         const resizeObserver = new ResizeObserver(() => {
           const activeViewer = pdfViewerRef.current;
           if (!activeViewer) return;
-          setSourceFitScale(activeViewer);
+          setSourceFitScale(activeViewer, presentation);
           scheduleInitialAnchor();
         });
         resizeObserver.observe(container);
@@ -343,7 +343,7 @@ export function SourceViewer({
 
         eventBus.on("pagesinit", () => {
           if (!active) return;
-          setSourceFitScale(pdfViewer);
+          setSourceFitScale(pdfViewer, presentation);
           scheduleInitialAnchor();
           setLoading(false);
         });
