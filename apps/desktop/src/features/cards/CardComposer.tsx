@@ -21,6 +21,7 @@ import {
   type CardRichTextEditorHandle,
   type MediaSourceType,
 } from "./CardRichTextEditor";
+import { CardRichTextToolbar } from "./CardRichTextToolbar";
 
 const NEW_DECK_VALUE = "__new_deck__";
 const SOURCE_UNAVAILABLE_MESSAGE = "Source document is no longer available. Select text from an open document to create a card.";
@@ -220,6 +221,33 @@ export function CardComposer({
   const backEditorRef = useRef<CardRichTextEditorHandle | null>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const deckSelectionTouchedRef = useRef(false);
+
+  const [focusedFace, setFocusedFace] = useState<"front" | "back" | null>(null);
+
+  const activeEditor =
+    focusedFace === "front"
+      ? frontEditorRef.current?.getEditor() ?? null
+      : focusedFace === "back"
+        ? backEditorRef.current?.getEditor() ?? null
+        : null;
+
+  const handleFaceFocus = (face: "front" | "back") => (focused: boolean) => {
+    if (focused) {
+      setFocusedFace(face);
+    } else {
+      setTimeout(() => {
+        const active = document.activeElement;
+        const isOtherControl =
+          active &&
+          active !== document.body &&
+          active !== document.documentElement &&
+          active.closest('.card-rich-text-editor, [role="toolbar"]') == null;
+        if (isOtherControl) {
+          setFocusedFace((prev) => (prev === face ? null : prev));
+        }
+      }, 0);
+    }
+  };
 
   const sourceIsAvailable = hasRequiredDocumentId(draft);
   const usingNewDeck = deckValue === NEW_DECK_VALUE;
@@ -463,6 +491,15 @@ export function CardComposer({
           </label>
         ) : null}
 
+        <CardRichTextToolbar
+          editor={activeEditor}
+          disabled={saving}
+          onInsertImage={() => {
+            if (focusedFace === "front") frontEditorRef.current?.openImagePicker();
+            else if (focusedFace === "back") backEditorRef.current?.openImagePicker();
+          }}
+        />
+
         {/* Not a <label>: a label forwards clicks to the first labelable
             control inside it, so wrapping the editor together with the
             Translate/Pronunciation buttons steals focus from the
@@ -477,8 +514,10 @@ export function CardComposer({
             disabled={saving}
             onChange={handleFrontDocChange}
             onDiscardMedia={() => {}}
+            onFocusChange={handleFaceFocus("front")}
             onStageMedia={stageMedia}
             ref={frontEditorRef}
+            showToolbar={false}
             value={frontDoc}
           />
         </div>
@@ -526,8 +565,10 @@ export function CardComposer({
             disabled={saving || translating}
             onChange={setBackDoc}
             onDiscardMedia={() => {}}
+            onFocusChange={handleFaceFocus("back")}
             onStageMedia={stageMedia}
             ref={backEditorRef}
+            showToolbar={false}
             value={backDoc}
           />
         </div>

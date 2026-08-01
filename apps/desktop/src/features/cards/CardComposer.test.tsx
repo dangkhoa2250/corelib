@@ -135,6 +135,77 @@ test("prefills the front from the selection and lets both card sides be edited",
   expect(back).toHaveTextContent("A set closed under vector addition and scalar multiplication.");
 });
 
+test("renders one shared formatting toolbar between Deck and Front", () => {
+  renderComposer();
+
+  const deck = screen.getByRole("combobox", { name: "Deck" });
+  const toolbar = screen.getByRole("toolbar", { name: "Card formatting" });
+  const front = editor("Front");
+
+  expect(screen.getAllByRole("toolbar", { name: "Card formatting" })).toHaveLength(1);
+  expect(deck.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(toolbar.compareDocumentPosition(front) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("targets the focused card face while keeping one shared toolbar", async () => {
+  const { user } = renderComposer();
+  const front = editor("Front");
+  const back = editor("Back");
+  const bold = () => screen.getByRole("button", { name: "Bold" });
+
+  await user.click(front);
+  await user.click(bold());
+  await user.keyboard("FRONT_BOLD ");
+
+  await user.click(back);
+  await user.keyboard("BACK_PLAIN ");
+  await user.click(bold());
+  await user.keyboard("BACK_BOLD");
+
+  expect(front.querySelector("strong")).toHaveTextContent("FRONT_BOLD");
+  expect(back.querySelector("strong")).toHaveTextContent("BACK_BOLD");
+  expect(back.querySelector("strong")).not.toHaveTextContent("BACK_PLAIN");
+  expect(screen.getAllByRole("toolbar", { name: "Card formatting" })).toHaveLength(1);
+});
+
+test("disables the shared toolbar when neither face is focused", async () => {
+  const { user } = renderComposer();
+  const deck = screen.getByRole("combobox", { name: "Deck" });
+  const toolbar = screen.getAllByRole("toolbar", { name: "Card formatting" })[0];
+
+  await user.click(deck);
+
+  await waitFor(() => {
+    expect(toolbar.querySelector('button[aria-label="Bold"]')).toBeDisabled();
+    expect(toolbar.querySelector('button[aria-label="Undo"]')).toBeDisabled();
+  });
+});
+
+test("delegates shared image insertion to the focused face", async () => {
+  const { user } = renderComposer();
+  const front = editor("Front");
+  const back = editor("Back");
+  const frontInput = front.closest(".card-rich-text-editor")?.querySelector(
+    '[data-testid="card-rich-text-editor-file-input"]',
+  ) as HTMLInputElement;
+  const backInput = back.closest(".card-rich-text-editor")?.querySelector(
+    '[data-testid="card-rich-text-editor-file-input"]',
+  ) as HTMLInputElement;
+  const frontClick = vi.spyOn(frontInput, "click").mockImplementation(() => {});
+  const backClick = vi.spyOn(backInput, "click").mockImplementation(() => {});
+  const toolbar = () => screen.getByRole("toolbar", { name: "Card formatting" });
+
+  await user.click(back);
+  await user.click(toolbar().querySelector('button[aria-label="Insert image"]') as HTMLElement);
+  expect(backClick).toHaveBeenCalledOnce();
+  expect(frontClick).not.toHaveBeenCalled();
+
+  await user.click(front);
+  await user.click(toolbar().querySelector('button[aria-label="Insert image"]') as HTMLElement);
+  expect(frontClick).toHaveBeenCalledOnce();
+  expect(screen.getAllByRole("toolbar", { name: "Card formatting" })).toHaveLength(1);
+});
+
 test("translates the derived plain text into a new back paragraph when the back is empty", async () => {
   const onTranslate = vi.fn().mockResolvedValue("Tôi đã định gọi cho bạn.");
   const { user } = renderComposer({ onTranslate });
