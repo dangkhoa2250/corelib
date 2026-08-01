@@ -401,6 +401,44 @@ test("practice source opens a Source PDF modal without a split source pane", asy
   expect(document.querySelector(".source-viewer--modal")).toBeInTheDocument();
 });
 
+test("closes and disposes YouGlish when the active card changes", async () => {
+  const user = userEvent.setup();
+  const firstCard = { ...card, frontLanguage: "en" };
+  const secondCard = { ...replacementGrant.card, frontLanguage: "fr" };
+  const { rerender } = render(<ReviewPage mode="practice" cards={[firstCard, secondCard]} />);
+
+  await user.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
+  expect(await screen.findByRole("dialog", { name: "Pronunciation for ‘bonjour’" })).toBeInTheDocument();
+  expect(screen.getByTitle("YouGlish pronunciation for bonjour")).toBeInTheDocument();
+
+  rerender(<ReviewPage mode="practice" cards={[secondCard]} />);
+
+  await waitFor(() => {
+    expect(screen.queryByRole("dialog", { name: "Pronunciation for ‘bonjour’" })).not.toBeInTheDocument();
+    expect(screen.queryByTitle("YouGlish pronunciation for bonjour")).not.toBeInTheDocument();
+  });
+  expect(screen.getByRole("button", { name: "Flashcard" })).toHaveFocus();
+});
+
+test("continues the study timer while a YouGlish modal is open", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-07-17T00:00:00.000Z"));
+  const cardWithLanguage = { ...card, frontLanguage: "en" };
+  render(
+    <ReviewPage
+      mode="study"
+      session={{ ...studySession, cards: [{ ...grant, card: cardWithLanguage }] }}
+      onRate={vi.fn()}
+      onRefresh={vi.fn()}
+    />,
+  );
+
+  fireEvent.click(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })[0]);
+  act(() => vi.advanceTimersByTime(2_000));
+
+  expect(screen.getByText("2s")).toHaveClass("review-page__elapsed");
+});
+
 test("closing source modal keeps the flipped card and restores source trigger focus", async () => {
   vi.stubGlobal("matchMedia", () => ({ matches: true, media: "", addListener: vi.fn(), removeListener: vi.fn() }));
   const user = userEvent.setup();

@@ -108,6 +108,7 @@ export function ReviewSessionSurface({
         <ScrollArea className="review-page__body" data-testid="review-session-surface">
           {header}
           <ReviewFlashcard
+            key={card.id}
             revealed={revealed}
             onReveal={onReveal}
             front={frontContent(false)}
