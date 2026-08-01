@@ -14,6 +14,9 @@ uncluttered header.
 - Leave the non-modal source viewer panel's current whole-page fit unchanged.
 - Increase the YouGlish modal maximum width by 16 CSS pixels, while retaining
   its viewport-relative width cap.
+- Let the YouGlish video-and-caption viewport below the modal header use nearly
+  the entire popup width by removing its nested card border and reducing its
+  horizontal inset to 8 CSS pixels.
 - Reduce the shared review-media modal header to 32 CSS pixels tall; remove
   its bottom border and avoid applying header container styles to the title.
   This removes the apparent underline below titles such as “Pronunciation for
@@ -43,5 +46,7 @@ thumb-side content inset.
   `page-fit`.
 - Add or update modal styling assertions for the 16px wider video dialog and
   its compact, borderless header.
+- Add or update a styling assertion that preserves the reduced YouGlish
+  viewport inset.
 - Run the focused desktop test suite and perform fresh Tauri runtime verification
   from this checkout when practical.
