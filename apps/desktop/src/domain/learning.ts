@@ -1,3 +1,5 @@
+import type { RichDocument } from "./richDocument";
+
 export type CardState =
   | "new"
   | "learning"
@@ -25,11 +27,32 @@ export interface NewCardSource extends Omit<CardSource, "documentId"> {
   documentId: string;
 }
 
+/**
+ * Media attached to a rich flashcard. Rich documents reference rows by
+ * `mediaId`; a media row belongs to the saved card that references it.
+ * `cardId` is nullable while the media is staged under a draft.
+ */
+export type CardMediaSourceType = "file" | "clipboard" | "pixabay";
+
+export interface CardMedia {
+  id: string;
+  cardId: string | null;
+  mimeType: string;
+  relativePath: string;
+  sourceType: CardMediaSourceType;
+  pixabayAttribution: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface LearningCard {
   id: string;
   deckId: string;
   front: string;
   back: string;
+  frontDoc?: RichDocument | null;
+  backDoc?: RichDocument | null;
+  media?: CardMedia[];
   state: CardState;
   dueAt: string;
   reps: number;
@@ -177,10 +200,25 @@ export interface BulkResult {
   affectedCount: number;
 }
 
+export interface CreateCardInput {
+  deckName: string;
+  front: string;
+  back: string;
+  frontDoc?: RichDocument | null;
+  backDoc?: RichDocument | null;
+  mediaDraftId?: string | null;
+  source?: NewCardSource;
+  tags?: string[];
+  frontLanguage?: string | null;
+}
+
 export interface UpdateCardInput {
   cardId: string;
   front: string;
   back: string;
+  frontDoc?: RichDocument | null;
+  backDoc?: RichDocument | null;
+  mediaDraftId?: string | null;
   tags: string[];
   frontLanguage: string | null;
 }
@@ -189,6 +227,9 @@ export interface UpdateAndMoveCardInput {
   cardId: string;
   front: string;
   back: string;
+  frontDoc?: RichDocument | null;
+  backDoc?: RichDocument | null;
+  mediaDraftId?: string | null;
   tags: string[];
   destinationDeckId: string | null;
   frontLanguage: string | null;

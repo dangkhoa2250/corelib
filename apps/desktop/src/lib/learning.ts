@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Invoke } from "./desktop";
-import type { Deck, DeckStatistics, LearningCard, NewCardSource, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult, MemoraSettings, DeckLearningSettings, StudyScope, StudySession, StudyRatingInput, StudyRatingResult, StudyReadyCounts } from "../domain/learning";
+import type { CreateCardInput, Deck, DeckStatistics, LearningCard, CardSource, CardBrowserQuery, CardPage, UpdateCardInput, UpdateAndMoveCardInput, BulkResult, MemoraSettings, DeckLearningSettings, StudyScope, StudySession, StudyRatingInput, StudyRatingResult, StudyReadyCounts } from "../domain/learning";
 import type { LibraryDocument } from "../domain/document";
 
+export type { CreateCardInput } from "../domain/learning";
 export type SearchResult = { kind: "nav" | "document" | "card" | "deck" | "trash"; id: string; title: string; subtitle: string | null };
-export type CreateCardInput = { deckName: string; front: string; back: string; source?: NewCardSource; tags?: string[]; frontLanguage?: string | null };
 
 export function createCard(input: CreateCardInput, call: Invoke = invoke as Invoke): Promise<LearningCard> { return call("create_card", { input }); }
 export function listDecks(call: Invoke = invoke as Invoke): Promise<Deck[]> { return call("list_decks"); }
