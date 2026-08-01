@@ -1,6 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import type { ReactNode } from "react";
-import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
+import { EditorContent, useEditor } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import { mergeAttributes } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
@@ -17,6 +16,7 @@ import {
   validateRichDocument,
   type RichDocument,
 } from "../../domain/richDocument";
+import { CardRichTextToolbar } from "./CardRichTextToolbar";
 import "./CardRichTextEditor.css";
 
 /**
@@ -44,6 +44,10 @@ export interface CardRichTextEditorHandle {
   insertTextAtSelection(text: string): boolean;
   /** Focuses the editor body. */
   focus(): void;
+  /** Returns the live Tiptap editor instance (or null). */
+  getEditor(): Editor | null;
+  /** Opens this editor's hidden image file picker. */
+  openImagePicker(): void;
 }
 
 export interface CardRichTextEditorProps {
@@ -53,6 +57,10 @@ export interface CardRichTextEditorProps {
   value: RichDocument;
   /** When true the editor and its toolbar are read-only. */
   disabled?: boolean;
+  /** When true (default) renders the built-in per-editor toolbar. */
+  showToolbar?: boolean;
+  /** Reports whether this editor's contenteditable gained/lost focus. */
+  onFocusChange?: (focused: boolean) => void;
   /** Emitted with a validated document after every user change. */
   onChange(document: RichDocument): void;
   /** Stores an image and returns its media id. */
@@ -304,83 +312,14 @@ const CardImage = Image.extend<CardImageOptions>({
   },
 });
 
-interface ToolbarState {
-  canUndo: boolean;
-  canRedo: boolean;
-  bold: boolean;
-  italic: boolean;
-  underline: boolean;
-  strike: boolean;
-  paragraph: boolean;
-  heading1: boolean;
-  heading2: boolean;
-  heading3: boolean;
-  bulletList: boolean;
-  orderedList: boolean;
-  alignLeft: boolean;
-  alignCenter: boolean;
-  alignRight: boolean;
-  alignJustify: boolean;
-}
-
-const IDLE_TOOLBAR: ToolbarState = {
-  canUndo: false,
-  canRedo: false,
-  bold: false,
-  italic: false,
-  underline: false,
-  strike: false,
-  paragraph: true,
-  heading1: false,
-  heading2: false,
-  heading3: false,
-  bulletList: false,
-  orderedList: false,
-  alignLeft: false,
-  alignCenter: false,
-  alignRight: false,
-  alignJustify: false,
-};
-
-function ToolbarButton({
-  label,
-  active = false,
-  disabled = false,
-  onClick,
-  children,
-}: {
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <button
-      aria-label={label}
-      aria-pressed={active}
-      className={
-        active
-          ? "card-rich-text-editor__toolbar-button is-active"
-          : "card-rich-text-editor__toolbar-button"
-      }
-      disabled={disabled}
-      onClick={onClick}
-      onMouseDown={(event) => event.preventDefault()}
-      title={label}
-      type="button"
-    >
-      {children}
-    </button>
-  );
-}
-
 export const CardRichTextEditor = forwardRef<CardRichTextEditorHandle, CardRichTextEditorProps>(
   function CardRichTextEditor(
     {
       ariaLabel,
       value,
       disabled = false,
+      showToolbar = true,
+      onFocusChange,
       onChange,
       onStageMedia,
       onDiscardMedia,
@@ -515,6 +454,12 @@ export const CardRichTextEditor = forwardRef<CardRichTextEditorHandle, CardRichT
         // can steal focus back to the front face long after the mount effect.
         current.view.focus();
       },
+      getEditor(): Editor | null {
+        return editorRef.current;
+      },
+      openImagePicker(): void {
+        fileInputRef.current?.click();
+      },
     }),
     [],
   );
@@ -524,6 +469,19 @@ export const CardRichTextEditor = forwardRef<CardRichTextEditorHandle, CardRichT
     // onChange with an unchanged document.
     editor?.setEditable(!disabled, false);
   }, [editor, disabled]);
+
+  // Report contenteditable focus changes so hosts can drive a shared toolbar.
+  useEffect(() => {
+    if (!editor) return;
+    const onFocus = () => onFocusChange?.(true);
+    const onBlur = () => onFocusChange?.(false);
+    editor.on("focus", onFocus);
+    editor.on("blur", onBlur);
+    return () => {
+      editor.off("focus", onFocus);
+      editor.off("blur", onBlur);
+    };
+  }, [editor, onFocusChange]);
 
   // Seed the media tracking and "last emitted" marker from the initial value.
   // A layout effect so the marker exists before the external-sync layout
@@ -552,225 +510,15 @@ export const CardRichTextEditor = forwardRef<CardRichTextEditorHandle, CardRichT
     editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
 
-  const toolbar = useEditorState({
-    editor,
-    selector: ({ editor: current }) => {
-      if (!current) return IDLE_TOOLBAR;
-      return {
-        canUndo: current.can().undo(),
-        canRedo: current.can().redo(),
-        bold: current.isActive("bold"),
-        italic: current.isActive("italic"),
-        underline: current.isActive("underline"),
-        strike: current.isActive("strike"),
-        paragraph: current.isActive("paragraph"),
-        heading1: current.isActive("heading", { level: 1 }),
-        heading2: current.isActive("heading", { level: 2 }),
-        heading3: current.isActive("heading", { level: 3 }),
-        bulletList: current.isActive("bulletList"),
-        orderedList: current.isActive("orderedList"),
-        alignLeft: current.isActive({ textAlign: "left" }),
-        alignCenter: current.isActive({ textAlign: "center" }),
-        alignRight: current.isActive({ textAlign: "right" }),
-        alignJustify: current.isActive({ textAlign: "justify" }),
-      };
-    },
-  });
-
-  const setAlign = (alignment: "left" | "center" | "right" | "justify") => {
-    editor?.chain().focus().setTextAlign(alignment).run();
-  };
-
   return (
     <div className="card-rich-text-editor">
-      <div
-        aria-label={`${ariaLabel} formatting`}
-        className="card-rich-text-editor__toolbar"
-        role="toolbar"
-      >
-        <ToolbarButton
-          disabled={disabled || !toolbar.canUndo}
-          label="Undo"
-          onClick={() => editor?.chain().focus().undo().run()}
-        >
-          ↺
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={disabled || !toolbar.canRedo}
-          label="Redo"
-          onClick={() => editor?.chain().focus().redo().run()}
-        >
-          ↻
-        </ToolbarButton>
-
-        <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-        <ToolbarButton
-          active={toolbar.bold}
+      {showToolbar ? (
+        <CardRichTextToolbar
+          editor={editor}
           disabled={disabled}
-          label="Bold"
-          onClick={() => editor?.chain().focus().toggleBold().run()}
-        >
-          <strong>B</strong>
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.italic}
-          disabled={disabled}
-          label="Italic"
-          onClick={() => editor?.chain().focus().toggleItalic().run()}
-        >
-          <em>I</em>
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.underline}
-          disabled={disabled}
-          label="Underline"
-          onClick={() => editor?.chain().focus().toggleUnderline().run()}
-        >
-          <u>U</u>
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.strike}
-          disabled={disabled}
-          label="Strikethrough"
-          onClick={() => editor?.chain().focus().toggleStrike().run()}
-        >
-          <s>S</s>
-        </ToolbarButton>
-
-        <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-        <ToolbarButton
-          active={toolbar.paragraph}
-          disabled={disabled}
-          label="Paragraph"
-          onClick={() => editor?.chain().focus().setParagraph().run()}
-        >
-          ¶
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.heading1}
-          disabled={disabled}
-          label="Heading 1"
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-        >
-          H1
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.heading2}
-          disabled={disabled}
-          label="Heading 2"
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-        >
-          H2
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.heading3}
-          disabled={disabled}
-          label="Heading 3"
-          onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-        >
-          H3
-        </ToolbarButton>
-
-        <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-        <ToolbarButton
-          active={toolbar.bulletList}
-          disabled={disabled}
-          label="Bullet list"
-          onClick={() => editor?.chain().focus().toggleBulletList().run()}
-        >
-          • List
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.orderedList}
-          disabled={disabled}
-          label="Numbered list"
-          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-        >
-          1. List
-        </ToolbarButton>
-
-        <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-        <ToolbarButton
-          active={toolbar.alignLeft}
-          disabled={disabled}
-          label="Align left"
-          onClick={() => setAlign("left")}
-        >
-          ⯇
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.alignCenter}
-          disabled={disabled}
-          label="Align center"
-          onClick={() => setAlign("center")}
-        >
-          ⯈
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.alignRight}
-          disabled={disabled}
-          label="Align right"
-          onClick={() => setAlign("right")}
-        >
-          ≣
-        </ToolbarButton>
-        <ToolbarButton
-          active={toolbar.alignJustify}
-          disabled={disabled}
-          label="Align justify"
-          onClick={() => setAlign("justify")}
-        >
-          ☰
-        </ToolbarButton>
-
-        <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-        <label className="card-rich-text-editor__color-control">
-          <span className="card-rich-text-editor__sr-only">Text color</span>
-          <input
-            aria-label="Text color"
-            disabled={disabled}
-            onChange={(event) => {
-              editor?.chain().focus().setColor(event.target.value).run();
-            }}
-            type="color"
-            value="#000000"
-          />
-        </label>
-        <label className="card-rich-text-editor__color-control">
-          <span className="card-rich-text-editor__sr-only">Highlight color</span>
-          <input
-            aria-label="Highlight color"
-            disabled={disabled}
-            onChange={(event) => {
-              editor?.chain().focus().setHighlight({ color: event.target.value }).run();
-            }}
-            type="color"
-            value="#ffff00"
-          />
-        </label>
-
-        <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-        <ToolbarButton
-          disabled={disabled}
-          label="Insert image"
-          onClick={() => fileInputRef.current?.click()}
-        >
-          Image
-        </ToolbarButton>
-        <ToolbarButton
-          disabled={disabled}
-          label="Clear formatting"
-          onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()}
-        >
-          Clear
-        </ToolbarButton>
-      </div>
+          onInsertImage={() => fileInputRef.current?.click()}
+        />
+      ) : null}
 
       <ScrollArea className="card-rich-text-editor__scroll-area">
         <div
