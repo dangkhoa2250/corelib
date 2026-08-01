@@ -17,10 +17,14 @@ uncluttered header.
 - Let the YouGlish video-and-caption viewport below the modal header use nearly
   the entire popup width by removing its nested card border and reducing its
   horizontal inset to 8 CSS pixels.
+- Increase the YouGlish viewport's available height by 20 CSS pixels at its
+  bottom edge without changing its top position or the popup's placement.
 - Reduce the shared review-media modal header to 32 CSS pixels tall; remove
   its bottom border and avoid applying header container styles to the title.
   This removes the apparent underline below titles such as “Pronunciation for
   ‘something’” and “Source PDF”.
+- Vertically center both the title and close control in that shared header, so
+  the correction applies consistently to YouGlish and PDF modals.
 
 ## Implementation boundary
 
@@ -48,5 +52,7 @@ thumb-side content inset.
   its compact, borderless header.
 - Add or update a styling assertion that preserves the reduced YouGlish
   viewport inset.
+- Add or update assertions for the extra 20px YouGlish viewport height and
+  vertically centered shared-header controls.
 - Run the focused desktop test suite and perform fresh Tauri runtime verification
   from this checkout when practical.
