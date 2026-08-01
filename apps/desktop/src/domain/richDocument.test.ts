@@ -254,7 +254,7 @@ describe("derivePlainText", () => {
         { type: "orderedList", content: [listItem("c")] },
       ],
     });
-    expect(derivePlainText(doc)).toBe("a\nb\nc");
+    expect(derivePlainText(doc)).toBe("• a\n• b\n1. c");
   });
 
   it("includes image alt text as a plain-text fallback", () => {
@@ -262,9 +262,9 @@ describe("derivePlainText", () => {
     expect(derivePlainText(doc)).toBe("a cat");
   });
 
-  it("omits nothing for images with empty alt text", () => {
+  it("falls back to a placeholder for images with empty alt text", () => {
     const doc = validateDoc({ type: "doc", content: [image({ alt: "" })] });
-    expect(derivePlainText(doc)).toBe("");
+    expect(derivePlainText(doc)).toBe("[image]");
   });
 
   it("combines paragraphs and image alt text on separate lines", () => {
@@ -290,14 +290,113 @@ describe("derivePlainText", () => {
     expect(derivePlainText(doc)).toBe("");
   });
 
+  it("collapses consecutive blank lines to a single newline", () => {
+    const doc = validateDoc({
+      type: "doc",
+      content: [paragraph("A"), paragraph(), paragraph("B")],
+    });
+    expect(derivePlainText(doc)).toBe("A\nB");
+  });
+
   it("is deterministic for nested lists", () => {
     const inner = { type: "bulletList", content: [{ type: "listItem", content: [paragraph("nested")] }] };
     const doc = validateDoc({
       type: "doc",
       content: [{ type: "bulletList", content: [{ type: "listItem", content: [paragraph("outer"), inner] }] }],
     });
-    expect(derivePlainText(doc)).toBe("outer\nnested");
+    expect(derivePlainText(doc)).toBe("• outer\n• nested");
     expect(derivePlainText(doc)).toBe(derivePlainText(doc));
+  });
+});
+
+// NOTE: Rust parity corpus. The expected strings below are duplicated from the
+// Rust implementation's tests in
+// apps/desktop/src-tauri/src/rich_document_tests.rs (plain_text_*). The Rust
+// tests must keep asserting the SAME expected outputs as this corpus — the
+// duplication is intentional so that a divergence between the two
+// implementations is caught by a test on whichever side changed.
+describe("derivePlainText - Rust parity corpus", () => {
+  it("single paragraph -> 'Hello'", () => {
+    expect(derivePlainText(validateDoc({ type: "doc", content: [paragraph("Hello")] }))).toBe("Hello");
+  });
+
+  it("multiple paragraphs -> 'Hello\\nWorld'", () => {
+    expect(
+      derivePlainText(validateDoc({ type: "doc", content: [paragraph("Hello"), paragraph("World")] })),
+    ).toBe("Hello\nWorld");
+  });
+
+  it("hardBreak in paragraph -> 'a\\nb'", () => {
+    expect(
+      derivePlainText(validateDoc({ type: "doc", content: [paragraph(text("a"), { type: "hardBreak" }, text("b"))] })),
+    ).toBe("a\nb");
+  });
+
+  it("heading -> 'Title'", () => {
+    expect(
+      derivePlainText(validateDoc({ type: "doc", content: [{ type: "heading", attrs: { level: 1 }, content: [text("Title")] }] })),
+    ).toBe("Title");
+  });
+
+  it("bullet list -> '• a\\n• b'", () => {
+    const item = (value: string): unknown => ({ type: "listItem", content: [paragraph(value)] });
+    expect(
+      derivePlainText(validateDoc({ type: "doc", content: [{ type: "bulletList", content: [item("a"), item("b")] }] })),
+    ).toBe("• a\n• b");
+  });
+
+  it("ordered list -> '1. c\\n2. d'", () => {
+    const item = (value: string): unknown => ({ type: "listItem", content: [paragraph(value)] });
+    expect(
+      derivePlainText(validateDoc({ type: "doc", content: [{ type: "orderedList", content: [item("c"), item("d")] }] })),
+    ).toBe("1. c\n2. d");
+  });
+
+  it("image with alt -> alt text", () => {
+    expect(derivePlainText(validateDoc({ type: "doc", content: [image({ alt: "a cat" })] }))).toBe("a cat");
+  });
+
+  it("image with empty alt -> '[image]'", () => {
+    expect(derivePlainText(validateDoc({ type: "doc", content: [image({ alt: "" })] }))).toBe("[image]");
+  });
+
+  it("paragraph then image -> 'Question\\ncat'", () => {
+    expect(
+      derivePlainText(validateDoc({ type: "doc", content: [paragraph("Question"), image({ alt: "cat" })] })),
+    ).toBe("Question\ncat");
+  });
+
+  it("ignores marks -> 'bold'", () => {
+    expect(
+      derivePlainText(validateDoc({
+        type: "doc",
+        content: [paragraph({ type: "text", text: "bold", marks: [{ type: "bold" }] })],
+      })),
+    ).toBe("bold");
+  });
+
+  it("trims surrounding whitespace -> 'spaced'", () => {
+    expect(derivePlainText(validateDoc({ type: "doc", content: [paragraph("   spaced   ")] }))).toBe("spaced");
+  });
+
+  it("empty document -> ''", () => {
+    expect(derivePlainText(validateDoc({ type: "doc", content: [] }))).toBe("");
+  });
+
+  it("collapses blank lines -> 'A\\nB'", () => {
+    expect(
+      derivePlainText(validateDoc({ type: "doc", content: [paragraph("A"), paragraph(), paragraph("B")] })),
+    ).toBe("A\nB");
+  });
+
+  it("nested lists -> '• outer\\n• nested'", () => {
+    const inner = { type: "bulletList", content: [{ type: "listItem", content: [paragraph("nested")] }] };
+    expect(
+      derivePlainText(validateDoc({
+        type: "doc",
+        content: [{ type: "bulletList", content: [{ type: "listItem", content: [paragraph("outer"), inner] }] }],
+      })),
+    ).toBe("• outer\n• nested");
   });
 });
 

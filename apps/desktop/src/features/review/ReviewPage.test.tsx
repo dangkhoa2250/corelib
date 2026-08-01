@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, test, vi, beforeEach } from "vitest";
 
@@ -7,6 +7,7 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: vi.fn((path: string) => path),
 }));
 
+import { invoke } from "@tauri-apps/api/core";
 import type { LearningCard, StudyGrant, StudySession } from "../../domain/learning";
 import type { StatisticsActivityApi } from "../reader/useReadingActivitySession";
 import { ReviewPage } from "./ReviewPage";
@@ -668,4 +669,56 @@ test("practice never calls rate_study_card", () => {
   expect(activityApi.start).not.toHaveBeenCalledWith(
     expect.objectContaining({ activityKind: "study" }),
   );
+});
+
+test("renders rich documents through the review surface with resolved media", async () => {
+  const richCard: LearningCard = {
+    ...card,
+    id: "card-rich",
+    frontDoc: {
+      type: "doc",
+      content: [
+        { type: "paragraph", content: [{ type: "text", text: "What is ATP?" }] },
+        { type: "image", attrs: { mediaId: "media-1", alt: "a cat", widthPercent: 50 } },
+      ],
+    },
+    backDoc: {
+      type: "doc",
+      content: [
+        {
+          type: "bulletList",
+          content: [
+            { type: "listItem", content: [{ type: "paragraph", content: [{ type: "text", text: "point" }] }] },
+          ],
+        },
+      ],
+    },
+  };
+  vi.mocked(invoke).mockImplementation((command: string) => {
+    if (command === "resolve_card_media") return Promise.resolve("card-rich/media-1.png");
+    return Promise.resolve(undefined);
+  });
+
+  render(<ReviewPage mode="practice" cards={[richCard]} />);
+
+  expect(screen.getAllByText("What is ATP?")).toHaveLength(2);
+  expect(screen.getByText("point")).toBeInTheDocument();
+
+  const images = await screen.findAllByAltText("a cat");
+  expect(images).toHaveLength(2);
+  await waitFor(() => {
+    for (const img of images) {
+      expect(img.getAttribute("src")).toBe("card-rich/media-1.png");
+      expect(img).toHaveStyle({ width: "50%" });
+    }
+  });
+});
+
+test("falls back to plain text when faces have no rich documents", () => {
+  const cardWithLanguage = { ...card, frontLanguage: "en" };
+  render(<ReviewPage mode="practice" cards={[cardWithLanguage]} />);
+
+  expect(screen.getAllByText("bonjour")).toHaveLength(2);
+  expect(screen.getByText("hello")).toBeInTheDocument();
+  expect(screen.getAllByRole("button", { name: "Hear 'bonjour' in YouGlish" })).toHaveLength(2);
 });

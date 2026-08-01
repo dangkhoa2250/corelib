@@ -464,39 +464,57 @@ function validateTextAlignAttrs(
 }
 
 /**
- * Derives deterministic plain text from a validated rich document. Text leaves
- * are joined with paragraph, list-item, and hard-break boundaries so the result
- * stays compatible with the legacy `front`/`back` columns. Image alt text is
- * included as a useful plain-text fallback on its own line.
+ * Derives deterministic plain text from a validated rich document, mirroring
+ * the Rust `plain_text` implementation in
+ * `apps/desktop/src-tauri/src/rich_document.rs`. Paragraphs, headings, list
+ * items, and hard breaks are separated by newlines; bullet list items are
+ * prefixed with `• `, ordered list items with `{n}. `; images contribute their
+ * alt text or `[image]` when the alt is empty; and consecutive blank lines are
+ * collapsed to a single newline before the result is trimmed. The result stays
+ * compatible with the legacy `front`/`back` columns used for full-text search,
+ * translation, and YouGlish lookups.
  */
 export function derivePlainText(doc: RichDocument): string {
-  const parts: string[] = [];
-  for (const block of doc.content) {
-    const text = blockToText(block);
-    if (text.length > 0) parts.push(text);
-  }
-  return parts.join("\n").trim();
+  const rendered = docToText(doc);
+  return collapseBlankLines(rendered).trim();
 }
 
-function blockToText(node: RichNode): string {
+function docToText(node: RichNode): string {
   switch (node.type) {
     case "doc":
-      return (node.content ?? []).map(blockToText).join("\n");
+      return (node.content ?? []).map(docToText).join("\n");
     case "paragraph":
     case "heading":
       return inlineToText(node.content);
     case "bulletList":
+      return listToText(node, false);
     case "orderedList":
-      return node.content.map(blockToText).join("\n");
+      return listToText(node, true);
     case "listItem":
-      return node.content.map(blockToText).join("\n");
+      return node.content.map(docToText).join("\n");
     case "image":
-      return node.attrs.alt;
+      return node.attrs.alt.length > 0 ? node.attrs.alt : "[image]";
     case "hardBreak":
       return "\n";
     case "text":
       return node.text;
   }
+}
+
+function listToText(
+  node: BulletListNode | OrderedListNode,
+  ordered: boolean,
+): string {
+  return node.content
+    .map((item, index) => {
+      const prefix = ordered ? `${index + 1}. ` : "• ";
+      return `${prefix}${item.content.map(docToText).join("\n")}`;
+    })
+    .join("\n");
+}
+
+function collapseBlankLines(value: string): string {
+  return value.replace(/\n{2,}/g, "\n");
 }
 
 function inlineToText(nodes: RichInline[]): string {
