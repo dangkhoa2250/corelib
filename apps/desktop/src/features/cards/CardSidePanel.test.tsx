@@ -185,4 +185,33 @@ describe("CardSidePanel rich documents", () => {
       expect(onDirtyStateChange).toHaveBeenLastCalledWith(true);
     });
   });
+
+  test("shared toolbar targets the focused face in the panel and renders only once", async () => {
+    const { user } = renderPanel(baseCard());
+    const front = editor("Front");
+    const back = editor("Back");
+    const h2Button = screen.getByRole("button", { name: "Heading 2" });
+
+    await user.click(front);
+    await user.click(h2Button);
+    await user.keyboard("Panel Heading");
+    expect(front.querySelector("h2")?.textContent).toContain("Panel Heading");
+
+    await user.click(back);
+    await user.keyboard("plain ");
+    expect(back.querySelector("h2")).toBeNull();
+    expect(screen.getAllByRole("toolbar", { name: "Card formatting" })).toHaveLength(1);
+  });
+
+  test("shared toolbar in side panel is disabled when no face is focused", async () => {
+    const { user } = renderPanel(baseCard());
+    const deck = screen.getByRole("combobox", { name: "Deck" });
+
+    await user.click(deck);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+    });
+  });
 });

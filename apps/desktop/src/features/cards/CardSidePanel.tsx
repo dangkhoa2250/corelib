@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import type { Deck, CardBrowserRow } from "../../domain/learning";
 import { createCard, updateAndMoveCard } from "../../lib/learning";
@@ -8,7 +8,9 @@ import { LanguagePicker } from "./LanguagePicker";
 import { Combobox } from "../../components/Combobox";
 import {
   CardRichTextEditor,
+  type CardRichTextEditorHandle,
 } from "./CardRichTextEditor";
+import { CardRichTextToolbar } from "./CardRichTextToolbar";
 
 export interface CardSidePanelProps {
   card: CardBrowserRow | null;
@@ -59,6 +61,35 @@ export function CardSidePanel({
   const [isManualLanguage, setIsManualLanguage] = useState(false);
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [mediaDraftId] = useState(() => createDraftId());
+
+  const frontEditorRef = useRef<CardRichTextEditorHandle | null>(null);
+  const backEditorRef = useRef<CardRichTextEditorHandle | null>(null);
+  const [focusedFace, setFocusedFace] = useState<"front" | "back" | null>(null);
+
+  const activeEditor =
+    focusedFace === "front"
+      ? frontEditorRef.current?.getEditor() ?? null
+      : focusedFace === "back"
+        ? backEditorRef.current?.getEditor() ?? null
+        : null;
+
+  const handleFaceFocus = (face: "front" | "back") => (focused: boolean) => {
+    if (focused) {
+      setFocusedFace(face);
+    } else {
+      setTimeout(() => {
+        const active = document.activeElement;
+        const isOtherControl =
+          active &&
+          active !== document.body &&
+          active !== document.documentElement &&
+          active.closest('.card-rich-text-editor, [role="toolbar"]') == null;
+        if (isOtherControl) {
+          setFocusedFace((prev) => (prev === face ? null : prev));
+        }
+      }, 0);
+    }
+  };
 
   const frontText = derivePlainText(frontDoc);
   const backText = derivePlainText(backDoc);
@@ -224,6 +255,15 @@ export function CardSidePanel({
             />
           </div>
 
+          <CardRichTextToolbar
+            editor={activeEditor}
+            disabled={saving}
+            onInsertImage={() => {
+              if (focusedFace === "front") frontEditorRef.current?.openImagePicker();
+              else if (focusedFace === "back") backEditorRef.current?.openImagePicker();
+            }}
+          />
+
           <div className="card-side-panel__field">
             <div className="card-side-panel__label">Front</div>
             <CardRichTextEditor
@@ -231,7 +271,10 @@ export function CardSidePanel({
               value={frontDoc}
               onChange={handleFrontDocChange}
               onDiscardMedia={() => {}}
+              onFocusChange={handleFaceFocus("front")}
               onStageMedia={stageMedia}
+              ref={frontEditorRef}
+              showToolbar={false}
               disabled={saving}
             />
           </div>
@@ -254,7 +297,10 @@ export function CardSidePanel({
               value={backDoc}
               onChange={setBackDoc}
               onDiscardMedia={() => {}}
+              onFocusChange={handleFaceFocus("back")}
               onStageMedia={stageMedia}
+              ref={backEditorRef}
+              showToolbar={false}
               disabled={saving}
             />
           </div>
