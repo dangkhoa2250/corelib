@@ -35,6 +35,7 @@ pub mod indexer;
 pub mod learning;
 pub mod library_db;
 pub mod library_store;
+pub mod media;
 pub mod model;
 pub mod pixabay;
 pub mod rich_document;
@@ -64,6 +65,9 @@ mod library_store_tests;
 
 #[cfg(test)]
 mod learning_tests;
+
+#[cfg(test)]
+mod media_tests;
 
 #[cfg(test)]
 mod scheduler_tests;
@@ -148,6 +152,9 @@ pub fn run() {
             commands::delete_card,
             commands::get_card,
             commands::get_card_source,
+            commands::stage_card_media,
+            commands::discard_media_draft,
+            commands::resolve_card_media,
             commands::search_everything,
             commands::get_document,
             commands::rename_document,

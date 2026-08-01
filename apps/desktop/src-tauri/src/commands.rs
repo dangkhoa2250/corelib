@@ -20,12 +20,14 @@ use crate::{
     learning::{DeckStatistics, NewCard, NewCardSource},
     library_db::{LibraryDatabase, NewLocalDocument},
     library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
+    media::{CardMediaStore, MEDIA_DIR_NAME},
     model::DocumentSummary,
     model::{
-        CardSourcePayload, DeckLearningSettingsPayload, DeckSummary, LearningCardSummary,
-        MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload, StudyCountsPayload,
-        StudyGrantPayload, StudyReadyCountsPayload, StudyScopePayload, StudySessionPayload,
-        SearchResultPayload, SelectionRect, UpdateDeckLearningSettingsPayload,
+        CardMediaPayload, CardSourcePayload, DeckLearningSettingsPayload, DeckSummary,
+        LearningCardSummary, MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload,
+        SearchResultPayload, SelectionRect, StudyCountsPayload, StudyGrantPayload,
+        StudyReadyCountsPayload, StudyScopePayload, StudySessionPayload,
+        UpdateDeckLearningSettingsPayload,
     },
     scheduler::{Rating, ScheduledState},
     study_queue::{
@@ -33,6 +35,7 @@ use crate::{
         StudyGrant, StudyRating, StudyRatingResult, StudyScope, StudySession,
     },
 };
+use base64::{engine::general_purpose::STANDARD, Engine};
 
 pub type IndexTask = Box<dyn FnOnce() + Send + 'static>;
 type IndexScheduler = Arc<dyn Fn(IndexTask) -> bool + Send + Sync>;
@@ -828,6 +831,87 @@ pub fn delete_card(id: String, state: State<'_, LibraryStore>) -> Result<(), Str
     learning_lock(&state)?
         .delete_card(&id)
         .map_err(|e| e.to_string())
+}
+
+/// Input for `stage_card_media`. `sourceType` is one of `file` (uses
+/// `filePath`, a local path the app already has read permission for),
+/// `clipboard`, or `pixabay` (both use `bytesBase64`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageCardMediaInput {
+    pub draft_id: String,
+    pub source_type: String,
+    pub pixabay_attribution: Option<String>,
+    pub file_path: Option<String>,
+    pub bytes_base64: Option<String>,
+}
+
+fn media_store(state: &LibraryStore) -> CardMediaStore {
+    CardMediaStore::new(
+        Arc::clone(&state.database),
+        state.library_root.join(MEDIA_DIR_NAME),
+    )
+}
+
+#[tauri::command]
+pub fn stage_card_media(
+    input: StageCardMediaInput,
+    state: State<'_, LibraryStore>,
+) -> Result<CardMediaPayload, String> {
+    let store = media_store(&state);
+    match input.source_type.as_str() {
+        "file" => {
+            let path = input
+                .file_path
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "filePath is required for sourceType 'file'".to_owned())?;
+            store.stage_from_file(&input.draft_id, Path::new(&path), &input.source_type)
+        }
+        "clipboard" | "pixabay" => {
+            let encoded = input
+                .bytes_base64
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "bytesBase64 is required for sourceType '{}'",
+                        input.source_type
+                    )
+                })?;
+            let bytes = STANDARD
+                .decode(encoded.trim())
+                .map_err(|e| format!("invalid base64 payload: {e}"))?;
+            store.stage_from_bytes(
+                &input.draft_id,
+                &bytes,
+                "",
+                &input.source_type,
+                input.pixabay_attribution.as_deref(),
+            )
+        }
+        other => Err(format!(
+            "sourceType must be one of file|clipboard|pixabay, got '{other}'"
+        )),
+    }
+}
+
+#[tauri::command]
+pub fn discard_media_draft(draft_id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
+    media_store(&state).discard_draft(&draft_id)
+}
+
+#[tauri::command]
+pub fn resolve_card_media(
+    card_id: String,
+    media_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<String, String> {
+    let store = media_store(&state);
+    let path = store.resolve_media_path(Some(&card_id), None, &media_id)?;
+    // Return the stored relative path; the frontend builds the asset: URL.
+    Ok(path
+        .strip_prefix(store.media_root())
+        .map(|relative| relative.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string_lossy().into_owned()))
 }
 
 #[cfg(test)]

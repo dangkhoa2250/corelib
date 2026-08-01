@@ -253,6 +253,23 @@ pub struct CardPagePayload {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct CardMediaPayload {
+    pub id: String,
+    pub card_id: Option<String>,
+    pub draft_id: Option<String>,
+    pub mime_type: String,
+    pub relative_path: String,
+    pub source_type: String,
+    pub pixabay_attribution: Option<String>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub size_bytes: i64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct PixabayImage {
     pub id: i64,
     pub page_url: String,

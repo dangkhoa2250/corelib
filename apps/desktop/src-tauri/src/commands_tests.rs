@@ -16,10 +16,10 @@ use tauri::Manager;
 use tempfile::tempdir;
 
 use crate::commands::{
-    download_drive_file_async, download_drive_file_async_guarded, get_document_file_url,
-    import_local_documents_for_test, local_review_clock, scope_from_payload,
-    validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool, LibraryStore,
-    StudyRatingPayload, INDEX_QUEUE_CAPACITY,
+    discard_media_draft, download_drive_file_async, download_drive_file_async_guarded,
+    get_document_file_url, import_local_documents_for_test, local_review_clock, resolve_card_media,
+    scope_from_payload, stage_card_media, validate_import_paths, validate_read_page, IndexTask,
+    IndexWorkerPool, LibraryStore, StageCardMediaInput, StudyRatingPayload, INDEX_QUEUE_CAPACITY,
 };
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
@@ -748,4 +748,281 @@ fn rate_study_card_rejects_expired_session_without_writes() {
     .expect_err("expired session rejected");
     assert_eq!(error, "study session expired");
     assert_eq!(study_review_log_count(&library_root, &card.id), 0);
+}
+
+/// Minimal valid 1x1 PNG (same signature used by the media store tests).
+const MEDIA_PNG_BYTES: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+    0x42, 0x60, 0x82,
+];
+
+const MEDIA_JPEG_BYTES: &[u8] = &[
+    0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, b'J', b'F', b'I', b'F', 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+    0x00, 0x01, 0x00, 0x00, 0xFF, 0xD9,
+];
+
+fn base64_standard(bytes: &[u8]) -> String {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    STANDARD.encode(bytes)
+}
+
+fn media_rows(library_root: &Path) -> Vec<(String, String, Option<String>, String)> {
+    let database = LibraryDatabase::open(library_root).expect("reopen database");
+    let mut statement = database
+        .connection
+        .prepare(
+            "SELECT id, relative_path, card_id, draft_id FROM card_media \
+             ORDER BY created_at, id",
+        )
+        .expect("prepare media query");
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })
+        .expect("query media rows");
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .expect("collect media rows")
+}
+
+#[test]
+fn stage_card_media_command_stages_a_file_source_under_staging() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let source = directory.path().join("photo.png");
+    fs::write(&source, MEDIA_PNG_BYTES).expect("write source png");
+
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "file".to_string(),
+            pixabay_attribution: None,
+            file_path: Some(source.to_string_lossy().into_owned()),
+            bytes_base64: None,
+        },
+        app.state(),
+    )
+    .expect("stage from file");
+
+    assert_eq!(staged.source_type, "file");
+    assert_eq!(staged.mime_type, "image/png");
+    assert_eq!(staged.card_id, None);
+    assert_eq!(staged.draft_id.as_deref(), Some("draft-1"));
+    assert!(
+        staged.relative_path.starts_with("staging/draft-1/"),
+        "staged file must live under staging/draft-1/, got {}",
+        staged.relative_path
+    );
+    assert!(library_root
+        .join("card-media")
+        .join(&staged.relative_path)
+        .is_file());
+}
+
+#[test]
+fn stage_card_media_command_stages_base64_for_clipboard_and_pixabay() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let clipboard = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            pixabay_attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage clipboard png");
+
+    let pixabay = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "pixabay".to_string(),
+            pixabay_attribution: Some("Pixabay user 'sample' / pixabay.com".to_string()),
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_JPEG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage pixabay jpeg");
+
+    assert_eq!(clipboard.source_type, "clipboard");
+    assert_eq!(clipboard.mime_type, "image/png");
+    assert_eq!(pixabay.source_type, "pixabay");
+    assert_eq!(pixabay.mime_type, "image/jpeg");
+    assert_eq!(
+        pixabay.pixabay_attribution.as_deref(),
+        Some("Pixabay user 'sample' / pixabay.com")
+    );
+
+    let rows = media_rows(&library_root);
+    assert_eq!(rows.len(), 2);
+    for (_id, relative_path, card_id, draft_id) in rows {
+        assert_eq!(card_id, None, "staged rows must not be committed");
+        assert_eq!(draft_id, "draft-1");
+        assert!(relative_path.starts_with("staging/draft-1/"));
+    }
+}
+
+#[test]
+fn stage_card_media_command_rejects_invalid_combinations() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    // File source without a file path.
+    let missing_path = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "file".to_string(),
+            pixabay_attribution: None,
+            file_path: None,
+            bytes_base64: None,
+        },
+        app.state(),
+    );
+    assert!(missing_path.is_err(), "file source needs a file path");
+
+    // Clipboard source with neither bytes nor a path.
+    let empty_bytes = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            pixabay_attribution: None,
+            file_path: None,
+            bytes_base64: None,
+        },
+        app.state(),
+    );
+    assert!(empty_bytes.is_err(), "clipboard source needs bytes");
+
+    // Invalid source type.
+    let bad_type = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "dropbox".to_string(),
+            pixabay_attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    );
+    assert!(bad_type.is_err(), "unknown source type rejected");
+}
+
+#[test]
+fn discard_media_draft_command_removes_only_that_drafts_staging() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    for (draft, bytes) in [("draft-1", MEDIA_PNG_BYTES), ("draft-1", MEDIA_JPEG_BYTES)] {
+        stage_card_media(
+            StageCardMediaInput {
+                draft_id: draft.to_string(),
+                source_type: "clipboard".to_string(),
+                pixabay_attribution: None,
+                file_path: None,
+                bytes_base64: Some(base64_standard(bytes)),
+            },
+            app.state(),
+        )
+        .expect("stage");
+    }
+    stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-2".to_string(),
+            source_type: "clipboard".to_string(),
+            pixabay_attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage draft-2");
+
+    discard_media_draft("draft-1".to_string(), app.state()).expect("discard draft-1");
+
+    let rows = media_rows(&library_root);
+    assert_eq!(rows.len(), 1, "only draft-2 rows remain");
+    assert_eq!(rows[0].3, "draft-2");
+    // The staging directory for the discarded draft is gone.
+    assert!(!library_root.join("card-media/staging/draft-1").exists());
+}
+
+#[test]
+fn resolve_card_media_command_returns_owned_media_relative_path() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    // Seed a committed media row: reopen the database to insert a card, promote
+    // a staged blob through the store, then resolve via the command.
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            pixabay_attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage");
+
+    {
+        let database = LibraryDatabase::open(&library_root).expect("reopen database");
+        database
+            .connection
+            .execute(
+                "INSERT INTO decks(id,name,created_at,updated_at) \
+                 VALUES('deck-1','deck-1','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')",
+                [],
+            )
+            .expect("insert deck");
+        database
+            .connection
+            .execute(
+                "INSERT INTO cards(id,deck_id,front,back,state,due_at,reps,lapses,created_at,updated_at) \
+                 VALUES('card-1','deck-1','card-1','card-1','new','2026-01-01T00:00:00.000Z',0,0,\
+                 '2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')",
+                [],
+            )
+            .expect("insert card");
+        let media_store = crate::media::CardMediaStore::new(
+            Arc::new(Mutex::new(database)),
+            library_root.join(crate::media::MEDIA_DIR_NAME),
+        );
+        media_store
+            .promote_referenced("card-1", "draft-1", std::slice::from_ref(&staged.id))
+            .expect("promote");
+    }
+
+    let relative = resolve_card_media("card-1".to_string(), staged.id.clone(), app.state())
+        .expect("resolve owned media");
+    assert!(
+        relative.starts_with("card-1/"),
+        "committed media resolves to a path under card-1/, got {relative}"
+    );
+    assert!(library_root.join("card-media").join(&relative).is_file());
+
+    let non_owned = resolve_card_media("card-other".to_string(), staged.id.clone(), app.state());
+    assert!(
+        non_owned.is_err(),
+        "must reject media not owned by the card"
+    );
+    let missing = resolve_card_media("card-1".to_string(), "nope".to_string(), app.state());
+    assert!(missing.is_err(), "must reject unknown media id");
 }
