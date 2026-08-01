@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -69,4 +69,13 @@ test("insert image button invokes onInsertImage", async () => {
   render(<Harness onInsertImage={onInsertImage} />);
   await user.click(screen.getByRole("button", { name: "Insert image" }));
   expect(onInsertImage).toHaveBeenCalled();
+});
+
+test("preserves native color input mousedown while buttons prevent it", () => {
+  render(<Harness onInsertImage={vi.fn()} />);
+  const colorInput = screen.getByLabelText("Text color");
+  const bold = screen.getByRole("button", { name: "Bold" });
+
+  expect(fireEvent.mouseDown(colorInput)).toBe(true);
+  expect(fireEvent.mouseDown(bold)).toBe(false);
 });

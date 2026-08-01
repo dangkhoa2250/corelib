@@ -118,7 +118,11 @@ export function CardRichTextToolbar({
       className="card-rich-text-editor__toolbar"
       role="toolbar"
       aria-label="Card formatting"
-      onMouseDown={(event) => event.preventDefault()}
+      onMouseDown={(event) => {
+        const target = event.target;
+        if (target instanceof HTMLInputElement && target.type === "color") return;
+        event.preventDefault();
+      }}
     >
       <ToolbarButton
         disabled={isDisabled || !toolbar.canUndo}
