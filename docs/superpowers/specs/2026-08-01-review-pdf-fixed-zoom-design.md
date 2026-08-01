@@ -1,9 +1,9 @@
-# Review PDF fixed-zoom design
+# Review media modal sizing design
 
 ## Goal
 
-Make source PDFs readable when opened from review by replacing the modal's
-whole-page fit with a fixed 150% zoom.
+Make review media easier to read and give both media modal types a compact,
+uncluttered header.
 
 ## Scope
 
@@ -12,6 +12,12 @@ whole-page fit with a fixed 150% zoom.
 - Retain the existing initial-page and source-highlight anchoring behavior.
 - Retain vertical and horizontal scrolling through the existing `ScrollArea`.
 - Leave the non-modal source viewer panel's current whole-page fit unchanged.
+- Increase the YouGlish modal maximum width by 16 CSS pixels, while retaining
+  its viewport-relative width cap.
+- Reduce the shared review-media modal header to 32 CSS pixels tall; remove
+  its bottom border and avoid applying header container styles to the title.
+  This removes the apparent underline below titles such as “Pronunciation for
+  ‘something’” and “Source PDF”.
 
 ## Implementation boundary
 
@@ -35,5 +41,7 @@ thumb-side content inset.
   with a 1.5 scale and reapplies it after a resize.
 - Preserve or extend the panel test to prove panel presentation still uses
   `page-fit`.
+- Add or update modal styling assertions for the 16px wider video dialog and
+  its compact, borderless header.
 - Run the focused desktop test suite and perform fresh Tauri runtime verification
   from this checkout when practical.
