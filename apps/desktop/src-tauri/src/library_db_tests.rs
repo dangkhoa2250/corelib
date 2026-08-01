@@ -562,6 +562,12 @@ fn deleting_a_drive_document_with_null_managed_path_succeeds() {
              CREATE TABLE document_text (
                document_id TEXT PRIMARY KEY NOT NULL,
                body TEXT NOT NULL
+             );
+             -- Minimal cards table so later migrations that ALTER cards
+             -- (e.g. 0014_card_rich_content) apply cleanly. Migration 0010
+             -- is recorded as applied above, so its cards changes are skipped.
+             CREATE TABLE cards (
+               id TEXT PRIMARY KEY NOT NULL
              );",
         )
         .expect("create legacy schema");
@@ -1066,5 +1072,335 @@ fn memora_study_migration_preserves_existing_cards_and_adds_defaults() {
     assert_eq!(
         memory_json.as_deref(),
         Some("{\"stability\":3.5,\"difficulty\":5.0}")
+    );
+}
+
+#[test]
+fn rich_content_migration_is_registered_and_adds_nullable_card_doc_columns() {
+    let directory = tempdir().expect("create temporary directory");
+    let database = LibraryDatabase::open(directory.path()).expect("open database");
+
+    let migration: Option<String> = database
+        .connection
+        .query_row(
+            "SELECT id FROM schema_migrations WHERE id = ?1",
+            params!["0014_card_rich_content"],
+            |row| row.get(0),
+        )
+        .optional()
+        .expect("query migration");
+    assert_eq!(migration.as_deref(), Some("0014_card_rich_content"));
+
+    let mut statement = database
+        .connection
+        .prepare("PRAGMA table_info(cards)")
+        .expect("prepare cards table_info");
+    let mut rows = statement.query([]).expect("query cards table_info");
+    let mut front_doc_notnull = None;
+    let mut back_doc_notnull = None;
+    while let Some(row) = rows.next().expect("next card column") {
+        let name: String = row.get(1).expect("column name");
+        let notnull: i32 = row.get(3).expect("notnull flag");
+        match name.as_str() {
+            "front_doc_json" => front_doc_notnull = Some(notnull),
+            "back_doc_json" => back_doc_notnull = Some(notnull),
+            _ => {}
+        }
+    }
+
+    assert_eq!(
+        front_doc_notnull,
+        Some(0),
+        "front_doc_json should be nullable"
+    );
+    assert_eq!(
+        back_doc_notnull,
+        Some(0),
+        "back_doc_json should be nullable"
+    );
+}
+
+#[test]
+fn card_media_table_has_the_mandated_columns() {
+    let directory = tempdir().expect("create temporary directory");
+    let database = LibraryDatabase::open(directory.path()).expect("open database");
+
+    let table_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'card_media'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count card_media table");
+    assert_eq!(table_count, 1, "card_media table should exist");
+
+    let expected_columns: &[(&str, &str, i32)] = &[
+        ("id", "TEXT", 1),
+        ("card_id", "TEXT", 0),
+        ("draft_id", "TEXT", 0),
+        ("mime_type", "TEXT", 0),
+        ("relative_path", "TEXT", 1),
+        ("source_type", "TEXT", 1),
+        ("pixabay_attribution", "TEXT", 0),
+        ("width", "INTEGER", 0),
+        ("height", "INTEGER", 0),
+        ("size_bytes", "INTEGER", 1),
+        ("created_at", "TEXT", 1),
+        ("updated_at", "TEXT", 1),
+    ];
+
+    let mut statement = database
+        .connection
+        .prepare("PRAGMA table_info(card_media)")
+        .expect("prepare card_media table_info");
+    let mut rows = statement.query([]).expect("query card_media table_info");
+    let mut found: std::collections::HashMap<String, (String, i32)> =
+        std::collections::HashMap::new();
+    while let Some(row) = rows.next().expect("next card_media column") {
+        let name: String = row.get(1).expect("column name");
+        let col_type: String = row.get(2).expect("column type");
+        let notnull: i32 = row.get(3).expect("notnull flag");
+        found.insert(name, (col_type, notnull));
+    }
+
+    for (name, expected_type, expected_notnull) in expected_columns {
+        let (col_type, notnull) = found
+            .get(*name)
+            .unwrap_or_else(|| panic!("missing card_media column {name}"));
+        assert_eq!(col_type, expected_type, "card_media.{name} type mismatch");
+        assert_eq!(
+            notnull, expected_notnull,
+            "card_media.{name} nullability mismatch"
+        );
+    }
+}
+
+#[test]
+fn card_media_source_type_check_accepts_known_sources_and_rejects_others() {
+    let directory = tempdir().expect("create temporary directory");
+    let database = LibraryDatabase::open(directory.path()).expect("open database");
+    let timestamp = "2026-08-01T00:00:00.000Z";
+
+    database
+        .connection
+        .execute(
+            "INSERT INTO decks (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            params!["deck-source", "Media", timestamp],
+        )
+        .expect("insert deck");
+    database
+        .connection
+        .execute(
+            "INSERT INTO cards (id, deck_id, front, back, state, due_at, created_at, updated_at)
+             VALUES (?1, ?2, 'q', 'a', 'new', ?3, ?3, ?3)",
+            params!["card-source", "deck-source", timestamp],
+        )
+        .expect("insert card");
+
+    for source_type in ["file", "clipboard", "pixabay"] {
+        database
+            .connection
+            .execute(
+                "INSERT INTO card_media (
+                    id, card_id, relative_path, source_type, size_bytes, created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)",
+                params![
+                    format!("media-{source_type}"),
+                    "card-source",
+                    format!("/rel/{source_type}"),
+                    source_type,
+                    timestamp
+                ],
+            )
+            .expect("insert known source_type row");
+    }
+
+    let rejected = database.connection.execute(
+        "INSERT INTO card_media (
+            id, card_id, relative_path, source_type, size_bytes, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, 'download', 0, ?4, ?4)",
+        params!["media-bad", "card-source", "/rel/bad", timestamp],
+    );
+    assert!(
+        rejected.is_err(),
+        "unknown source_type should be rejected by the CHECK constraint"
+    );
+}
+
+#[test]
+fn card_media_size_bytes_check_rejects_negative_values() {
+    let directory = tempdir().expect("create temporary directory");
+    let database = LibraryDatabase::open(directory.path()).expect("open database");
+    let timestamp = "2026-08-01T00:00:00.000Z";
+
+    database
+        .connection
+        .execute(
+            "INSERT INTO decks (id, name, created_at, updated_at) VALUES (?1, ?2, ?3, ?3)",
+            params!["deck-size", "Size", timestamp],
+        )
+        .expect("insert deck");
+    database
+        .connection
+        .execute(
+            "INSERT INTO cards (id, deck_id, front, back, state, due_at, created_at, updated_at)
+             VALUES (?1, ?2, 'q', 'a', 'new', ?3, ?3, ?3)",
+            params!["card-size", "deck-size", timestamp],
+        )
+        .expect("insert card");
+
+    database
+        .connection
+        .execute(
+            "INSERT INTO card_media (
+                id, card_id, relative_path, source_type, size_bytes, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, 'file', 0, ?4, ?4)",
+            params!["media-zero", "card-size", "/rel/zero", timestamp],
+        )
+        .expect("zero size_bytes is allowed");
+
+    let negative = database.connection.execute(
+        "INSERT INTO card_media (
+            id, card_id, relative_path, source_type, size_bytes, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, 'file', -1, ?4, ?4)",
+        params!["media-neg", "card-size", "/rel/neg", timestamp],
+    );
+    assert!(
+        negative.is_err(),
+        "negative size_bytes should be rejected by the CHECK constraint"
+    );
+}
+
+#[test]
+fn card_media_has_indexes_on_card_id_draft_id_and_created_at() {
+    let directory = tempdir().expect("create temporary directory");
+    let database = LibraryDatabase::open(directory.path()).expect("open database");
+
+    let index_count: i64 = database
+        .connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE type = 'index' AND name IN (
+                 'card_media_card_id', 'card_media_draft_id', 'card_media_created_at'
+             )",
+            [],
+            |row| row.get(0),
+        )
+        .expect("count card_media indexes");
+
+    assert_eq!(index_count, 3, "expected all three card_media indexes");
+}
+
+#[test]
+fn rich_content_migration_preserves_legacy_cards_without_doc_json() {
+    let directory = tempdir().expect("create temporary directory");
+    let database_path = directory.path().join("library.sqlite3");
+    let connection = Connection::open(&database_path).expect("open legacy database");
+    connection
+        .execute_batch("PRAGMA foreign_keys = ON;")
+        .expect("enable foreign keys");
+    connection
+        .execute_batch("CREATE TABLE schema_migrations (id TEXT PRIMARY KEY NOT NULL);")
+        .expect("create migration table");
+    for (id, sql) in [
+        (
+            "0001_library",
+            include_str!("../migrations/0001_library.sql"),
+        ),
+        (
+            "0002_index_claims",
+            include_str!("../migrations/0002_index_claims.sql"),
+        ),
+        (
+            "0003_drive_source",
+            include_str!("../migrations/0003_drive_source.sql"),
+        ),
+        (
+            "0004_learning",
+            include_str!("../migrations/0004_learning.sql"),
+        ),
+        (
+            "0005_learning_source_integrity",
+            include_str!("../migrations/0005_learning_source_integrity.sql"),
+        ),
+        (
+            "0006_card_lifecycle",
+            include_str!("../migrations/0006_card_lifecycle.sql"),
+        ),
+        (
+            "0007_youglish_clickable",
+            include_str!("../migrations/0007_youglish_clickable.sql"),
+        ),
+        (
+            "0008_page_count",
+            include_str!("../migrations/0008_page_count.sql"),
+        ),
+        (
+            "0009_page_tags",
+            include_str!("../migrations/0009_page_tags.sql"),
+        ),
+        (
+            "0010_memora_study",
+            include_str!("../migrations/0010_memora_study.sql"),
+        ),
+        (
+            "0011_statistics",
+            include_str!("../migrations/0011_statistics.sql"),
+        ),
+        (
+            "0012_review_local_day",
+            include_str!("../migrations/0012_review_local_day.sql"),
+        ),
+        (
+            "0013_statistics_time_buckets",
+            include_str!("../migrations/0013_statistics_time_buckets.sql"),
+        ),
+    ] {
+        connection
+            .execute_batch(sql)
+            .expect("apply legacy migration");
+        connection
+            .execute("INSERT INTO schema_migrations(id) VALUES(?1)", params![id])
+            .expect("record migration");
+    }
+
+    let timestamp = "2026-07-31T00:00:00.000Z";
+    connection
+        .execute(
+            "INSERT INTO decks (id, name, created_at, updated_at) VALUES ('deck-legacy', 'Legacy', ?1, ?1)",
+            params![timestamp],
+        )
+        .expect("insert legacy deck");
+    connection
+        .execute(
+            "INSERT INTO cards (
+                id, deck_id, front, back, state, due_at, created_at, updated_at
+             ) VALUES ('card-legacy', 'deck-legacy', 'Old front', 'Old back', 'review', ?1, ?1, ?1)",
+            params![timestamp],
+        )
+        .expect("insert legacy card");
+    drop(connection);
+
+    let database = LibraryDatabase::open(directory.path()).expect("upgrade database");
+    let card: (String, String, Option<String>, Option<String>) = database
+        .connection
+        .query_row(
+            "SELECT front, back, front_doc_json, back_doc_json
+             FROM cards WHERE id = 'card-legacy'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        )
+        .expect("read preserved card");
+
+    assert_eq!(card.0, "Old front");
+    assert_eq!(card.1, "Old back");
+    assert_eq!(
+        card.2, None,
+        "front_doc_json should stay NULL for legacy cards"
+    );
+    assert_eq!(
+        card.3, None,
+        "back_doc_json should stay NULL for legacy cards"
     );
 }
