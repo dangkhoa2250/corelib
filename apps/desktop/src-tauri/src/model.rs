@@ -72,6 +72,11 @@ pub struct LearningCardSummary {
     pub tags: Vec<String>,
     #[serde(rename = "frontLanguage")]
     pub front_language: Option<String>,
+    #[serde(rename = "frontDoc")]
+    pub front_doc: Option<serde_json::Value>,
+    #[serde(rename = "backDoc")]
+    pub back_doc: Option<serde_json::Value>,
+    pub media: Vec<CardMediaPayload>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -162,6 +167,9 @@ pub struct UpdateCardPayload {
     pub back: String,
     pub tags: Vec<String>,
     pub front_language: Option<String>,
+    pub front_doc: Option<serde_json::Value>,
+    pub back_doc: Option<serde_json::Value>,
+    pub media_draft_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -313,9 +321,9 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        BulkResultPayload, CardBrowserRowPayload, CardPagePayload, CardSourcePayload, DeckSummary,
-        LearningCardSummary, ReviewIntervalPayload, ReviewPreviewPayload, SearchResultPayload,
-        SelectionRect,
+        BulkResultPayload, CardBrowserRowPayload, CardMediaPayload, CardPagePayload,
+        CardSourcePayload, DeckSummary, LearningCardSummary, ReviewIntervalPayload,
+        ReviewPreviewPayload, SearchResultPayload, SelectionRect,
     };
 
     #[test]
@@ -353,6 +361,25 @@ mod tests {
             }),
             tags: vec!["biology".into()],
             front_language: Some("en".into()),
+            front_doc: Some(serde_json::json!({
+                "type": "doc",
+                "content": [],
+            })),
+            back_doc: None,
+            media: vec![CardMediaPayload {
+                id: "media-1".into(),
+                card_id: Some("card-1".into()),
+                draft_id: None,
+                mime_type: "image/png".into(),
+                relative_path: "card-1/media-1.png".into(),
+                source_type: "pixabay".into(),
+                pixabay_attribution: Some("Pixabay user 'x'".into()),
+                width: Some(640),
+                height: Some(480),
+                size_bytes: 2048,
+                created_at: "2026-07-09T09:00:00Z".into(),
+                updated_at: "2026-07-09T09:00:00Z".into(),
+            }],
         };
         let interval = ReviewIntervalPayload {
             due_at: "2026-07-11T09:00:00Z".into(),
@@ -398,6 +425,25 @@ mod tests {
                 },
                 "tags": ["biology"],
                 "frontLanguage": "en",
+                "frontDoc": {
+                    "type": "doc",
+                    "content": [],
+                },
+                "backDoc": null,
+                "media": [{
+                    "id": "media-1",
+                    "cardId": "card-1",
+                    "draftId": null,
+                    "mimeType": "image/png",
+                    "relativePath": "card-1/media-1.png",
+                    "sourceType": "pixabay",
+                    "pixabayAttribution": "Pixabay user 'x'",
+                    "width": 640,
+                    "height": 480,
+                    "sizeBytes": 2048,
+                    "createdAt": "2026-07-09T09:00:00Z",
+                    "updatedAt": "2026-07-09T09:00:00Z",
+                }],
             })
         );
         assert_eq!(

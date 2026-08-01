@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::library_db::{LibraryDatabase, LibraryDbError, Result};
-use crate::model::{CardSourcePayload, LearningCardSummary, SelectionRect};
+use crate::model::{
+    CardMediaPayload, CardSourcePayload, LearningCardSummary, SelectionRect,
+};
 use crate::scheduler::{
     CardScheduleInput, CardState, Rating, ReviewPreview, ReviewScheduler, ScheduledState,
     SchedulerConfig,
@@ -874,7 +876,7 @@ fn deck_effective_new_cards_per_day(tx: &Transaction<'_>, deck_id: &str) -> Resu
 
 fn hydrate_card_in_tx(tx: &Transaction<'_>, card_id: &str) -> Result<Option<LearningCardSummary>> {
     tx.query_row(
-        "SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language,learning_step FROM cards WHERE id=?1 AND deleted_at IS NULL",
+        "SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language,learning_step,front_doc_json,back_doc_json FROM cards WHERE id=?1 AND deleted_at IS NULL",
         params![card_id],
         |row| hydrate_card_row_in_tx(tx, row),
     )
@@ -916,6 +918,9 @@ fn hydrate_card_row_in_tx(
     let tags = tags_stmt
         .query_map(params![id], |r| r.get(0))?
         .collect::<std::result::Result<Vec<String>, _>>()?;
+    let front_doc = parse_doc_column(row.get::<_, Option<String>>(13)?)?;
+    let back_doc = parse_doc_column(row.get::<_, Option<String>>(14)?)?;
+    let media = card_media_in_tx(tx, &id)?;
     Ok(LearningCardSummary {
         id,
         deck_id,
@@ -932,7 +937,53 @@ fn hydrate_card_row_in_tx(
         learning_step: row.get(12)?,
         source,
         tags,
+        front_doc,
+        back_doc,
+        media,
     })
+}
+
+fn card_media_in_tx(
+    tx: &Transaction<'_>,
+    card_id: &str,
+) -> rusqlite::Result<Vec<CardMediaPayload>> {
+    let mut stmt = tx.prepare(
+        "SELECT id, card_id, draft_id, mime_type, relative_path, source_type, \
+         pixabay_attribution, width, height, size_bytes, created_at, updated_at \
+         FROM card_media WHERE card_id = ?1 ORDER BY created_at, id",
+    )?;
+    let rows = stmt.query_map(params![card_id], |r| {
+        Ok(CardMediaPayload {
+            id: r.get(0)?,
+            card_id: r.get(1)?,
+            draft_id: r.get(2)?,
+            mime_type: r.get(3)?,
+            relative_path: r.get(4)?,
+            source_type: r.get(5)?,
+            pixabay_attribution: r.get(6)?,
+            width: r.get(7)?,
+            height: r.get(8)?,
+            size_bytes: r.get(9)?,
+            created_at: r.get(10)?,
+            updated_at: r.get(11)?,
+        })
+    })?;
+    rows.collect::<std::result::Result<Vec<_>, _>>()
+}
+
+fn parse_doc_column(raw: Option<String>) -> rusqlite::Result<Option<serde_json::Value>> {
+    match raw {
+        None => Ok(None),
+        Some(raw) => serde_json::from_str(&raw)
+            .map(Some)
+            .map_err(|e| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    0,
+                    rusqlite::types::Type::Text,
+                    Box::new(e),
+                )
+            }),
+    }
 }
 
 fn rfc3339(value: DateTime<Utc>) -> String {

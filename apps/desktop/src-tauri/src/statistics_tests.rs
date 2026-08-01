@@ -1362,19 +1362,25 @@ fn create_card_for_document(
     front: &str,
 ) -> String {
     let card = database
-        .create_card(NewCard {
-            deck_name: deck_name.into(),
-            front: front.into(),
-            back: "answer".into(),
-            source: Some(NewCardSource {
-                document_id: document_id.into(),
-                page,
-                quote: format!("quote-{front}"),
-                rects_json: "[]".into(),
-            }),
-            tags: vec![],
-            front_language: None,
-        })
+        .create_card(
+            NewCard {
+                deck_name: deck_name.into(),
+                front: front.into(),
+                back: "answer".into(),
+                source: Some(NewCardSource {
+                    document_id: document_id.into(),
+                    page,
+                    quote: format!("quote-{front}"),
+                    rects_json: "[]".into(),
+                }),
+                tags: vec![],
+                front_language: None,
+                front_doc_json: None,
+                back_doc_json: None,
+                media_draft_id: None,
+            },
+            None,
+        )
         .expect("create card");
     card.id
 }

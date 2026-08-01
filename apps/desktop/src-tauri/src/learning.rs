@@ -6,8 +6,11 @@ use uuid::Uuid;
 
 use crate::{
     library_db::{LibraryDatabase, LibraryDbError, Result},
-    model::{CardSourcePayload, LearningCardSummary, SearchResultPayload, SelectionRect},
+    media::promote_referenced_in_tx,
+    model::{CardMediaPayload, CardSourcePayload, LearningCardSummary, SearchResultPayload, SelectionRect},
+    rich_document::{plain_text, validate_document},
 };
+use std::path::Path;
 
 pub struct NewCard {
     pub deck_name: String,
@@ -16,6 +19,9 @@ pub struct NewCard {
     pub source: Option<NewCardSource>,
     pub tags: Vec<String>,
     pub front_language: Option<String>,
+    pub front_doc_json: Option<serde_json::Value>,
+    pub back_doc_json: Option<serde_json::Value>,
+    pub media_draft_id: Option<String>,
 }
 pub struct UpdateCard {
     pub card_id: String,
@@ -23,6 +29,9 @@ pub struct UpdateCard {
     pub back: String,
     pub tags: Vec<String>,
     pub front_language: Option<String>,
+    pub front_doc_json: Option<serde_json::Value>,
+    pub back_doc_json: Option<serde_json::Value>,
+    pub media_draft_id: Option<String>,
 }
 pub struct UpdateAndMoveCard {
     pub card_id: String,
@@ -361,12 +370,96 @@ fn learning_timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
+/// Validates a raw rich document for one card face, returning the canonical
+/// value plus the derived plain text used for the legacy `front`/`back`
+/// columns (and full-text search).
+fn validate_face_doc(
+    raw: Option<serde_json::Value>,
+    label: &str,
+) -> Result<Option<(serde_json::Value, String)>> {
+    match raw {
+        Some(doc) => {
+            let canonical = validate_document(&doc)
+                .map_err(|e| invalid(&format!("{label} document: {e}")))?;
+            let text = plain_text(&canonical);
+            Ok(Some((canonical, text)))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Collects the media ids referenced by the front and back documents, in
+/// deterministic (sorted, deduplicated) order, for promotion and for the
+/// post-save unreferenced-media sweep.
+pub(crate) fn referenced_media_ids(
+    front_doc: &Option<serde_json::Value>,
+    back_doc: &Option<serde_json::Value>,
+) -> Vec<String> {
+    let mut ids: Vec<String> = Vec::new();
+    for doc in [front_doc, back_doc].into_iter().flatten() {
+        collect_image_media_ids(doc, &mut ids);
+    }
+    ids.sort();
+    ids.dedup();
+    ids
+}
+
+fn collect_image_media_ids(node: &serde_json::Value, out: &mut Vec<String>) {
+    if node.get("type").and_then(serde_json::Value::as_str) == Some("image") {
+        if let Some(id) = node
+            .get("attrs")
+            .and_then(|attrs| attrs.get("mediaId"))
+            .and_then(serde_json::Value::as_str)
+        {
+            out.push(id.to_string());
+        }
+    }
+    if let Some(children) = node.get("content").and_then(serde_json::Value::as_array) {
+        for child in children {
+            collect_image_media_ids(child, out);
+        }
+    }
+}
+
+/// Parses a stored `front_doc_json`/`back_doc_json` column into a JSON value,
+/// treating NULL as "no rich document" (legacy plain-text card).
+fn parse_doc_column(raw: Option<String>) -> rusqlite::Result<Option<serde_json::Value>> {
+    match raw {
+        None => Ok(None),
+        Some(raw) => serde_json::from_str(&raw)
+            .map(Some)
+            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(
+                0,
+                rusqlite::types::Type::Text,
+                Box::new(e),
+            )),
+    }
+}
+
 impl LibraryDatabase {
-    pub fn create_card(&mut self, input: NewCard) -> Result<LearningCardSummary> {
+    pub fn create_card(
+        &mut self,
+        input: NewCard,
+        media_root: Option<&Path>,
+    ) -> Result<LearningCardSummary> {
         let front_language = validate_front_language(&input.front_language)?;
+        let front_doc = validate_face_doc(input.front_doc_json, "front")?;
+        let back_doc = validate_face_doc(input.back_doc_json, "back")?;
         let deck = norm(&input.deck_name, "deck name is required")?;
-        let front = norm(&input.front, "front is required")?;
-        let back = norm(&input.back, "back is required")?;
+        let front = norm(
+            &front_doc
+                .as_ref()
+                .map(|(_, text)| text.clone())
+                .unwrap_or(input.front),
+            "front is required",
+        )?;
+        let back = norm(
+            &back_doc
+                .as_ref()
+                .map(|(_, text)| text.clone())
+                .unwrap_or(input.back),
+            "back is required",
+        )?;
         let source_quote = input
             .source
             .as_ref()
@@ -427,7 +520,25 @@ impl LibraryDatabase {
             }
         }
         let id = Uuid::new_v4().to_string();
-        tx.execute("INSERT INTO cards (id,deck_id,front,back,state,due_at,reps,lapses,created_at,updated_at,front_language) VALUES (?1,?2,?3,?4,'new',?5,0,0,?5,?5,?6)", params![id, deck_id, front, back, now, front_language])?;
+        let front_doc_json = front_doc
+            .as_ref()
+            .map(|(doc, _)| serde_json::to_string(doc).expect("canonical doc serializes"));
+        let back_doc_json = back_doc
+            .as_ref()
+            .map(|(doc, _)| serde_json::to_string(doc).expect("canonical doc serializes"));
+        tx.execute(
+            "INSERT INTO cards (id,deck_id,front,back,state,due_at,reps,lapses,created_at,updated_at,front_language,front_doc_json,back_doc_json) VALUES (?1,?2,?3,?4,'new',?5,0,0,?5,?5,?6,?7,?8)",
+            params![
+                id,
+                deck_id,
+                front,
+                back,
+                now,
+                front_language,
+                front_doc_json,
+                back_doc_json
+            ],
+        )?;
         if let Some(source) = input.source {
             tx.execute("INSERT INTO card_sources (card_id,document_id,page,quote,rects_json) VALUES (?1,?2,?3,?4,?5)", params![id, source.document_id.trim(), source.page, source.quote.trim(), source.rects_json])?;
         }
@@ -461,6 +572,17 @@ impl LibraryDatabase {
             "INSERT INTO card_text(card_id,body) VALUES(?1,?2)",
             params![id, body],
         )?;
+        if front_doc.is_some() || back_doc.is_some() {
+            let canonical = |doc: &Option<(serde_json::Value, String)>| {
+                doc.as_ref().map(|(value, _)| value.clone())
+            };
+            let referenced = referenced_media_ids(&canonical(&front_doc), &canonical(&back_doc));
+            if let Some(draft_id) = input.media_draft_id.as_deref() {
+                let root = media_root.ok_or_else(|| invalid("media storage is unavailable"))?;
+                promote_referenced_in_tx(&tx, root, &id, draft_id, &referenced)
+                    .map_err(|e| invalid(&e))?;
+            }
+        }
         tx.commit()?;
         self.card_by_id(&id)?
             .ok_or(LibraryDbError::DocumentNotFound)
@@ -484,7 +606,7 @@ impl LibraryDatabase {
     }
 
     pub fn card_by_id(&self, id: &str) -> Result<Option<LearningCardSummary>> {
-        let exists = self.connection.query_row("SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language,learning_step FROM cards WHERE id=?1 AND deleted_at IS NULL", params![id], |r| self.hydrate_card(r)).optional()?;
+        let exists = self.connection.query_row("SELECT id,deck_id,front,back,state,due_at,reps,lapses,stability,difficulty,last_review_at,front_language,learning_step,front_doc_json,back_doc_json FROM cards WHERE id=?1 AND deleted_at IS NULL", params![id], |r| self.hydrate_card(r)).optional()?;
         Ok(exists)
     }
 
@@ -518,6 +640,9 @@ impl LibraryDatabase {
         let tags = tags_stmt
             .query_map(params![id], |r| r.get(0))?
             .collect::<std::result::Result<Vec<String>, _>>()?;
+        let front_doc = parse_doc_column(row.get::<_, Option<String>>(13)?)?;
+        let back_doc = parse_doc_column(row.get::<_, Option<String>>(14)?)?;
+        let media = self.card_media(&id)?;
         Ok(LearningCardSummary {
             id,
             deck_id,
@@ -534,7 +659,36 @@ impl LibraryDatabase {
             learning_step: row.get(12)?,
             source,
             tags,
+            front_doc,
+            back_doc,
+            media,
         })
+    }
+
+    /// Loads the committed media rows for a card, ordered deterministically.
+    fn card_media(&self, card_id: &str) -> rusqlite::Result<Vec<CardMediaPayload>> {
+        let mut stmt = self.connection.prepare(
+            "SELECT id, card_id, draft_id, mime_type, relative_path, source_type, \
+             pixabay_attribution, width, height, size_bytes, created_at, updated_at \
+             FROM card_media WHERE card_id = ?1 ORDER BY created_at, id",
+        )?;
+        let rows = stmt.query_map(params![card_id], |r| {
+            Ok(CardMediaPayload {
+                id: r.get(0)?,
+                card_id: r.get(1)?,
+                draft_id: r.get(2)?,
+                mime_type: r.get(3)?,
+                relative_path: r.get(4)?,
+                source_type: r.get(5)?,
+                pixabay_attribution: r.get(6)?,
+                width: r.get(7)?,
+                height: r.get(8)?,
+                size_bytes: r.get(9)?,
+                created_at: r.get(10)?,
+                updated_at: r.get(11)?,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
     }
 
     pub fn card_source(&self, id: &str) -> Result<Option<CardSourcePayload>> {
@@ -909,10 +1063,28 @@ impl LibraryDatabase {
         })
     }
 
-    pub fn update_card(&mut self, input: UpdateCard) -> Result<LearningCardSummary> {
+    pub fn update_card(
+        &mut self,
+        input: UpdateCard,
+        media_root: Option<&Path>,
+    ) -> Result<LearningCardSummary> {
         let front_language = validate_front_language(&input.front_language)?;
-        let front = norm(&input.front, "front is required")?;
-        let back = norm(&input.back, "back is required")?;
+        let front_doc = validate_face_doc(input.front_doc_json, "front")?;
+        let back_doc = validate_face_doc(input.back_doc_json, "back")?;
+        let front = norm(
+            &front_doc
+                .as_ref()
+                .map(|(_, text)| text.clone())
+                .unwrap_or(input.front),
+            "front is required",
+        )?;
+        let back = norm(
+            &back_doc
+                .as_ref()
+                .map(|(_, text)| text.clone())
+                .unwrap_or(input.back),
+            "back is required",
+        )?;
         let mut tags = Vec::new();
         for tag in input.tags {
             let tag = tag.trim();
@@ -933,9 +1105,15 @@ impl LibraryDatabase {
             return Err(invalid("card not found or is in Trash"));
         }
 
+        let front_doc_json = front_doc
+            .as_ref()
+            .map(|(doc, _)| serde_json::to_string(doc).expect("canonical doc serializes"));
+        let back_doc_json = back_doc
+            .as_ref()
+            .map(|(doc, _)| serde_json::to_string(doc).expect("canonical doc serializes"));
         tx.execute(
-            "UPDATE cards SET front=?1, back=?2, updated_at=?3, front_language=?4 WHERE id=?5",
-            params![front, back, now, front_language, input.card_id],
+            "UPDATE cards SET front=?1, back=?2, updated_at=?3, front_language=?4, front_doc_json=?5, back_doc_json=?6 WHERE id=?7",
+            params![front, back, now, front_language, front_doc_json, back_doc_json, input.card_id],
         )?;
 
         tx.execute(
@@ -985,7 +1163,20 @@ impl LibraryDatabase {
             params![input.card_id, body],
         )?;
 
+        if front_doc.is_some() || back_doc.is_some() {
+            let canonical = |doc: &Option<(serde_json::Value, String)>| {
+                doc.as_ref().map(|(value, _)| value.clone())
+            };
+            let referenced = referenced_media_ids(&canonical(&front_doc), &canonical(&back_doc));
+            if let Some(draft_id) = input.media_draft_id.as_deref() {
+                let root = media_root.ok_or_else(|| invalid("media storage is unavailable"))?;
+                promote_referenced_in_tx(&tx, root, &input.card_id, draft_id, &referenced)
+                    .map_err(|e| invalid(&e))?;
+            }
+        }
+
         tx.commit()?;
+
         self.card_by_id(&input.card_id)?
             .ok_or(LibraryDbError::DocumentNotFound)
     }

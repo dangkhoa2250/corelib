@@ -714,6 +714,9 @@ pub struct CreateCardInput {
     #[serde(default)]
     pub tags: Vec<String>,
     pub front_language: Option<String>,
+    pub front_doc: Option<serde_json::Value>,
+    pub back_doc: Option<serde_json::Value>,
+    pub media_draft_id: Option<String>,
 }
 
 fn learning_lock(
@@ -723,6 +726,20 @@ fn learning_lock(
         .database
         .lock()
         .map_err(|_| "library database is unavailable".to_owned())
+}
+
+/// Validates a rich document at the command boundary so the frontend receives
+/// a structured error (including the failing node path) before any write.
+fn validate_face_doc_command(
+    raw: Option<serde_json::Value>,
+    label: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    match raw {
+        Some(doc) => crate::rich_document::validate_document(&doc)
+            .map(Some)
+            .map_err(|e| format!("{label} document: {e}")),
+        None => Ok(None),
+    }
 }
 
 #[tauri::command]
@@ -747,15 +764,24 @@ pub fn create_card(
             })
         })
         .transpose()?;
+    let front_doc_json = validate_face_doc_command(input.front_doc, "front")?;
+    let back_doc_json = validate_face_doc_command(input.back_doc, "back")?;
+    let media_root = media_store(&state).media_root().to_path_buf();
     learning_lock(&state)?
-        .create_card(NewCard {
-            deck_name: input.deck_name,
-            front: input.front,
-            back: input.back,
-            source,
-            tags: input.tags,
-            front_language: input.front_language,
-        })
+        .create_card(
+            NewCard {
+                deck_name: input.deck_name,
+                front: input.front,
+                back: input.back,
+                source,
+                tags: input.tags,
+                front_language: input.front_language,
+                front_doc_json,
+                back_doc_json,
+                media_draft_id: input.media_draft_id,
+            },
+            Some(&media_root),
+        )
         .map_err(|e| e.to_string())
 }
 
@@ -1027,15 +1053,35 @@ pub fn update_card(
     state: State<'_, LibraryStore>,
 ) -> Result<LearningCardSummary, String> {
     use crate::learning::UpdateCard;
+    let front_doc_json = validate_face_doc_command(payload.front_doc, "front")?;
+    let back_doc_json = validate_face_doc_command(payload.back_doc, "back")?;
+    let referenced =
+        crate::learning::referenced_media_ids(&front_doc_json, &back_doc_json);
+    let has_docs = front_doc_json.is_some() || back_doc_json.is_some();
+    let media_root = media_store(&state).media_root().to_path_buf();
+    let card_id = payload.card_id;
     learning_lock(&state)?
-        .update_card(UpdateCard {
-            card_id: payload.card_id,
-            front: payload.front,
-            back: payload.back,
-            tags: payload.tags,
-            front_language: payload.front_language,
-        })
-        .map_err(|e| e.to_string())
+        .update_card(
+            UpdateCard {
+                card_id: card_id.clone(),
+                front: payload.front,
+                back: payload.back,
+                tags: payload.tags,
+                front_language: payload.front_language,
+                front_doc_json,
+                back_doc_json,
+                media_draft_id: payload.media_draft_id,
+            },
+            Some(&media_root),
+        )
+        .map_err(|e| e.to_string())?;
+    if has_docs {
+        media_store(&state).remove_unreferenced_media(&card_id, &referenced)?;
+    }
+    learning_lock(&state)?
+        .card_by_id(&card_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "card not found after update".to_owned())
 }
 
 #[tauri::command]
