@@ -436,7 +436,7 @@ test("learns and practices a card without changing the real schedule", async ({ 
   await page.addInitScript(installLearningMock, { seedCards: seed, learningDelayMs: 1_500 });
 
   page.on("dialog", (dialog) => dialog.accept());
-  await page.goto("http://127.0.0.1:1420");
+  await page.goto("http://127.0.0.1:1421");
 
   await page.getByRole("button", { name: "Memora" }).click();
   await expect(page.getByRole("button", { name: "Biology", exact: true })).toBeVisible();
@@ -476,7 +476,7 @@ test("changes settings and deck override", async ({ page }) => {
   await page.addInitScript(installLearningMock, { seedCards: seed });
 
   page.on("dialog", (dialog) => dialog.accept());
-  await page.goto("http://127.0.0.1:1420");
+  await page.goto("http://127.0.0.1:1421");
 
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByRole("button", { name: "Memora", exact: true })).toBeVisible();
