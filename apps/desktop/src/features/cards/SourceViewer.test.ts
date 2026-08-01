@@ -71,3 +71,13 @@ test("caches completed full-document searches for the same PDF and quote", () =>
   expect(viewer).toContain("const searchCacheKey = `${source.documentId}:${searchQuery}`;");
   expect(viewer).toContain("completedSearchCache.set(searchCacheKey, matches);");
 });
+
+test("supports panel and modal presentation without duplicating modal chrome", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+
+  expect(viewer).toContain('presentation = "panel"');
+  expect(viewer).toContain("source-viewer--${presentation}");
+  expect(viewer).toContain('presentation === "panel"');
+  expect(viewer).toContain('className="source-viewer__pdf-content"');
+});

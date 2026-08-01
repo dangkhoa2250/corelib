@@ -1,9 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { YouGlishPanel } from "./YouGlishPanel";
 
 test("renders the official embedded player URL without waiting for the widget handshake", () => {
-  render(<YouGlishPanel word="Algorithms" frontLanguage="en" onClose={vi.fn()} />);
+  render(<YouGlishPanel word="Algorithms" frontLanguage="en" />);
 
   const player = screen.getByTitle("YouGlish pronunciation for Algorithms");
   expect(player).toHaveAttribute(
@@ -14,13 +14,13 @@ test("renders the official embedded player URL without waiting for the widget ha
 });
 
 test("uses the same surface color as the flashcard and source viewer", () => {
-  const { container } = render(<YouGlishPanel word="Algorithms" frontLanguage="en" onClose={vi.fn()} />);
+  const { container } = render(<YouGlishPanel word="Algorithms" frontLanguage="en" />);
 
   expect(container.firstElementChild).toHaveStyle({ background: "var(--main-bg)" });
 });
 
 test("locks the player height at the first resize after a caption change", () => {
-  render(<YouGlishPanel word="Algorithms" frontLanguage="en" onClose={vi.fn()} />);
+  render(<YouGlishPanel word="Algorithms" frontLanguage="en" />);
 
   const player = screen.getByTitle("YouGlish pronunciation for Algorithms");
   const widgetId = player.getAttribute("data-youglish-id");
@@ -34,4 +34,12 @@ test("locks the player height at the first resize after a caption change", () =>
   send(2, 980);
 
   expect(screen.getByTestId("youglish-video-viewport")).toHaveStyle({ height: "480px" });
+});
+
+test("renders as a chrome-free panel with attribution", () => {
+  const { container } = render(<YouGlishPanel word="Algorithms" frontLanguage="en" />);
+
+  expect(container.querySelector(".youglish-panel")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Close YouGlish panel" })).toBeNull();
+  expect(container.querySelector(".youglish-panel__attribution")).toBeTruthy();
 });

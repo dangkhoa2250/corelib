@@ -26,7 +26,8 @@ function loadPdfViewerModule() {
 export interface SourceViewerProps {
   source: CardSource;
   getDocumentFileUrl: (id: string) => Promise<string>;
-  onClose: () => void;
+  onClose?: () => void;
+  presentation?: "panel" | "modal";
 }
 
 interface HighlightRect {
@@ -134,7 +135,12 @@ async function searchDocument(
   return matches.sort((a, b) => a.pageIndex - b.pageIndex);
 }
 
-export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceViewerProps) {
+export function SourceViewer({
+  source,
+  getDocumentFileUrl,
+  onClose,
+  presentation = "panel",
+}: SourceViewerProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewerRef = useRef<HTMLDivElement | null>(null);
   const pdfViewerRef = useRef<PDFViewerType | null>(null);
@@ -406,9 +412,9 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
   const hasQuery = source.quote.trim().length > 0;
 
   return (
-    <section className="source-viewer" aria-label="Card source PDF">
+    <section className={`source-viewer source-viewer--${presentation}`} aria-label="Card source PDF">
       <header className="source-viewer__header">
-        <h3 className="source-viewer__title">Source</h3>
+        {presentation === "panel" && <h3 className="source-viewer__title">Source</h3>}
         <span className="source-viewer__page-label">Page {currentPage}</span>
         {hasQuery && matchCount > 0 && (
           <div className="source-viewer__match-nav">
@@ -435,14 +441,16 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
         {hasQuery && searched && !searching && matchCount === 0 && (
           <span className="source-viewer__match-empty">Not found</span>
         )}
-        <button
-          type="button"
-          className="source-viewer__close-btn"
-          onClick={onClose}
-          aria-label="Close source viewer"
-        >
-          ×
-        </button>
+        {presentation === "panel" && (
+          <button
+            type="button"
+            className="source-viewer__close-btn"
+            onClick={onClose}
+            aria-label="Close source viewer"
+          >
+            ×
+          </button>
+        )}
       </header>
       <div className="source-viewer__page">
         {loading && <div className="source-viewer__loading">Loading PDF…</div>}
@@ -452,7 +460,9 @@ export function SourceViewer({ source, getDocumentFileUrl, onClose }: SourceView
           className="source-viewer__pdf-container"
           style={{ position: "absolute", inset: 0 }}
         >
-          <div ref={viewerRef} className="pdfViewer" />
+          <div className="source-viewer__pdf-content">
+            <div ref={viewerRef} className="pdfViewer" />
+          </div>
         </ScrollArea>
       </div>
     </section>

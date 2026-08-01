@@ -1,10 +1,10 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { SUPPORTED_LANGUAGES } from "../../domain/learning";
 
 interface YouGlishPanelProps {
-  word: string | null;
-  frontLanguage: string | null;
-  onClose: () => void;
+  word: string;
+  frontLanguage?: string;
 }
 
 const FLUENT_FOOTER_HEIGHT = 240;
@@ -14,7 +14,7 @@ export function youGlishEmbedUrl(word: string, language: string, widgetId: strin
   return `https://youglish.com/pronounce/${encodeURIComponent(word)}/${language.toLowerCase()}/all/emb=1&e_id=${encodeURIComponent(widgetId)}&e_comp=8&e_notif_h=1`;
 }
 
-export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelProps) {
+export function YouGlishPanel({ word, frontLanguage }: YouGlishPanelProps) {
   const rawWidgetId = useId();
   const widgetId = `youglish-${rawWidgetId.replace(/[^a-z0-9]/gi, "")}`;
   const [viewportHeight, setViewportHeight] = useState(640);
@@ -46,12 +46,18 @@ export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelPro
     return () => window.removeEventListener("message", handleYouGlishMessage);
   }, [widgetId]);
 
-  if (!word) return null;
-
   const languageName = frontLanguage ? SUPPORTED_LANGUAGES[frontLanguage.toLowerCase()] : undefined;
+  const viewportStyle = {
+    height: `${viewportHeight}px`,
+    overflow: "hidden",
+    borderRadius: "8px",
+    background: "var(--surface-1)",
+    "--youglish-viewport-height": `${viewportHeight}px`,
+  } as CSSProperties;
 
   return (
-    <div
+    <section
+      className="youglish-panel"
       style={{
         marginTop: "16px",
         padding: "16px",
@@ -63,30 +69,10 @@ export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelPro
         gap: "12px",
       }}
     >
-      <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-primary)" }}>
-          Pronunciation for <span style={{ color: "var(--link)" }}>"{word}"</span>
-        </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close YouGlish panel"
-          style={{
-            background: "transparent",
-            border: "none",
-            fontSize: "18px",
-            cursor: "pointer",
-            color: "var(--text-secondary)",
-            padding: "4px 8px",
-          }}
-        >
-          ✕
-        </button>
-      </header>
-
       {languageName ? (
-        <div data-testid="youglish-video-viewport" style={{ height: `${viewportHeight}px`, overflow: "hidden", borderRadius: "8px", background: "var(--surface-1)" }}>
+        <div className="youglish-panel__viewport" data-testid="youglish-video-viewport" style={viewportStyle}>
           <iframe
+            className="youglish-panel__iframe"
             title={`YouGlish pronunciation for ${word}`}
             data-youglish-id={widgetId}
             src={youGlishEmbedUrl(word, languageName, widgetId)}
@@ -95,14 +81,14 @@ export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelPro
           />
         </div>
       ) : (
-        <div style={{ padding: "12px", borderRadius: "8px", color: "var(--warning)", background: "var(--color-danger-bg-soft)", fontSize: "13px" }}>
+        <div className="youglish-panel__error" role="alert" style={{ padding: "12px", borderRadius: "8px", color: "var(--warning)", background: "var(--color-danger-bg-soft)", fontSize: "13px" }}>
           {!frontLanguage
             ? "No confirmed front language. Choose the front language in card edit to use YouGlish."
             : `Unsupported front language "${frontLanguage}". Choose a supported language in card edit to use YouGlish.`}
         </div>
       )}
 
-      <footer style={{ display: "flex", justifyContent: "flex-end", fontSize: "11px", color: "var(--text-secondary)" }}>
+      <footer className="youglish-panel__attribution" style={{ display: "flex", justifyContent: "flex-end", fontSize: "11px", color: "var(--text-secondary)" }}>
         Powered by&nbsp;
         <a
           href="https://youglish.com"
@@ -113,6 +99,6 @@ export function YouGlishPanel({ word, frontLanguage, onClose }: YouGlishPanelPro
           YouGlish.com
         </a>
       </footer>
-    </div>
+    </section>
   );
 }
