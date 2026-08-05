@@ -212,7 +212,7 @@ pub fn list_models(provider: &str) -> Result<Vec<AiModel>, String> {
     } else {
         parse_openai_models(&value)
     };
-    models.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    models.sort_by_key(|model| model.name.to_lowercase());
     Ok(models)
 }
 

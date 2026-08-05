@@ -5,6 +5,9 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import "./styles/tokens.css";
 import "./features/statistics/statistics.css";
 import "pdfjs-dist/web/pdf_viewer.css";
+import { desktopPlatform } from "./lib/platform";
+
+document.documentElement.dataset.platform = desktopPlatform();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

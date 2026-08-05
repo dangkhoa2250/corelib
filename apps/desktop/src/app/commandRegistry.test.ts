@@ -29,6 +29,8 @@ function createContext(overrides: Record<string, unknown> = {}) {
     importPdf: vi.fn(),
     reviewToday: vi.fn(),
     setTheme: vi.fn(),
+    setTranslationEngine: vi.fn(),
+    windowsOnDeviceTranslationAvailable: false,
     ...overrides,
   };
 }
@@ -130,4 +132,21 @@ test("executes a Command Palette theme action", async () => {
   await entry.execute();
 
   expect(setTheme).toHaveBeenCalledWith("dark");
+});
+
+test("registers Windows on-device translation as a Command Palette setting action", async () => {
+  const setTranslationEngine = vi.fn();
+  const registry = createCommandRegistry(createContext({
+    setTranslationEngine,
+    windowsOnDeviceTranslationAvailable: true,
+  }));
+
+  const [entry] = await registry.search("command-palette", "offline translation");
+  expect(entry).toMatchObject({
+    id: "action.translation-windows-on-device",
+    surface: "command-palette",
+    breadcrumb: ["Settings", "Models"],
+  });
+  await entry.execute();
+  expect(setTranslationEngine).toHaveBeenCalledWith("windows-translation");
 });

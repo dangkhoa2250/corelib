@@ -2,6 +2,7 @@ import type { LibraryDocument } from "../domain/document";
 import type { Deck } from "../domain/learning";
 import type { SearchResult } from "../lib/learning";
 import { PUBLIC_ROUTE_CATALOG, type AppRoute, type SettingsSection } from "./routes";
+import type { TranslationEngineId } from "../domain/translation";
 
 export type CommandSurface = "quick-open" | "command-palette";
 
@@ -34,6 +35,8 @@ export interface CommandContext {
   importPdf: () => void | Promise<void>;
   reviewToday: () => void | Promise<void>;
   setTheme: (theme: "light" | "dark" | "system") => void;
+  setTranslationEngine: (engine: TranslationEngineId) => void;
+  windowsOnDeviceTranslationAvailable: boolean;
 }
 
 function fuzzyMatch(text: string, query: string): boolean {
@@ -131,6 +134,16 @@ function commandActions(context: CommandContext): CommandEntry[] {
     action("action.theme-light", "Theme: Light", ["light theme"], ["Settings", "Appearance"], "Settings", () => context.setTheme("light")),
     action("action.theme-dark", "Theme: Dark", ["dark theme"], ["Settings", "Appearance"], "Settings", () => context.setTheme("dark")),
     action("action.theme-system", "Theme: System", ["system theme", "appearance"], ["Settings", "Appearance"], "Settings", () => context.setTheme("system")),
+    ...(context.windowsOnDeviceTranslationAvailable
+      ? [action(
+        "action.translation-windows-on-device",
+        "Translation: Windows on-device",
+        ["offline translation", "no api key", "edge translator"],
+        ["Settings", "Models"],
+        "Settings",
+        () => context.setTranslationEngine("windows-translation"),
+      )]
+      : []),
   ];
 }
 
