@@ -1,0 +1,3 @@
+# Standardize JSON contracts without mandating JSON storage
+
+Plugin manifests, Commands, Resources, Events, exports, and other cross-boundary values use versioned JSON Schema contracts, but Plugins may store their private state through the isolated storage form appropriate to the workload, including JSON or key-value data, indexed records, and blobs. Plugin Events identify affected Resources and revisions while consumers fetch authoritative state through Commands instead of treating event payloads as duplicated state; this preserves interoperability and portability without sacrificing transactions, indexing, partial updates, or large-data performance.

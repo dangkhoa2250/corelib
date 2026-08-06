@@ -1,0 +1,3 @@
+# Make Plugin updates atomic and permission-aware
+
+Plugin Releases are immutable, and Corelib may automatically install only compatible updates that do not expand Plugin Permissions. Each update is verified in staging and switched atomically while retaining the previous package for health-check rollback; Plugin Data is backed up before migration, and updates that add permissions, break compatibility, or make data rollback unsafe require explicit approval and recovery guidance. This consumes additional storage and constrains migration design, but prevents routine updates from silently expanding authority or leaving a Plugin unusable.

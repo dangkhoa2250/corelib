@@ -1,0 +1,3 @@
+# Keep the Corelib host minimal
+
+Corelib retains only non-removable Core Services for the shell and shared UI, Plugin lifecycle and Marketplace, signatures and updates, dependency resolution, Capability and Permission enforcement, isolated storage, command coordination, accounts, diagnostics, recovery, and Agent Runtime safety. Library, Memora, Statistics, Drive integration, translation and AI providers, and future everyday functions become removable First-party Plugins; this increases the migration cost for today's tightly composed app but prevents current product features from becoming permanent dependencies of the platform.

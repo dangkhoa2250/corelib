@@ -1,0 +1,3 @@
+# Gate Agent access to Plugin Commands
+
+The Agent Runtime exposes a Plugin Command to AI only when its Publisher marks it agent-enabled, the user provides an Agent Grant, and Corelib does not classify it as host-security or administrative authority. Existing Plugin Permissions remain mandatory, high-impact operations still require execution-time confirmation, and credentials, permission grants, unsigned-code settings, Marketplace review, and Agent safety controls remain human-only; this limits fully autonomous behavior but prevents plugin metadata or an AI model from granting itself authority.

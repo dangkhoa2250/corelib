@@ -1,0 +1,3 @@
+# Confirm Agent Plans according to impact
+
+The Agent Runtime may execute granted read-only steps without confirmation, requests one plan-level confirmation for grouped reversible changes, and requires targeted confirmation for destructive, financial, public, messaging, or external-sharing actions. An Agent Plan that materially changes during execution pauses for renewed approval, while progress, failures, cancellation, and available undo actions remain visible in execution history; this adds interruptions around consequential work but keeps cross-Plugin automation understandable and user-controlled.
