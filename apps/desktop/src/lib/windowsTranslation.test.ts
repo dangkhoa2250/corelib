@@ -7,14 +7,22 @@ import {
 } from "./windowsTranslation";
 
 describe("Windows on-device translation", () => {
-  it("feature-detects the WebView2 Translator API", () => {
-    expect(windowsOnDeviceTranslationAvailable({})).toBe(false);
-    expect(windowsOnDeviceTranslationAvailable({
+  it("requires a usable language-pair model instead of only a visible API", async () => {
+    await expect(windowsOnDeviceTranslationAvailable({})).resolves.toBe(false);
+    const unavailable = vi.fn().mockResolvedValue("unavailable");
+    await expect(windowsOnDeviceTranslationAvailable({
       Translator: {
-        availability: vi.fn(),
+        availability: unavailable,
         create: vi.fn(),
       },
-    })).toBe(true);
+    })).resolves.toBe(false);
+    expect(unavailable).toHaveBeenCalledWith({ sourceLanguage: "en", targetLanguage: "ja" });
+    await expect(windowsOnDeviceTranslationAvailable({
+      Translator: {
+        availability: vi.fn().mockResolvedValue("downloadable"),
+        create: vi.fn(),
+      },
+    })).resolves.toBe(true);
   });
 
   it("downloads or loads a language-pair model and translates locally", async () => {

@@ -38,11 +38,22 @@ function browserRuntime(): WindowsTranslationRuntime {
   return globalThis as WindowsTranslationRuntime;
 }
 
-export function windowsOnDeviceTranslationAvailable(
+export async function windowsOnDeviceTranslationAvailable(
   runtime: WindowsTranslationRuntime = browserRuntime(),
-): boolean {
-  return typeof runtime.Translator?.availability === "function"
-    && typeof runtime.Translator.create === "function";
+): Promise<boolean> {
+  const factory = runtime.Translator;
+  if (typeof factory?.availability !== "function" || typeof factory.create !== "function") {
+    return false;
+  }
+
+  try {
+    // WebView2 can expose the Translator API even when its model runtime cannot
+    // be used. Probe the required English-to-Japanese pair instead of treating
+    // the presence of the global object as proof that translation will work.
+    return await factory.availability({ sourceLanguage: "en", targetLanguage: "ja" }) !== "unavailable";
+  } catch {
+    return false;
+  }
 }
 
 async function detectSourceLanguage(

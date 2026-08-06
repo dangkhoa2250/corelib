@@ -52,7 +52,7 @@ function matchesSearch(item: SettingsNavItem, query: string): boolean {
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
 const defaultAppleTranslationAvailable = async () => desktopPlatform() === "macos";
-const defaultWindowsTranslationAvailable = async () => windowsOnDeviceTranslationAvailable();
+const defaultWindowsTranslationAvailable = windowsOnDeviceTranslationAvailable;
 
 function storage(): Storage | null {
   const candidate = typeof window !== "undefined" ? window.localStorage : null;
@@ -99,7 +99,9 @@ export function readTranslationPreference(): { engineId: TranslationEngineId | n
   const candidate = storage();
   const platform = desktopPlatform();
   const appleCandidate = platform === "macos" || platform === "unknown";
-  const windowsCandidate = platform === "windows" && windowsOnDeviceTranslationAvailable();
+  // Windows model availability is asynchronous and is resolved by the effect
+  // below. Avoid selecting the engine merely because WebView2 exposes its API.
+  const windowsCandidate = false;
   return {
     engineId: candidate
       ? readTranslationSelection(candidate, appleCandidate, windowsCandidate)
@@ -134,9 +136,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
     const platform = desktopPlatform();
     return platform === "macos" || platform === "unknown";
   });
-  const [windowsAvailable, setWindowsAvailable] = useState(() => (
-    desktopPlatform() === "windows" && windowsOnDeviceTranslationAvailable()
-  ));
+  const [windowsAvailable, setWindowsAvailable] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState(initialPreference.targetLanguage);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

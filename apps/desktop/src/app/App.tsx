@@ -325,9 +325,23 @@ export function App({
   const [driveEntries, setDriveEntries] = useState<DriveEntry[]>([]);
   const [driveFolderStack, setDriveFolderStack] = useState<string[]>([]);
   const [driveCurrentFolderId, setDriveCurrentFolderId] = useState<string | undefined>();
+  const [windowsTranslationAvailableForCommands, setWindowsTranslationAvailableForCommands] = useState(false);
   const requestId = useRef(0);
   const pendingImportId = useRef(0);
   const quickOpenRef = useRef<CommandPaletteHandle>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve(aiApi.windowsTranslationAvailable?.() ?? false).then(
+      (available) => {
+        if (!cancelled) setWindowsTranslationAvailableForCommands(available);
+      },
+      () => {
+        if (!cancelled) setWindowsTranslationAvailableForCommands(false);
+      },
+    );
+    return () => { cancelled = true; };
+  }, [aiApi.windowsTranslationAvailable]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
@@ -651,8 +665,8 @@ export function App({
     reviewToday: handleReviewToday,
     setTheme,
     setTranslationEngine: handleSetTranslationEngine,
-    windowsOnDeviceTranslationAvailable: windowsOnDeviceTranslationAvailable(),
-  }), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, handleSetTranslationEngine, setTheme]);
+    windowsOnDeviceTranslationAvailable: windowsTranslationAvailableForCommands,
+  }), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, handleSetTranslationEngine, setTheme, windowsTranslationAvailableForCommands]);
 
   const palette = (
     <>
