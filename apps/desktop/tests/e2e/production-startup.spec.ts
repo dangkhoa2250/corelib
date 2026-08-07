@@ -33,6 +33,10 @@ test("the production bundle renders the signed-in application", async ({ page })
               entitlements: { featureKeys: [], refreshedAt: "2026-08-07T00:00:00Z" },
             };
           }
+          if (command === "load_plugin_lifecycle_state") {
+            return { state: { schemaVersion: 1, accounts: {} }, notices: [] };
+          }
+          if (command === "save_plugin_lifecycle_state") return undefined;
           if (command === "list_documents" || command === "list_decks") return [];
           return undefined;
         },
