@@ -1,5 +1,9 @@
 import type { PluginManifest } from "./manifest";
 import type { CoreContributionDefinition } from "./registry";
+import {
+  PLUGIN_LIFECYCLE_COMMAND_DECLARATIONS,
+  PLUGIN_LIFECYCLE_COMMAND_IDS,
+} from "./lifecycleCommands";
 
 const emptyReservedContributions = {
   searchProviders: [],
@@ -11,6 +15,15 @@ const emptyReservedContributions = {
 >;
 
 export const CORE_CONTRIBUTIONS = [
+  {
+    ownerId: "plugin-lifecycle",
+    contributions: {
+      ...emptyReservedContributions,
+      surfaces: [],
+      commands: [...PLUGIN_LIFECYCLE_COMMAND_DECLARATIONS],
+    },
+    declaredBindings: PLUGIN_LIFECYCLE_COMMAND_IDS,
+  },
   {
     ownerId: "home",
     contributions: {

@@ -125,6 +125,25 @@ export const PLUGIN_MANIFEST_SCHEMA = {
               effect: { enum: ["read", "write", "destructive", "external"] },
               bindingId: contributionIdentifier,
               availabilityId: contributionIdentifier,
+              input: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  schemaVersion: { type: "integer", minimum: 1 },
+                  schema: { type: "object" },
+                },
+                required: ["schemaVersion", "schema"],
+              },
+              output: {
+                type: "object",
+                additionalProperties: false,
+                properties: {
+                  schemaVersion: { type: "integer", minimum: 1 },
+                  schema: { type: "object" },
+                },
+                required: ["schemaVersion", "schema"],
+              },
+              confirmation: { enum: ["never", "when-required"] },
             },
             required: [
               ...commandPresentation.required,

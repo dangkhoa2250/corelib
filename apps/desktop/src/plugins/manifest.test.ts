@@ -116,4 +116,33 @@ describe("validatePluginManifest", () => {
       );
     }
   });
+
+  it("validates versioned Command schemas and confirmation policy", () => {
+    const command = {
+      id: "action.example",
+      title: "Example action",
+      aliases: [],
+      breadcrumb: ["Example"],
+      group: "Actions",
+      audiences: ["agent"],
+      effect: "write",
+      bindingId: "binding.example",
+      input: { schemaVersion: 1, schema: { type: "object" } },
+      output: { schemaVersion: 1, schema: { type: "object" } },
+      confirmation: "when-required",
+    } as const;
+    const candidate = {
+      ...validManifest,
+      contributions: { ...validManifest.contributions, commands: [command] },
+    };
+
+    expect(validatePluginManifest(candidate)).toEqual({ ok: true, manifest: candidate });
+    expect(validatePluginManifest({
+      ...candidate,
+      contributions: {
+        ...candidate.contributions,
+        commands: [{ ...command, confirmation: "always-bypass" }],
+      },
+    }).ok).toBe(false);
+  });
 });

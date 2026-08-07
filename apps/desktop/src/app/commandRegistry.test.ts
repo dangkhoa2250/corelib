@@ -177,7 +177,10 @@ test("covers every registered executable binding exactly once", () => {
     DEFAULT_PLUGIN_REGISTRY.listSurfaces().map((surface) => surface.bindingId).sort(),
   );
   expect([...COMMAND_REGISTRY_BINDINGS.commands].sort()).toEqual(
-    DEFAULT_PLUGIN_REGISTRY.listCommands().map((command) => command.bindingId).sort(),
+    DEFAULT_PLUGIN_REGISTRY.listCommands()
+      .filter((command) => command.audiences.includes("human"))
+      .map((command) => command.bindingId)
+      .sort(),
   );
   expect([...COMMAND_REGISTRY_BINDINGS.searchProviders].sort()).toEqual(
     DEFAULT_PLUGIN_REGISTRY
@@ -202,4 +205,18 @@ test("registers Windows on-device translation as a Command Palette setting actio
   });
   await entry.execute();
   expect(setTranslationEngine).toHaveBeenCalledWith("windows-translation");
+});
+
+test("does not expose Agent-only lifecycle Commands in the human Command Palette", async () => {
+  const registry = createCommandRegistry(createContext());
+
+  const entries = await registry.search("command-palette", "");
+
+  expect(entries.map(({ id }) => id)).not.toEqual(expect.arrayContaining([
+    "core.plugins.enable",
+    "core.plugins.disable",
+    "core.navigation.pin",
+    "core.navigation.unpin",
+    "core.navigation.reorder",
+  ]));
 });

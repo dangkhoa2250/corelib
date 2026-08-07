@@ -248,7 +248,10 @@ async function resolveSearchProvider(
 function assertBindingCoverage(registry: PluginRegistry) {
   const categories = [
     [COMMAND_REGISTRY_BINDINGS.surfaces, registry.listSurfaces()],
-    [COMMAND_REGISTRY_BINDINGS.commands, registry.listCommands()],
+    [
+      COMMAND_REGISTRY_BINDINGS.commands,
+      registry.listCommands().filter((command) => command.audiences.includes("human")),
+    ],
     [COMMAND_REGISTRY_BINDINGS.searchProviders, registry.listSearchProviders()],
   ] as const;
   categories.forEach(([bindings, contributions]) => {
@@ -270,6 +273,7 @@ export function createCommandRegistry(
       if (surface === "command-palette") {
         return pluginRegistry
           .listCommands()
+          .filter((command) => command.audiences.includes("human"))
           .filter((command) => commandAvailable(command, context))
           .map((command) => commandAction(command, context))
           .filter((entry) => matches(entry, query));
