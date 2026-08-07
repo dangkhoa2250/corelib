@@ -268,9 +268,9 @@ function assertBindingCoverage(registry: PluginRegistry) {
   ] as const;
   categories.forEach(([bindings, contributions]) => {
     const actual = contributions.map((contribution) => contribution.bindingId).sort();
-    const expected = [...bindings].sort();
-    if (actual.join("\n") !== expected.join("\n")) {
-      throw new Error("Command Registry binding coverage does not match Plugin Registry.");
+    const unsupported = actual.filter((bindingId) => !bindings.includes(bindingId));
+    if (unsupported.length > 0) {
+      throw new Error(`Command Registry has no handler for: ${unsupported.join(", ")}`);
     }
   });
 }

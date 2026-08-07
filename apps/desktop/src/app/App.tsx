@@ -53,9 +53,12 @@ import { createCommandRegistry } from "./commandRegistry";
 import type { AppRoute } from "./routes";
 import { useInputPrivacyGuard } from "../components/InputPrivacyGuard";
 import { translateWithWindowsOnDevice, windowsOnDeviceTranslationAvailable } from "../lib/windowsTranslation";
-import { DEFAULT_PLUGIN_REGISTRY } from "../plugins/firstParty";
-
-const DEFAULT_SIDEBAR_ITEMS = createDefaultSidebarItems(DEFAULT_PLUGIN_REGISTRY);
+import { FIRST_PARTY_PLUGIN_CATALOG } from "../plugins/firstParty";
+import { CORE_CONTRIBUTIONS } from "../plugins/coreContributions";
+import { CORELIB_PLUGIN_API_VERSION } from "../plugins/manifest";
+import { createPluginLifecycle, type PluginLifecycle } from "../plugins/lifecycle";
+import { createTauriPluginLifecycleStateStore } from "../lib/pluginLifecycle";
+import { PluginLifecycleProvider, usePluginLifecycle } from "./PluginLifecycleProvider";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -184,6 +187,7 @@ interface AppProps {
   learningApi?: LearningApi;
   aiApi?: AiApi;
   accountApi?: AccountApi;
+  pluginLifecycle?: PluginLifecycle;
 }
 
 const ROUTE_FEATURE_KEYS: Partial<Record<AppRoute["name"], string>> = {
@@ -218,6 +222,31 @@ const nativeAiApi: AiApi = {
 };
 
 const defaultAccountApi = new PocketBaseAccountApiClient();
+
+function createDefaultPluginLifecycle() {
+  return createPluginLifecycle({
+    pluginApiVersion: CORELIB_PLUGIN_API_VERSION,
+    coreContributions: CORE_CONTRIBUTIONS,
+    installedPlugins: FIRST_PARTY_PLUGIN_CATALOG,
+    store: createTauriPluginLifecycleStateStore(),
+  });
+}
+
+export function App(props: AppProps) {
+  useInputPrivacyGuard();
+  const accountApi = props.accountApi ?? defaultAccountApi;
+  const pluginLifecycle = useMemo(
+    () => props.pluginLifecycle ?? createDefaultPluginLifecycle(),
+    [props.pluginLifecycle],
+  );
+  return (
+    <AccountGate api={accountApi}>
+      <PluginLifecycleProvider lifecycle={pluginLifecycle}>
+        <AuthenticatedApp {...props} accountApi={accountApi} />
+      </PluginLifecycleProvider>
+    </AccountGate>
+  );
+}
 
 function AnalyticsInstrumentation({
   client,
@@ -265,14 +294,14 @@ function SyncCoordinator({ accountApi }: { accountApi: AccountApi }) {
   );
 }
 
-export function App({
+function AuthenticatedApp({
   libraryApi = nativeLibraryApi,
   learningApi = nativeLearningApi,
   aiApi = nativeAiApi,
   accountApi = defaultAccountApi,
 }: AppProps) {
+  const { snapshot: pluginSnapshot } = usePluginLifecycle();
   const { resolvedTheme, setTheme } = useTheme();
-  useInputPrivacyGuard();
   const analyticsClient = useMemo(() => new AnalyticsClient(accountApi, false), [accountApi]);
 
   useEffect(() => {
@@ -669,7 +698,12 @@ export function App({
     setTheme,
     setTranslationEngine: handleSetTranslationEngine,
     windowsOnDeviceTranslationAvailable: windowsTranslationAvailableForCommands,
-  }, DEFAULT_PLUGIN_REGISTRY), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, handleSetTranslationEngine, setTheme, windowsTranslationAvailableForCommands]);
+  }, pluginSnapshot.registry), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, handleSetTranslationEngine, pluginSnapshot.registry, setTheme, windowsTranslationAvailableForCommands]);
+
+  const sidebarItems = useMemo(
+    () => createDefaultSidebarItems(pluginSnapshot.registry),
+    [pluginSnapshot.registry],
+  );
 
   const palette = (
     <>
@@ -798,13 +832,13 @@ export function App({
       : "library";
 
   return (
-    <AccountGate api={accountApi}>
+    <>
       <AnalyticsInstrumentation client={analyticsClient} route={route} />
       <SyncCoordinator accountApi={accountApi} />
       <div className="app-shell">
       <AppSidebar
         active={activeSection}
-        items={DEFAULT_SIDEBAR_ITEMS}
+        items={sidebarItems}
         onNavigate={(section) => {
           if (isBrowserDirty) {
             if (!window.confirm("You have unsaved changes. Discard changes?")) return;
@@ -1006,6 +1040,6 @@ export function App({
         </div>
       )}
     </div>
-    </AccountGate>
+    </>
   );
 }

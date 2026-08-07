@@ -76,6 +76,9 @@ beforeEach(() => {
     if (cmd === "get_daily_statistics_snapshots") {
       return [];
     }
+    if (cmd === "load_plugin_lifecycle_state") {
+      return { state: { schemaVersion: 1, accounts: {} }, notices: [] };
+    }
     return undefined as any;
   });
 });
@@ -657,6 +660,14 @@ test("uses Apple Translation by default for a new installation", async () => {
   expect(screen.getByRole("textbox", { name: "Back" })).toHaveValue("Văn bản nguồn đã chọn");
   userAgent.mockRestore();
   platform.mockRestore();
+});
+
+vi.mock("./PluginLifecycleProvider", async () => {
+  const { DEFAULT_PLUGIN_REGISTRY } = await import("../plugins/firstParty");
+  return {
+    PluginLifecycleProvider: ({ children }: { children: React.ReactNode }) => children,
+    usePluginLifecycle: () => ({ snapshot: { registry: DEFAULT_PLUGIN_REGISTRY } }),
+  };
 });
 
 test("keeps the composer visible and reports deck loading errors", async () => {

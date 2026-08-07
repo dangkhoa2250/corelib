@@ -6,6 +6,7 @@ import { STATISTICS_PLUGIN } from "../features/statistics/plugin";
 import { CORELIB_PLUGIN_API_VERSION } from "./manifest";
 import { CORE_CONTRIBUTIONS } from "./coreContributions";
 import { createPluginRegistry } from "./registry";
+import type { InstalledPluginDefinition } from "./lifecycle";
 
 export const FIRST_PARTY_PLUGINS = [
   DRIVE_PLUGIN,
@@ -14,6 +15,10 @@ export const FIRST_PARTY_PLUGINS = [
   MODELS_PLUGIN,
   STATISTICS_PLUGIN,
 ] as const;
+
+export const FIRST_PARTY_PLUGIN_CATALOG: readonly InstalledPluginDefinition[] = Object.freeze(
+  FIRST_PARTY_PLUGINS.map((definition) => Object.freeze({ definition, defaultEnabled: true })),
+);
 
 export const DEFAULT_PLUGIN_REGISTRY = createPluginRegistry({
   pluginApiVersion: CORELIB_PLUGIN_API_VERSION,

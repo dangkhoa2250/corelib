@@ -2,7 +2,11 @@ import { expect, test, vi } from "vitest";
 
 import { COMMAND_REGISTRY_BINDINGS, createCommandRegistry } from "./commandRegistry";
 import { PUBLIC_ROUTE_CATALOG, publicRouteNames } from "./routes";
-import { DEFAULT_PLUGIN_REGISTRY } from "../plugins/firstParty";
+import { DEFAULT_PLUGIN_REGISTRY, FIRST_PARTY_PLUGIN_CATALOG } from "../plugins/firstParty";
+import { CORE_CONTRIBUTIONS } from "../plugins/coreContributions";
+import { createPluginLifecycle } from "../plugins/lifecycle";
+import { createMemoryPluginLifecycleStateStore } from "../plugins/lifecycleState";
+import { CORELIB_PLUGIN_API_VERSION } from "../plugins/manifest";
 
 const document = {
   id: "linear-algebra",
@@ -133,6 +137,24 @@ test("executes a Command Palette theme action", async () => {
   await entry.execute();
 
   expect(setTheme).toHaveBeenCalledWith("dark");
+});
+
+test("omits disabled Plugin contributions while keeping Core destinations", async () => {
+  const lifecycle = createPluginLifecycle({
+    pluginApiVersion: CORELIB_PLUGIN_API_VERSION,
+    coreContributions: CORE_CONTRIBUTIONS,
+    installedPlugins: FIRST_PARTY_PLUGIN_CATALOG,
+    store: createMemoryPluginLifecycleStateStore(),
+  });
+  await lifecycle.load("account-a");
+  const snapshot = await lifecycle.apply(
+    lifecycle.plan({ kind: "disable-plugin", pluginId: "corelib.models" }),
+  );
+  const registry = createCommandRegistry(createContext(), snapshot.registry);
+
+  await expect(registry.search("quick-open", "model")).resolves.toEqual([]);
+  await expect(registry.search("command-palette", "offline translation")).resolves.toEqual([]);
+  await expect(registry.search("quick-open", "appearance")).resolves.toHaveLength(1);
 });
 
 test("covers every registered executable binding exactly once", () => {
