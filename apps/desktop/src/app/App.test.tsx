@@ -664,9 +664,23 @@ test("uses Apple Translation by default for a new installation", async () => {
 
 vi.mock("./PluginLifecycleProvider", async () => {
   const { DEFAULT_PLUGIN_REGISTRY } = await import("../plugins/firstParty");
+  const installedPlugins = DEFAULT_PLUGIN_REGISTRY.listPlugins().map((manifest) => ({
+    manifest,
+    status: "enabled" as const,
+  }));
   return {
     PluginLifecycleProvider: ({ children }: { children: React.ReactNode }) => children,
-    usePluginLifecycle: () => ({ snapshot: { registry: DEFAULT_PLUGIN_REGISTRY } }),
+    usePluginLifecycle: () => ({
+      snapshot: {
+        registry: DEFAULT_PLUGIN_REGISTRY,
+        installedPlugins,
+        notices: [],
+        isEnabled: () => true,
+      },
+      applying: false,
+      plan: vi.fn(),
+      apply: vi.fn(),
+    }),
   };
 });
 
@@ -755,6 +769,21 @@ test("navigates between Library and Memora via the sidebar", async () => {
 
   await user.click(screen.getByRole("button", { name: "Library" }));
   expect(screen.getByRole("heading", { level: 1, name: "Library" })).toBeInTheDocument();
+});
+
+test("opens non-removable Corelib Home from the first sidebar destination", async () => {
+  render(<App />);
+
+  const sidebar = screen.getByRole("navigation", { name: "Primary" });
+  const destinations = within(sidebar).getAllByRole("button");
+  expect(destinations.find((button) => button.textContent?.includes("Home"))).toBeDefined();
+
+  await userEvent.click(within(sidebar).getByRole("button", { name: "Home" }));
+
+  expect(await screen.findByRole("heading", { name: "Corelib Home" })).toBeInTheDocument();
+  expect(screen.getByTestId("home-scroll-content").parentElement).toHaveAttribute(
+    "data-scroll-area-root",
+  );
 });
 
 test("creates a new deck from Memora", async () => {

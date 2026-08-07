@@ -38,6 +38,16 @@ export function IconLibrary({ size = 16 }: IconProps) {
   );
 }
 
+export function IconHome({ size = 16 }: IconProps) {
+  return (
+    <svg {...baseProps} height={size} width={size}>
+      <path d="m3 10 9-7 9 7" />
+      <path d="M5 9v11h14V9" />
+      <path d="M9 20v-6h6v6" />
+    </svg>
+  );
+}
+
 export function IconMemora({ size = 16 }: IconProps) {
   return (
     <svg {...baseProps} height={size} width={size}>

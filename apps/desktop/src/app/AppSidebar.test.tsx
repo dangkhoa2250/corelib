@@ -17,6 +17,7 @@ describe("AppSidebar plugin navigation", () => {
         label,
       })),
     ).toEqual([
+      { section: "home", label: "Home" },
       { section: "library", label: "Library" },
       { section: "memora", label: "Memora" },
       { section: "statistics", label: "Statistics" },
@@ -55,6 +56,7 @@ describe("AppSidebar plugin navigation", () => {
     );
 
     expect(createDefaultSidebarItems(snapshot.registry).map(({ section }) => section)).toEqual([
+      "home",
       "library",
       "statistics",
     ]);

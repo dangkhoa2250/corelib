@@ -33,6 +33,7 @@ describe("DEFAULT_PLUGIN_REGISTRY", () => {
   });
 
   it.each([
+    ["route.home", "home"],
     ["route.settings", "settings"],
     ["route.settings.account", "account"],
     ["route.settings.appearance", "appearance"],

@@ -9,7 +9,7 @@ import type {
   RegisteredSearchProvider,
   RegisteredSurface,
 } from "../plugins/registry";
-import type { AppRoute, SettingsSection } from "./routes";
+import { appRouteForSurfaceId, type AppRoute } from "./routes";
 
 export type CommandSurface = "quick-open" | "command-palette";
 
@@ -48,6 +48,7 @@ export interface CommandContext {
 
 export const COMMAND_REGISTRY_BINDINGS = Object.freeze({
   surfaces: Object.freeze([
+    "route.home",
     "route.library",
     "route.memora",
     "route.statistics",
@@ -130,24 +131,8 @@ function action(
   };
 }
 
-function settingsRoute(section: SettingsSection): AppRoute {
-  return { name: "settings", section };
-}
-
 function executeSurface(bindingId: string, context: CommandContext) {
-  const routes: Record<string, AppRoute> = {
-    "route.library": { name: "library" },
-    "route.memora": { name: "memora" },
-    "route.statistics": { name: "statistics" },
-    "route.trash": { name: "trash" },
-    "route.settings": { name: "settings" },
-    "route.settings.account": settingsRoute("account"),
-    "route.settings.appearance": settingsRoute("appearance"),
-    "route.settings.drive": settingsRoute("drive"),
-    "route.settings.memora": settingsRoute("memora"),
-    "route.settings.model": settingsRoute("model"),
-  };
-  const route = routes[bindingId];
+  const route = appRouteForSurfaceId(bindingId);
   if (!route) throw new Error(`Unsupported Surface binding: ${bindingId}`);
   return () => context.openRoute(route);
 }

@@ -12,6 +12,28 @@ const emptyReservedContributions = {
 
 export const CORE_CONTRIBUTIONS = [
   {
+    ownerId: "home",
+    contributions: {
+      ...emptyReservedContributions,
+      surfaces: [
+        {
+          id: "route.home",
+          title: "Home",
+          aliases: ["plugins", "apps", "marketplace"],
+          breadcrumb: ["Corelib"],
+          group: "Navigate",
+          kind: "page",
+          quickOpen: true,
+          navigation: { defaultPinned: true, order: 0 },
+          icon: "home",
+          bindingId: "route.home",
+        },
+      ],
+      commands: [],
+    },
+    declaredBindings: ["route.home"],
+  },
+  {
     ownerId: "settings",
     contributions: {
       ...emptyReservedContributions,

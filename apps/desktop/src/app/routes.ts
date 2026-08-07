@@ -10,6 +10,7 @@ export type StatisticsRouteTarget =
   | { kind: "deck"; deckId: string };
 
 export type AppRoute =
+  | { name: "home" }
   | { name: "library" }
   | { name: "memora" }
   | { name: "reader"; document: LibraryDocument }
@@ -22,8 +23,26 @@ export type AppRoute =
   | { name: "admin" }
   | { name: "statistics"; target?: StatisticsRouteTarget; origin?: "library" | "memora" };
 
-export const publicRouteNames = ["library", "memora", "trash", "settings", "statistics"] as const;
+export const publicRouteNames = ["home", "library", "memora", "trash", "settings", "statistics"] as const;
 export type PublicRouteName = (typeof publicRouteNames)[number];
+
+const SURFACE_ROUTES: Readonly<Record<string, AppRoute>> = Object.freeze({
+  "route.home": { name: "home" },
+  "route.library": { name: "library" },
+  "route.memora": { name: "memora" },
+  "route.statistics": { name: "statistics" },
+  "route.trash": { name: "trash" },
+  "route.settings": { name: "settings" },
+  "route.settings.account": { name: "settings", section: "account" },
+  "route.settings.appearance": { name: "settings", section: "appearance" },
+  "route.settings.drive": { name: "settings", section: "drive" },
+  "route.settings.memora": { name: "settings", section: "memora" },
+  "route.settings.model": { name: "settings", section: "model" },
+});
+
+export function appRouteForSurfaceId(surfaceId: string): AppRoute | null {
+  return SURFACE_ROUTES[surfaceId] ?? null;
+}
 
 interface PublicRouteDefinition {
   id: string;
@@ -34,6 +53,7 @@ interface PublicRouteDefinition {
 }
 
 const PUBLIC_ROUTE_BINDINGS = {
+  home: { contributionId: "route.home", route: { name: "home" } },
   library: { contributionId: "route.library", route: { name: "library" } },
   memora: { contributionId: "route.memora", route: { name: "memora" } },
   trash: { contributionId: "route.trash", route: { name: "trash" } },
@@ -62,6 +82,7 @@ function publicRouteDefinition(name: PublicRouteName): PublicRouteDefinition {
 }
 
 export const PUBLIC_ROUTE_CATALOG = Object.freeze({
+  home: publicRouteDefinition("home"),
   library: publicRouteDefinition("library"),
   memora: publicRouteDefinition("memora"),
   trash: publicRouteDefinition("trash"),

@@ -139,6 +139,21 @@ test("executes a Command Palette theme action", async () => {
   expect(setTheme).toHaveBeenCalledWith("dark");
 });
 
+test("registers Corelib Home as a searchable Quick Open destination", async () => {
+  const registry = createCommandRegistry(createContext());
+
+  const entries = await registry.search("quick-open", "marketplace");
+
+  expect(entries).toEqual([
+    expect.objectContaining({
+      id: "route.home",
+      surface: "quick-open",
+      title: "Home",
+      breadcrumb: ["Corelib"],
+    }),
+  ]);
+});
+
 test("omits disabled Plugin contributions while keeping Core destinations", async () => {
   const lifecycle = createPluginLifecycle({
     pluginApiVersion: CORELIB_PLUGIN_API_VERSION,

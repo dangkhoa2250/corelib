@@ -1,11 +1,11 @@
 import { useContext, useCallback, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 
-import { IconLibrary, IconMemora, IconSearch, IconSettings, IconStatistics, IconTrash } from "./icons";
+import { IconHome, IconLibrary, IconMemora, IconSearch, IconSettings, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
 import { primaryShortcut } from "../lib/platform";
 import type { PluginRegistry } from "../plugins/registry";
 
-export type AppSection = "library" | "memora" | "trash" | "settings" | "admin" | "statistics";
+export type AppSection = "home" | "library" | "memora" | "trash" | "settings" | "admin" | "statistics";
 
 const SIDEBAR_MIN_WIDTH = 160;
 const SIDEBAR_MAX_WIDTH = 360;
@@ -28,6 +28,8 @@ export interface AppSidebarItem {
 
 function sectionForBinding(bindingId: string): AppSection {
   switch (bindingId) {
+    case "route.home":
+      return "home";
     case "route.library":
       return "library";
     case "route.memora":
@@ -43,6 +45,8 @@ function sectionForBinding(bindingId: string): AppSection {
 
 function iconForId(iconId: string | undefined): ComponentType {
   switch (iconId) {
+    case "home":
+      return IconHome;
     case "library":
       return IconLibrary;
     case "memora":

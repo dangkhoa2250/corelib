@@ -50,7 +50,7 @@ import { StatisticsPage } from "../features/statistics/StatisticsPage";
 import { StatisticsAnalyticsSync } from "../features/statistics/StatisticsAnalyticsSync";
 import { AnalyticsClient } from "../lib/analytics";
 import { createCommandRegistry } from "./commandRegistry";
-import type { AppRoute } from "./routes";
+import { appRouteForSurfaceId, type AppRoute } from "./routes";
 import { useInputPrivacyGuard } from "../components/InputPrivacyGuard";
 import { translateWithWindowsOnDevice, windowsOnDeviceTranslationAvailable } from "../lib/windowsTranslation";
 import { FIRST_PARTY_PLUGIN_CATALOG } from "../plugins/firstParty";
@@ -59,6 +59,7 @@ import { CORELIB_PLUGIN_API_VERSION } from "../plugins/manifest";
 import { createPluginLifecycle, type PluginLifecycle } from "../plugins/lifecycle";
 import { createTauriPluginLifecycleStateStore } from "../lib/pluginLifecycle";
 import { PluginLifecycleProvider, usePluginLifecycle } from "./PluginLifecycleProvider";
+import { HomePage } from "../features/home/HomePage";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -345,7 +346,9 @@ function AuthenticatedApp({
     updateDeckLearningSettings: learningApi.updateDeckLearningSettings ?? nativeUpdateDeckLearningSettings,
   }), [learningApi]);
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
-  const [route, setRoute] = useState<AppRoute>({ name: "library" });
+  const [route, setRoute] = useState<AppRoute>(() =>
+    pluginSnapshot.isEnabled("corelib.library") ? { name: "library" } : { name: "home" },
+  );
   const [loading, setLoading] = useState(true);
   const [pendingImports, setPendingImports] = useState<PendingImport[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -380,6 +383,28 @@ function AuthenticatedApp({
   const [isBrowserDirty, setIsBrowserDirty] = useState(false);
   const [sourceHighlight, setSourceHighlight] = useState<CardSource | null>(null);
   const [translationPreference, setTranslationPreference] = useState(readTranslationPreference);
+
+  useEffect(() => {
+    const pluginId =
+      route.name === "library" || route.name === "reader"
+        ? "corelib.library"
+        : route.name === "memora" ||
+            route.name === "deckDetail" ||
+            route.name === "cardBrowser" ||
+            route.name === "trash" ||
+            route.name === "review"
+          ? "corelib.memora"
+          : route.name === "statistics"
+            ? "corelib.statistics"
+            : route.name === "settings" && route.section === "drive"
+              ? "corelib.drive"
+              : route.name === "settings" && route.section === "model"
+                ? "corelib.models"
+                : route.name === "settings" && route.section === "memora"
+                  ? "corelib.memora"
+                  : null;
+    if (pluginId && !pluginSnapshot.isEnabled(pluginId)) setRoute({ name: "home" });
+  }, [pluginSnapshot, route]);
 
   const reloadDecks = useCallback(async () => {
     try {
@@ -819,7 +844,9 @@ function AuthenticatedApp({
   }
 
   const activeSection: AppSection =
-    route.name === "memora" || route.name === "deckDetail"
+    route.name === "home"
+      ? "home"
+      : route.name === "memora" || route.name === "deckDetail"
       ? "memora"
       : route.name === "cardBrowser"
       ? "memora"
@@ -845,7 +872,9 @@ function AuthenticatedApp({
           }
           setIsBrowserDirty(false);
           setRoute(
-            section === "memora"
+            section === "home"
+              ? { name: "home" }
+              : section === "memora"
               ? { name: "memora" }
               : section === "trash"
               ? { name: "trash" }
@@ -858,8 +887,15 @@ function AuthenticatedApp({
         onSettingsClick={() => setRoute({ name: "settings" })}
         onAdminClick={() => setRoute({ name: "admin" })}
       />
-      <div className={`app-shell__content ${route.name === "statistics" || route.name === "admin" ? "app-shell__content--managed-scroll" : ""}`}>
-        {route.name === "statistics" ? (
+      <div className={`app-shell__content ${route.name === "home" || route.name === "statistics" || route.name === "admin" ? "app-shell__content--managed-scroll" : ""}`}>
+        {route.name === "home" ? (
+          <HomePage
+            onLaunch={(surfaceId) => {
+              const destination = appRouteForSurfaceId(surfaceId);
+              if (destination) setRoute(destination);
+            }}
+          />
+        ) : route.name === "statistics" ? (
           <StatisticsPage
             documents={documents ?? []}
             documentsLoading={loading}
