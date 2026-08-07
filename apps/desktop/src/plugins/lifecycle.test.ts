@@ -70,7 +70,9 @@ describe("PluginLifecycle", () => {
         definition,
         defaultEnabled: true,
       })),
-      store: createMemoryPluginLifecycleStateStore(),
+      store: createMemoryPluginLifecycleStateStore(createEmptyPluginLifecycleState(), [
+        { code: "corrupt_state_recovered", message: "Defaults were restored." },
+      ]),
     });
 
     const snapshot = await lifecycle.load("account-a");
@@ -82,6 +84,9 @@ describe("PluginLifecycle", () => {
       snapshot.enabledPluginIds,
     );
     expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(snapshot.notices).toEqual([
+      { code: "corrupt_state_recovered", message: "Defaults were restored." },
+    ]);
   });
 
   it("keeps a later First-party plugin disabled for an existing account", async () => {
@@ -384,7 +389,7 @@ describe("PluginLifecycle", () => {
       })),
       store: {
         async load() {
-          return persistedState;
+          return { state: persistedState, notices: [] };
         },
         async save(state) {
           saves += 1;

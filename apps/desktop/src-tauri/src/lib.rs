@@ -36,6 +36,7 @@ pub mod learning;
 pub mod library_db;
 pub mod library_store;
 pub mod model;
+pub mod plugin_lifecycle;
 pub mod scheduler;
 pub mod study_queue;
 pub mod statistics;
@@ -61,6 +62,9 @@ mod library_db_tests;
 mod library_store_tests;
 
 #[cfg(test)]
+mod plugin_lifecycle_tests;
+
+#[cfg(test)]
 mod learning_tests;
 
 #[cfg(test)]
@@ -84,6 +88,9 @@ pub fn run() {
                 .path()
                 .app_data_dir()
                 .map_err(|error| std::io::Error::other(error.to_string()))?;
+            app.manage(plugin_lifecycle::PluginLifecycleStateStore::new(
+                &app_data_directory,
+            ));
             app.manage(
                 commands::LibraryStore::open(app_data_directory).map_err(std::io::Error::other)?,
             );
@@ -197,6 +204,8 @@ pub fn run() {
             commands::admin_delete_user,
             commands::account_upsert_daily_statistics,
             commands::admin_get_statistics,
+            plugin_lifecycle::load_plugin_lifecycle_state,
+            plugin_lifecycle::save_plugin_lifecycle_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,6 +8,7 @@ import { createPluginRegistry } from "./registry";
 import {
   type PluginLifecycleAccountState,
   type PluginLifecyclePersistedState,
+  type PluginLifecycleStateNotice,
   type PluginLifecycleStateStore,
 } from "./lifecycleState";
 
@@ -26,6 +27,7 @@ export interface PluginLifecycleSnapshot {
   readonly pinnedSurfaceIds: readonly string[];
   readonly visiblePinnedSurfaceIds: readonly string[];
   readonly installedPlugins: readonly PluginLifecyclePluginStatus[];
+  readonly notices: readonly PluginLifecycleStateNotice[];
   readonly registry: PluginRegistry;
   isEnabled(pluginId: string): boolean;
   isIntegrationAvailable(pluginId: string, dependencyPluginId: string): boolean;
@@ -205,6 +207,7 @@ export function createPluginLifecycle(options: CreatePluginLifecycleOptions): Pl
   let currentState: PluginLifecyclePersistedState | null = null;
   let currentAccount: PluginLifecycleAccountState | null = null;
   let currentNewPluginIds = new Set<string>();
+  let currentNotices: readonly PluginLifecycleStateNotice[] = [];
   const issuedPlans = new WeakSet<object>();
 
   const snapshotFrom = (
@@ -242,6 +245,7 @@ export function createPluginLifecycle(options: CreatePluginLifecycleOptions): Pl
       pinnedSurfaceIds: Object.freeze([...account.navigation.pinnedSurfaceIds]),
       visiblePinnedSurfaceIds: Object.freeze(visiblePinnedSurfaceIds),
       installedPlugins: Object.freeze(installedPlugins),
+      notices: Object.freeze(currentNotices.map((notice) => Object.freeze({ ...notice }))),
       registry,
       isEnabled: (pluginId: string) => enabledPluginIdSet.has(pluginId),
       isIntegrationAvailable: (pluginId: string, dependencyPluginId: string) =>
@@ -268,7 +272,8 @@ export function createPluginLifecycle(options: CreatePluginLifecycleOptions): Pl
 
   return {
     async load(accountId) {
-      let state = await options.store.load();
+      const loaded = await options.store.load();
+      let state = loaded.state;
       let account = state.accounts[accountId];
       let newlyKnownPluginIds: readonly string[] = [];
       if (!account) {
@@ -310,6 +315,7 @@ export function createPluginLifecycle(options: CreatePluginLifecycleOptions): Pl
       currentState = state;
       currentAccount = account;
       currentNewPluginIds = new Set(newlyKnownPluginIds);
+      currentNotices = loaded.notices;
       currentSnapshot = snapshotFrom(accountId, account);
       return currentSnapshot;
     },
