@@ -6,9 +6,10 @@ import oneDriveMark from "../../assets/import-sources/onedrive.svg";
 interface ImportMenuProps {
   onUpload: () => void;
   onGoogleDrive?: () => void;
+  showGoogleDrive?: boolean;
 }
 
-export function ImportMenu({ onUpload, onGoogleDrive }: ImportMenuProps) {
+export function ImportMenu({ onUpload, onGoogleDrive, showGoogleDrive = true }: ImportMenuProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -102,19 +103,21 @@ export function ImportMenu({ onUpload, onGoogleDrive }: ImportMenuProps) {
             <IconUpload />
             <span>Upload file</span>
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="library-import-menu__item"
-            disabled={!onGoogleDrive}
-            onClick={() => onGoogleDrive && select(onGoogleDrive)}
-          >
-            <img src={googleDriveMark} alt="" aria-hidden="true" />
-            <span>Google Drive</span>
-            {!onGoogleDrive ? (
-              <span className="library-import-menu__coming-soon">Unavailable</span>
-            ) : null}
-          </button>
+          {showGoogleDrive ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="library-import-menu__item"
+              disabled={!onGoogleDrive}
+              onClick={() => onGoogleDrive && select(onGoogleDrive)}
+            >
+              <img src={googleDriveMark} alt="" aria-hidden="true" />
+              <span>Google Drive</span>
+              {!onGoogleDrive ? (
+                <span className="library-import-menu__coming-soon">Unavailable</span>
+              ) : null}
+            </button>
+          ) : null}
           <button type="button" role="menuitem" className="library-import-menu__item" disabled>
             <IconCloud />
             <span>iCloud Drive</span>

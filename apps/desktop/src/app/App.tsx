@@ -50,7 +50,7 @@ import { StatisticsPage } from "../features/statistics/StatisticsPage";
 import { StatisticsAnalyticsSync } from "../features/statistics/StatisticsAnalyticsSync";
 import { AnalyticsClient } from "../lib/analytics";
 import { createCommandRegistry } from "./commandRegistry";
-import { appRouteForSurfaceId, type AppRoute } from "./routes";
+import { appRouteForSurfaceId, type AppRoute, type SettingsSection } from "./routes";
 import { useInputPrivacyGuard } from "../components/InputPrivacyGuard";
 import { translateWithWindowsOnDevice, windowsOnDeviceTranslationAvailable } from "../lib/windowsTranslation";
 import { FIRST_PARTY_PLUGIN_CATALOG } from "../plugins/firstParty";
@@ -306,6 +306,11 @@ function AuthenticatedApp({
     plan: planPluginLifecycle,
     apply: applyPluginLifecycle,
   } = usePluginLifecycle();
+  const libraryPluginEnabled = pluginSnapshot.isEnabled("corelib.library");
+  const memoraPluginEnabled = pluginSnapshot.isEnabled("corelib.memora");
+  const statisticsPluginEnabled = pluginSnapshot.isEnabled("corelib.statistics");
+  const drivePluginEnabled = pluginSnapshot.isEnabled("corelib.drive");
+  const modelsPluginEnabled = pluginSnapshot.isEnabled("corelib.models");
   const { resolvedTheme, setTheme } = useTheme();
   const analyticsClient = useMemo(() => new AnalyticsClient(accountApi, false), [accountApi]);
 
@@ -370,6 +375,10 @@ function AuthenticatedApp({
   const quickOpenRef = useRef<CommandPaletteHandle>(null);
 
   useEffect(() => {
+    if (!modelsPluginEnabled) {
+      setWindowsTranslationAvailableForCommands(false);
+      return;
+    }
     let cancelled = false;
     void Promise.resolve(aiApi.windowsTranslationAvailable?.() ?? false).then(
       (available) => {
@@ -380,7 +389,7 @@ function AuthenticatedApp({
       },
     );
     return () => { cancelled = true; };
-  }, [aiApi.windowsTranslationAvailable]);
+  }, [aiApi.windowsTranslationAvailable, modelsPluginEnabled]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
@@ -411,11 +420,15 @@ function AuthenticatedApp({
   }, [pluginSnapshot, route]);
 
   const reloadDecks = useCallback(async () => {
+    if (!memoraPluginEnabled) {
+      setDecks([]);
+      return;
+    }
     try {
       const d = await learning.listDecks();
       setDecks(d);
     } catch (_) {}
-  }, [learning]);
+  }, [learning, memoraPluginEnabled]);
 
   useEffect(() => {
     if (route.name === "deckDetail" || route.name === "cardBrowser" || route.name === "trash") {
@@ -465,6 +478,12 @@ function AuthenticatedApp({
     } catch (reviewError) { setError(errorMessage(reviewError)); }
   }, [learning, decks]);
   const load = useCallback(async () => {
+    if (!libraryPluginEnabled) {
+      requestId.current += 1;
+      setDocuments([]);
+      setLoading(false);
+      return;
+    }
     const currentRequestId = ++requestId.current;
     setLoading(true);
     setError(null);
@@ -482,7 +501,7 @@ function AuthenticatedApp({
         setLoading(false);
       }
     }
-  }, [libraryApi, requestId]);
+  }, [libraryApi, libraryPluginEnabled, requestId]);
 
   useEffect(() => {
     void load();
@@ -733,6 +752,13 @@ function AuthenticatedApp({
     () => createDefaultSidebarItems(pluginSnapshot.registry, pluginSnapshot.visiblePinnedSurfaceIds),
     [pluginSnapshot.registry, pluginSnapshot.visiblePinnedSurfaceIds],
   );
+  const enabledSettingsSections = useMemo<readonly SettingsSection[]>(() => [
+    "account",
+    "appearance",
+    ...(drivePluginEnabled ? ["drive" as const] : []),
+    ...(modelsPluginEnabled ? ["model" as const] : []),
+    ...(memoraPluginEnabled ? ["memora" as const] : []),
+  ], [drivePluginEnabled, memoraPluginEnabled, modelsPluginEnabled]);
 
   const palette = (
     <>
@@ -801,12 +827,12 @@ function AuthenticatedApp({
           }}
           getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
           onPageChange={handlePageChange}
-          onCreateCard={handleCreateCard}
           composerSource={composerSource}
           composerDecks={composerDecks}
           composerError={composerError}
           onSaveCard={handleSaveCard}
-          onTranslate={handleTranslate}
+          onCreateCard={memoraPluginEnabled ? handleCreateCard : undefined}
+          onTranslate={modelsPluginEnabled ? handleTranslate : undefined}
           onCloseComposer={handleCloseComposer}
           sourceHighlight={sourceHighlight}
           listPageTags={async (id) => {
@@ -836,11 +862,12 @@ function AuthenticatedApp({
           appleTranslationAvailable={aiApi.appleTranslationAvailable}
           windowsTranslationAvailable={aiApi.windowsTranslationAvailable}
           onDefaultChange={handleTranslationDefaultChange}
-          onBack={() => setRoute({ name: "library" })}
+          onBack={() => setRoute(libraryPluginEnabled ? { name: "library" } : { name: "home" })}
           saveDriveCredentials={saveGoogleDriveCredentials}
           loadDriveCredentials={loadGoogleDriveCredentials}
           clearDriveCredentials={clearGoogleDriveCredentials}
-          initialSection={route.section}
+          initialSection={route.section ?? (modelsPluginEnabled ? "model" : "appearance")}
+          enabledSections={enabledSettingsSections}
         />
         {palette}
       </>
@@ -865,7 +892,7 @@ function AuthenticatedApp({
   return (
     <>
       <AnalyticsInstrumentation client={analyticsClient} route={route} />
-      <SyncCoordinator accountApi={accountApi} />
+      {statisticsPluginEnabled ? <SyncCoordinator accountApi={accountApi} /> : null}
       <div className="app-shell">
       <AppSidebar
         active={activeSection}
@@ -909,7 +936,7 @@ function AuthenticatedApp({
             origin={route.origin}
             onBack={() => {
               if (route.origin === "memora") setRoute({ name: "memora" });
-              else setRoute({ name: "library" });
+              else setRoute(libraryPluginEnabled ? { name: "library" } : { name: "home" });
             }}
           />
         ) : route.name === "memora" ? (
@@ -944,7 +971,9 @@ function AuthenticatedApp({
             }}
             onStudyDeck={handleStudyDeck}
             onPracticeAll={handlePracticeAll}
-            onViewStatistics={(id) => setRoute({ name: "statistics", target: { kind: "deck", deckId: id }, origin: "memora" })}
+            onViewStatistics={statisticsPluginEnabled
+              ? (id) => setRoute({ name: "statistics", target: { kind: "deck", deckId: id }, origin: "memora" })
+              : undefined}
             onDirtyStateChange={setIsBrowserDirty}
             getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
             getDeckStatistics={learning.getDeckStatistics}
@@ -1005,10 +1034,13 @@ function AuthenticatedApp({
                 }
               }}
               onImport={() => void handleImport()}
-              onOpenDrive={() => void handleOpenDrive()}
+              onOpenDrive={drivePluginEnabled ? () => void handleOpenDrive() : undefined}
+              showDriveImport={drivePluginEnabled}
               onDelete={(id) => void handleDelete(id)}
               onRename={(id, title) => void handleRename(id, title)}
-              onViewStatistics={(id) => setRoute({ name: "statistics", target: { kind: "document", documentId: id }, origin: "library" })}
+              onViewStatistics={statisticsPluginEnabled
+                ? (id) => setRoute({ name: "statistics", target: { kind: "document", documentId: id }, origin: "library" })
+                : undefined}
               getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
               pendingImports={pendingImports}
             />

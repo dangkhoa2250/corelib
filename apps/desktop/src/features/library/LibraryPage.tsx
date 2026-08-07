@@ -8,6 +8,7 @@ interface LibraryPageProps {
   onOpen: (id: string) => void;
   onImport: () => void;
   onOpenDrive?: () => void;
+  showDriveImport?: boolean;
   onDelete?: (id: string) => void;
   onRename?: (id: string, newTitle: string) => void;
   onViewStatistics?: (documentId: string) => void;
@@ -20,6 +21,7 @@ export function LibraryPage({
   onOpen,
   onImport,
   onOpenDrive,
+  showDriveImport = true,
   onDelete,
   onRename,
   onViewStatistics,
@@ -30,7 +32,11 @@ export function LibraryPage({
     <main className="library-page">
       <header className="library-page__header">
         <h1>Library</h1>
-        <ImportMenu onUpload={onImport} onGoogleDrive={onOpenDrive} />
+        <ImportMenu
+          onUpload={onImport}
+          onGoogleDrive={showDriveImport ? onOpenDrive : undefined}
+          showGoogleDrive={showDriveImport}
+        />
       </header>
       {documents.length > 0 || (pendingImports && pendingImports.length > 0) ? (
         <DocumentGrid

@@ -86,7 +86,16 @@ export interface SettingsPageProps {
   loadDriveCredentials?: () => Promise<{ clientId: string; clientSecret: string } | null>;
   clearDriveCredentials?: () => Promise<void>;
   initialSection?: SettingsSection;
+  enabledSections?: readonly SettingsSection[];
 }
+
+const ALL_SETTINGS_SECTIONS: readonly SettingsSection[] = [
+  "account",
+  "appearance",
+  "drive",
+  "model",
+  "memora",
+];
 
 function readProvider(): AiProviderId {
   const value = getPreference(DEFAULT_PROVIDER_KEY);
@@ -114,7 +123,7 @@ export function readTranslationPreference(): { engineId: TranslationEngineId | n
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleTranslationAvailable = defaultAppleTranslationAvailable, windowsTranslationAvailable = defaultWindowsTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, initialSection = "model" }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleTranslationAvailable = defaultAppleTranslationAvailable, windowsTranslationAvailable = defaultWindowsTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, initialSection = "model", enabledSections = ALL_SETTINGS_SECTIONS }: SettingsPageProps) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
@@ -170,8 +179,8 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
   const [section, setSection] = useState<SettingsSection>(initialSection);
 
   useEffect(() => {
-    setSection(initialSection);
-  }, [initialSection]);
+    setSection(enabledSections.includes(initialSection) ? initialSection : enabledSections[0] ?? "appearance");
+  }, [enabledSections, initialSection]);
 
   const showAccountSettings = section === "account";
   const showAppearanceSettings = section === "appearance";
@@ -182,10 +191,11 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
   const accountContext = useContext(AccountContext);
 
   const isNavVisible = (target: SettingsSection): boolean =>
+    enabledSections.includes(target) &&
     matchesSearch({ section: target, keywords: SETTINGS_NAV_KEYWORDS[target] }, searchQuery);
 
   useEffect(() => {
-    if (!loadDriveCredentials) return;
+    if (!enabledSections.includes("drive") || !loadDriveCredentials) return;
     loadDriveCredentials()
       .then((credentials) => {
         if (credentials) {
@@ -195,7 +205,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
         }
       })
       .catch(() => {});
-  }, [loadDriveCredentials]);
+  }, [enabledSections, loadDriveCredentials]);
 
   const handleSaveDriveCredentials = async () => {
     if (!saveDriveCredentials) return;
@@ -260,6 +270,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
   }, [modelSearch]);
 
   useEffect(() => {
+    if (!enabledSections.includes("model")) return;
     let cancelled = false;
     void Promise.all([
       appleTranslationAvailable().catch(() => false),
@@ -288,9 +299,10 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
       onDefaultChange?.(fallback);
     });
     return () => { cancelled = true; };
-  }, [appleTranslationAvailable, windowsTranslationAvailable]);
+  }, [appleTranslationAvailable, enabledSections, windowsTranslationAvailable]);
 
   useEffect(() => {
+    if (!enabledSections.includes("model")) return;
     let cancelled = false;
     void Promise.all(AI_PROVIDERS.map(async (item) => [item.id, await hasApiKey(item.id)] as const))
       .then((entries) => {
@@ -300,7 +312,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
       })
       .catch(() => undefined);
     return () => { cancelled = true; };
-  }, [hasApiKey]);
+  }, [enabledSections, hasApiKey]);
 
   const loadModels = async (providerToLoad = provider) => {
     setLoading(true);
@@ -451,7 +463,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
             Google Drive
           </button>
         )}
-        <p className="settings-page__nav-label">Models</p>
+        {enabledSections.includes("model") ? <p className="settings-page__nav-label">Models</p> : null}
         {isNavVisible("model") && (
           <button
             className={`settings-page__nav-item ${showModelSettings ? "is-active" : ""}`}
@@ -462,7 +474,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
             Model
           </button>
         )}
-        <p className="settings-page__nav-label">Apps</p>
+        {enabledSections.includes("memora") ? <p className="settings-page__nav-label">Apps</p> : null}
         {isNavVisible("memora") && (
           <button
             className={`settings-page__nav-item ${showMemoraSettings ? "is-active" : ""}`}
