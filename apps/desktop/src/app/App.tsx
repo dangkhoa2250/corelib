@@ -50,7 +50,8 @@ import { StatisticsPage } from "../features/statistics/StatisticsPage";
 import { StatisticsAnalyticsSync } from "../features/statistics/StatisticsAnalyticsSync";
 import { AnalyticsClient } from "../lib/analytics";
 import { createCommandRegistry } from "./commandRegistry";
-import { appRouteForSurfaceId, type AppRoute, type SettingsSection } from "./routes";
+import { appRouteForSurfaceId, type AppRoute } from "./routes";
+import { deriveAppPluginActivation } from "./pluginActivation";
 import { useInputPrivacyGuard } from "../components/InputPrivacyGuard";
 import { translateWithWindowsOnDevice, windowsOnDeviceTranslationAvailable } from "../lib/windowsTranslation";
 import { FIRST_PARTY_PLUGIN_CATALOG } from "../plugins/firstParty";
@@ -306,11 +307,17 @@ function AuthenticatedApp({
     plan: planPluginLifecycle,
     apply: applyPluginLifecycle,
   } = usePluginLifecycle();
-  const libraryPluginEnabled = pluginSnapshot.isEnabled("corelib.library");
-  const memoraPluginEnabled = pluginSnapshot.isEnabled("corelib.memora");
-  const statisticsPluginEnabled = pluginSnapshot.isEnabled("corelib.statistics");
-  const drivePluginEnabled = pluginSnapshot.isEnabled("corelib.drive");
-  const modelsPluginEnabled = pluginSnapshot.isEnabled("corelib.models");
+  const pluginActivation = useMemo(
+    () => deriveAppPluginActivation(pluginSnapshot),
+    [pluginSnapshot],
+  );
+  const {
+    library: libraryPluginEnabled,
+    memora: memoraPluginEnabled,
+    statistics: statisticsPluginEnabled,
+    drive: drivePluginEnabled,
+    models: modelsPluginEnabled,
+  } = pluginActivation;
   const { resolvedTheme, setTheme } = useTheme();
   const analyticsClient = useMemo(() => new AnalyticsClient(accountApi, false), [accountApi]);
 
@@ -356,7 +363,7 @@ function AuthenticatedApp({
   }), [learningApi]);
   const [documents, setDocuments] = useState<LibraryDocument[] | null>(null);
   const [route, setRoute] = useState<AppRoute>(() =>
-    pluginSnapshot.isEnabled("corelib.library") ? { name: "library" } : { name: "home" },
+    pluginActivation.library ? { name: "library" } : { name: "home" },
   );
   const [loading, setLoading] = useState(true);
   const [pendingImports, setPendingImports] = useState<PendingImport[]>([]);
@@ -398,26 +405,8 @@ function AuthenticatedApp({
   const [translationPreference, setTranslationPreference] = useState(readTranslationPreference);
 
   useEffect(() => {
-    const pluginId =
-      route.name === "library" || route.name === "reader"
-        ? "corelib.library"
-        : route.name === "memora" ||
-            route.name === "deckDetail" ||
-            route.name === "cardBrowser" ||
-            route.name === "trash" ||
-            route.name === "review"
-          ? "corelib.memora"
-          : route.name === "statistics"
-            ? "corelib.statistics"
-            : route.name === "settings" && route.section === "drive"
-              ? "corelib.drive"
-              : route.name === "settings" && route.section === "model"
-                ? "corelib.models"
-                : route.name === "settings" && route.section === "memora"
-                  ? "corelib.memora"
-                  : null;
-    if (pluginId && !pluginSnapshot.isEnabled(pluginId)) setRoute({ name: "home" });
-  }, [pluginSnapshot, route]);
+    if (!pluginActivation.isRouteAvailable(route)) setRoute({ name: "home" });
+  }, [pluginActivation, route]);
 
   const reloadDecks = useCallback(async () => {
     if (!memoraPluginEnabled) {
@@ -752,14 +741,6 @@ function AuthenticatedApp({
     () => createDefaultSidebarItems(pluginSnapshot.registry, pluginSnapshot.visiblePinnedSurfaceIds),
     [pluginSnapshot.registry, pluginSnapshot.visiblePinnedSurfaceIds],
   );
-  const enabledSettingsSections = useMemo<readonly SettingsSection[]>(() => [
-    "account",
-    "appearance",
-    ...(drivePluginEnabled ? ["drive" as const] : []),
-    ...(modelsPluginEnabled ? ["model" as const] : []),
-    ...(memoraPluginEnabled ? ["memora" as const] : []),
-  ], [drivePluginEnabled, memoraPluginEnabled, modelsPluginEnabled]);
-
   const palette = (
     <>
       <CommandPalette
@@ -867,7 +848,7 @@ function AuthenticatedApp({
           loadDriveCredentials={loadGoogleDriveCredentials}
           clearDriveCredentials={clearGoogleDriveCredentials}
           initialSection={route.section ?? (modelsPluginEnabled ? "model" : "appearance")}
-          enabledSections={enabledSettingsSections}
+          enabledSections={pluginActivation.settingsSections}
         />
         {palette}
       </>
