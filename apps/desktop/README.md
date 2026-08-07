@@ -30,6 +30,8 @@ Windows creates a new local library under the application's Windows roaming AppD
 
 Set `ACCOUNT_API_BASE_URL` while building to connect account features to the shared PocketBase service. CI and releases read it from the GitHub repository variable named `ACCOUNT_API_BASE_URL`; the backend URL is not committed to source.
 
+For a local Windows build that talks to the bundled local PocketBase, run `powershell -ExecutionPolicy Bypass -File scripts/build-windows.ps1` from `apps/desktop`. It defaults `ACCOUNT_API_BASE_URL` to `http://127.0.0.1:8090` and honors an explicitly set value.
+
 ## Translation
 
 Apple Translation is shown only on macOS. On supported Windows WebView2 runtimes, Library exposes **Windows Translation**, which uses the browser's on-device `Translator` and `LanguageDetector` APIs without an API key. The first use of a language pair may download a model; translation then runs locally and can work offline. The integration is runtime feature-detected, so unsupported WebView2 versions do not show it.
