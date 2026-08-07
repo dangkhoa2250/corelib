@@ -56,6 +56,15 @@ it("manages bundled Plugins in a track-free inset ScrollArea", async () => {
   expect(screen.queryByText(/Uninstall|Erase data/i)).not.toBeInTheDocument();
 
   const libraryCard = screen.getByRole("heading", { name: "Library" }).closest("article");
+  expect(within(libraryCard!).getByRole("button", { name: "Unpin" })).toBeInTheDocument();
+  await userEvent.click(within(libraryCard!).getByRole("button", { name: "Unpin" }));
+  await waitFor(() =>
+    expect(within(libraryCard!).getByRole("button", { name: "Pin" })).toBeInTheDocument(),
+  );
+  await userEvent.click(within(libraryCard!).getByRole("button", { name: "Pin" }));
+  await waitFor(() =>
+    expect(within(libraryCard!).getByRole("button", { name: "Unpin" })).toBeInTheDocument(),
+  );
   await userEvent.click(within(libraryCard!).getByRole("button", { name: "Open" }));
   expect(onLaunch).toHaveBeenCalledWith("route.library");
 

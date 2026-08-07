@@ -96,6 +96,7 @@ export function HomePage({ onLaunch }: { onLaunch: (surfaceId: string) => void }
             {snapshot.installedPlugins.map((plugin) => {
               const enabled = plugin.status === "enabled";
               const surfaceId = primarySurfaceId(plugin);
+              const pinned = surfaceId ? snapshot.pinnedSurfaceIds.includes(surfaceId) : false;
               const statusLabel = plugin.status === "new" ? "New" : enabled ? "Enabled" : "Disabled";
               return (
                 <article className="home-plugin-card" key={plugin.manifest.id}>
@@ -109,6 +110,24 @@ export function HomePage({ onLaunch }: { onLaunch: (surfaceId: string) => void }
                   <p className="home-plugin-card__description">{plugin.manifest.description}</p>
                   <p className="home-plugin-card__dependencies">{dependencySummary(plugin)}</p>
                   <div className="home-plugin-card__actions">
+                    {surfaceId ? (
+                      <button
+                        type="button"
+                        disabled={applying}
+                        onClick={() =>
+                          void apply(
+                            plan({
+                              kind: pinned ? "unpin-surface" : "pin-surface",
+                              surfaceId,
+                            }),
+                          ).catch((error: unknown) =>
+                            setOperationError(error instanceof Error ? error.message : String(error)),
+                          )
+                        }
+                      >
+                        {pinned ? "Unpin" : "Pin"}
+                      </button>
+                    ) : null}
                     {enabled && surfaceId ? (
                       <button type="button" className="home-plugin-card__launch" onClick={() => onLaunch(surfaceId)}>
                         Open

@@ -301,7 +301,11 @@ function AuthenticatedApp({
   aiApi = nativeAiApi,
   accountApi = defaultAccountApi,
 }: AppProps) {
-  const { snapshot: pluginSnapshot } = usePluginLifecycle();
+  const {
+    snapshot: pluginSnapshot,
+    plan: planPluginLifecycle,
+    apply: applyPluginLifecycle,
+  } = usePluginLifecycle();
   const { resolvedTheme, setTheme } = useTheme();
   const analyticsClient = useMemo(() => new AnalyticsClient(accountApi, false), [accountApi]);
 
@@ -726,8 +730,8 @@ function AuthenticatedApp({
   }, pluginSnapshot.registry), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, handleSetTranslationEngine, pluginSnapshot.registry, setTheme, windowsTranslationAvailableForCommands]);
 
   const sidebarItems = useMemo(
-    () => createDefaultSidebarItems(pluginSnapshot.registry),
-    [pluginSnapshot.registry],
+    () => createDefaultSidebarItems(pluginSnapshot.registry, pluginSnapshot.visiblePinnedSurfaceIds),
+    [pluginSnapshot.registry, pluginSnapshot.visiblePinnedSurfaceIds],
   );
 
   const palette = (
@@ -866,21 +870,22 @@ function AuthenticatedApp({
       <AppSidebar
         active={activeSection}
         items={sidebarItems}
-        onNavigate={(section) => {
+        onNavigate={(surfaceId) => {
           if (isBrowserDirty) {
             if (!window.confirm("You have unsaved changes. Discard changes?")) return;
           }
           setIsBrowserDirty(false);
-          setRoute(
-            section === "home"
-              ? { name: "home" }
-              : section === "memora"
-              ? { name: "memora" }
-              : section === "trash"
-              ? { name: "trash" }
-              : section === "statistics"
-              ? { name: "statistics" }
-              : { name: "library" }
+          const destination = appRouteForSurfaceId(surfaceId);
+          if (destination) setRoute(destination);
+        }}
+        onReorder={(surfaceId, beforeSurfaceId) => {
+          const reorderPlan = planPluginLifecycle({
+            kind: "reorder-surface",
+            surfaceId,
+            beforeSurfaceId,
+          });
+          void applyPluginLifecycle(reorderPlan).catch((reorderError: unknown) =>
+            setError(errorMessage(reorderError)),
           );
         }}
         onSearchClick={() => quickOpenRef.current?.open()}

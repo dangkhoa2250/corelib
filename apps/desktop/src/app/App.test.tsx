@@ -668,6 +668,9 @@ vi.mock("./PluginLifecycleProvider", async () => {
     manifest,
     status: "enabled" as const,
   }));
+  const pinnedSurfaceIds = DEFAULT_PLUGIN_REGISTRY.listSurfaces()
+    .filter((surface) => surface.owner.kind === "plugin" && surface.navigation?.defaultPinned)
+    .map((surface) => surface.id);
   return {
     PluginLifecycleProvider: ({ children }: { children: React.ReactNode }) => children,
     usePluginLifecycle: () => ({
@@ -675,6 +678,8 @@ vi.mock("./PluginLifecycleProvider", async () => {
         registry: DEFAULT_PLUGIN_REGISTRY,
         installedPlugins,
         notices: [],
+        pinnedSurfaceIds,
+        visiblePinnedSurfaceIds: pinnedSurfaceIds,
         isEnabled: () => true,
       },
       applying: false,

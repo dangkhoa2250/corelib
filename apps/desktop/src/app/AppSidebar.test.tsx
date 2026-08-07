@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -40,7 +40,7 @@ describe("AppSidebar plugin navigation", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Statistics" }));
 
-    expect(onNavigate).toHaveBeenCalledWith("statistics");
+    expect(onNavigate).toHaveBeenCalledWith("route.statistics");
   });
 
   it("omits disabled Plugin Surfaces from navigation", async () => {
@@ -55,10 +55,47 @@ describe("AppSidebar plugin navigation", () => {
       lifecycle.plan({ kind: "disable-plugin", pluginId: "corelib.memora" }),
     );
 
-    expect(createDefaultSidebarItems(snapshot.registry).map(({ section }) => section)).toEqual([
+    expect(
+      createDefaultSidebarItems(snapshot.registry, snapshot.visiblePinnedSurfaceIds).map(
+        ({ section }) => section,
+      ),
+    ).toEqual([
       "home",
       "library",
       "statistics",
     ]);
+  });
+
+  it("routes drag-and-drop and accessible move controls through stable Surface IDs", async () => {
+    const onReorder = vi.fn();
+    const items = createDefaultSidebarItems(DEFAULT_PLUGIN_REGISTRY);
+    render(
+      <AppSidebar
+        active="library"
+        items={items}
+        onNavigate={vi.fn()}
+        onReorder={onReorder}
+        onSearchClick={vi.fn()}
+        onSettingsClick={vi.fn()}
+      />,
+    );
+    const data = new Map<string, string>();
+    const dataTransfer = {
+      effectAllowed: "move",
+      dropEffect: "move",
+      setData: (type: string, value: string) => data.set(type, value),
+      getData: (type: string) => data.get(type) ?? "",
+    };
+    const trashRow = screen.getByRole("button", { name: "Trash" }).closest("li")!;
+    const memoraRow = screen.getByRole("button", { name: "Memora" }).closest("li")!;
+
+    fireEvent.dragStart(trashRow, { dataTransfer });
+    fireEvent.dragOver(memoraRow, { dataTransfer, clientY: 0 });
+    fireEvent.drop(memoraRow, { dataTransfer, clientY: 0 });
+
+    expect(onReorder).toHaveBeenCalledWith("route.trash", "route.memora");
+
+    await userEvent.click(screen.getByRole("button", { name: "Move Memora down" }));
+    expect(onReorder).toHaveBeenLastCalledWith("route.memora", "route.trash");
   });
 });

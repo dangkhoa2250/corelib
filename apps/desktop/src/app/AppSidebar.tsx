@@ -1,6 +1,6 @@
-import { useContext, useCallback, useState, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
+import { useContext, useCallback, useState, type ComponentType, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
 
-import { IconHome, IconLibrary, IconMemora, IconSearch, IconSettings, IconStatistics, IconTrash } from "./icons";
+import { IconHome, IconLibrary, IconMemora, IconSearch, IconSettings, IconSparkles, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
 import { primaryShortcut } from "../lib/platform";
 import type { PluginRegistry } from "../plugins/registry";
@@ -14,16 +14,19 @@ const SIDEBAR_DEFAULT_WIDTH = 220;
 interface AppSidebarProps {
   active: AppSection;
   items: readonly AppSidebarItem[];
-  onNavigate: (section: AppSection) => void;
+  onNavigate: (surfaceId: string) => void;
+  onReorder?: (surfaceId: string, beforeSurfaceId: string | null) => void;
   onSearchClick: () => void;
   onSettingsClick: () => void;
   onAdminClick?: () => void;
 }
 
 export interface AppSidebarItem {
+  readonly surfaceId: string;
   readonly section: AppSection;
   readonly label: string;
   readonly icon: ComponentType;
+  readonly movable: boolean;
 }
 
 function sectionForBinding(bindingId: string): AppSection {
@@ -38,6 +41,10 @@ function sectionForBinding(bindingId: string): AppSection {
       return "statistics";
     case "route.trash":
       return "trash";
+    case "route.settings.drive":
+    case "route.settings.memora":
+    case "route.settings.model":
+      return "settings";
     default:
       throw new Error(`Unsupported sidebar Surface binding: ${bindingId}`);
   }
@@ -55,32 +62,76 @@ function iconForId(iconId: string | undefined): ComponentType {
       return IconStatistics;
     case "trash":
       return IconTrash;
+    case "settings":
+      return IconSettings;
     default:
-      throw new Error(`Unsupported sidebar icon: ${iconId ?? "(missing)"}`);
+      return IconSparkles;
   }
 }
 
-export function createDefaultSidebarItems(registry: PluginRegistry): readonly AppSidebarItem[] {
+export function createDefaultSidebarItems(
+  registry: PluginRegistry,
+  pinnedSurfaceIds?: readonly string[],
+): readonly AppSidebarItem[] {
+  const surfaces = registry.listSurfaces();
+  const home = surfaces.find((surface) => surface.id === "route.home");
+  if (!home) throw new Error("Corelib Home Surface is not registered.");
+  const requestedPluginSurfaceIds =
+    pinnedSurfaceIds ??
+    surfaces
+      .filter((surface) => surface.owner.kind === "plugin" && surface.navigation?.defaultPinned)
+      .map((surface) => surface.id);
+  const orderedSurfaces = [
+    home,
+    ...requestedPluginSurfaceIds
+      .map((surfaceId) => surfaces.find((surface) => surface.id === surfaceId))
+      .filter((surface): surface is NonNullable<typeof surface> => Boolean(surface)),
+  ];
   return Object.freeze(
-    registry
-      .listSurfaces()
-      .filter((surface) => surface.navigation?.defaultPinned)
+    orderedSurfaces
       .map((surface) =>
         Object.freeze({
+          surfaceId: surface.id,
           section: sectionForBinding(surface.bindingId),
           label: surface.title,
           icon: iconForId(surface.icon),
+          movable: surface.owner.kind === "plugin",
         }),
       ),
   );
 }
 
-export function AppSidebar({ active, items, onNavigate, onSearchClick, onSettingsClick, onAdminClick }: AppSidebarProps) {
+export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick, onSettingsClick, onAdminClick }: AppSidebarProps) {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const searchShortcut = primaryShortcut("K");
   
   const accountContext = useContext(AccountContext);
   const isAdmin = accountContext?.session?.profile?.role === "admin";
+  const movableItems = items.filter((item) => item.movable);
+
+  const handleDrop = (item: AppSidebarItem, event: DragEvent<HTMLLIElement>) => {
+    if (!onReorder || !item.movable) return;
+    event.preventDefault();
+    const sourceId = event.dataTransfer.getData("text/plain");
+    if (!sourceId || sourceId === item.surfaceId) return;
+    const itemIndex = movableItems.findIndex((candidate) => candidate.surfaceId === item.surfaceId);
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const droppedAfter = event.clientY > bounds.top + bounds.height / 2;
+    const beforeSurfaceId = droppedAfter
+      ? movableItems[itemIndex + 1]?.surfaceId ?? null
+      : item.surfaceId;
+    onReorder(sourceId, beforeSurfaceId);
+  };
+
+  const moveItem = (item: AppSidebarItem, direction: -1 | 1) => {
+    if (!onReorder) return;
+    const index = movableItems.findIndex((candidate) => candidate.surfaceId === item.surfaceId);
+    if (direction < 0 && index > 0) {
+      onReorder(item.surfaceId, movableItems[index - 1].surfaceId);
+    } else if (direction > 0 && index >= 0 && index < movableItems.length - 1) {
+      onReorder(item.surfaceId, movableItems[index + 2]?.surfaceId ?? null);
+    }
+  };
 
   const handleResizeStart = useCallback(
     (e: ReactMouseEvent) => {
@@ -127,16 +178,49 @@ export function AppSidebar({ active, items, onNavigate, onSearchClick, onSetting
         {items.map((item) => {
           const Icon = item.icon;
           return (
-            <li key={item.section}>
+            <li
+              draggable={item.movable && Boolean(onReorder)}
+              key={item.surfaceId}
+              onDragOver={(event) => {
+                if (item.movable && onReorder) event.preventDefault();
+              }}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", item.surfaceId);
+              }}
+              onDrop={(event) => handleDrop(item, event)}
+            >
               <button
                 aria-current={active === item.section ? "page" : undefined}
                 className={`app-sidebar__nav-item ${active === item.section ? "is-active" : ""}`}
-                onClick={() => onNavigate(item.section)}
+                onClick={() => onNavigate(item.surfaceId)}
                 type="button"
               >
                 <span aria-hidden="true" className="app-sidebar__nav-icon"><Icon /></span>
                 {item.label}
               </button>
+              {item.movable && onReorder ? (
+                <span className="app-sidebar__reorder-controls">
+                  <button
+                    aria-label={`Move ${item.label} up`}
+                    disabled={movableItems[0]?.surfaceId === item.surfaceId}
+                    onClick={() => moveItem(item, -1)}
+                    type="button"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    aria-label={`Move ${item.label} down`}
+                    disabled={
+                      movableItems[movableItems.length - 1]?.surfaceId === item.surfaceId
+                    }
+                    onClick={() => moveItem(item, 1)}
+                    type="button"
+                  >
+                    ↓
+                  </button>
+                </span>
+              ) : null}
             </li>
           );
         })}
