@@ -1,12 +1,18 @@
-import Ajv, { type ErrorObject } from "ajv";
+import type { ErrorObject } from "ajv";
 import type { FromSchema } from "json-schema-to-ts";
 import { valid, validRange } from "semver";
 
-import { PLUGIN_MANIFEST_SCHEMA } from "./manifest.schema";
+import type { PLUGIN_MANIFEST_SCHEMA } from "./manifest.schema";
+import validateStructure from "./validatePluginManifest.generated";
 
 export const CORELIB_PLUGIN_API_VERSION = "1.0.0";
 
 export type PluginManifest = FromSchema<typeof PLUGIN_MANIFEST_SCHEMA>;
+
+const validateManifestStructure = validateStructure as unknown as {
+  (candidate: unknown): candidate is PluginManifest;
+  errors?: ErrorObject[] | null;
+};
 
 export type PluginManifestValidationIssueCode =
   | "invalid_manifest"
@@ -25,9 +31,6 @@ export type PluginManifestValidationResult =
   | { ok: true; manifest: PluginManifest }
   | { ok: false; issues: readonly PluginManifestValidationIssue[] };
 
-const ajv = new Ajv({ allErrors: true, strict: true });
-const validateStructure = ajv.compile<PluginManifest>(PLUGIN_MANIFEST_SCHEMA);
-
 const schemaIssue = (error: ErrorObject): PluginManifestValidationIssue => ({
   code:
     error.keyword === "const" && error.instancePath === "/manifestVersion"
@@ -38,10 +41,10 @@ const schemaIssue = (error: ErrorObject): PluginManifestValidationIssue => ({
 });
 
 export function validatePluginManifest(candidate: unknown): PluginManifestValidationResult {
-  if (!validateStructure(candidate)) {
+  if (!validateManifestStructure(candidate)) {
     return {
       ok: false,
-      issues: (validateStructure.errors ?? []).map(schemaIssue),
+      issues: (validateManifestStructure.errors ?? []).map(schemaIssue),
     };
   }
 
