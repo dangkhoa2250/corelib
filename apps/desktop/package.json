@@ -20,9 +20,11 @@
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.10.1",
+    "ajv": "^8.20.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "react-dom": "^19.1.0",
+    "semver": "^7.8.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",
@@ -33,8 +35,10 @@
     "@types/node": "^26.1.1",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "@types/semver": "^7.8.0",
     "@vitejs/plugin-react": "^4.6.0",
     "jsdom": "^29.1.1",
+    "json-schema-to-ts": "^3.1.1",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^4.1.10"

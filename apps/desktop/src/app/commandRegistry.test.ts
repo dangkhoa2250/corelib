@@ -1,7 +1,8 @@
 import { expect, test, vi } from "vitest";
 
-import { createCommandRegistry } from "./commandRegistry";
+import { COMMAND_REGISTRY_BINDINGS, createCommandRegistry } from "./commandRegistry";
 import { PUBLIC_ROUTE_CATALOG, publicRouteNames } from "./routes";
+import { DEFAULT_PLUGIN_REGISTRY } from "../plugins/firstParty";
 
 const document = {
   id: "linear-algebra",
@@ -132,6 +133,21 @@ test("executes a Command Palette theme action", async () => {
   await entry.execute();
 
   expect(setTheme).toHaveBeenCalledWith("dark");
+});
+
+test("covers every registered executable binding exactly once", () => {
+  expect([...COMMAND_REGISTRY_BINDINGS.surfaces].sort()).toEqual(
+    DEFAULT_PLUGIN_REGISTRY.listSurfaces().map((surface) => surface.bindingId).sort(),
+  );
+  expect([...COMMAND_REGISTRY_BINDINGS.commands].sort()).toEqual(
+    DEFAULT_PLUGIN_REGISTRY.listCommands().map((command) => command.bindingId).sort(),
+  );
+  expect([...COMMAND_REGISTRY_BINDINGS.searchProviders].sort()).toEqual(
+    DEFAULT_PLUGIN_REGISTRY
+      .listSearchProviders()
+      .map((provider) => provider.bindingId)
+      .sort(),
+  );
 });
 
 test("registers Windows on-device translation as a Command Palette setting action", async () => {

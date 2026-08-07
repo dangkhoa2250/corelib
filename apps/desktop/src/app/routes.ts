@@ -1,5 +1,6 @@
 import type { LibraryDocument } from "../domain/document";
 import type { Deck, LearningCard, StudySession } from "../domain/learning";
+import { DEFAULT_PLUGIN_REGISTRY } from "../plugins/firstParty";
 
 export type SettingsSection = "account" | "appearance" | "drive" | "model" | "memora";
 
@@ -27,15 +28,43 @@ export type PublicRouteName = (typeof publicRouteNames)[number];
 interface PublicRouteDefinition {
   id: string;
   title: string;
-  aliases: string[];
-  breadcrumb: string[];
+  aliases: readonly string[];
+  breadcrumb: readonly string[];
   route: AppRoute;
 }
 
-export const PUBLIC_ROUTE_CATALOG = {
-  library: { id: "route.library", title: "Library", aliases: ["documents", "pdf"], breadcrumb: ["Library"], route: { name: "library" } },
-  memora: { id: "route.memora", title: "Memora", aliases: ["flashcards", "decks"], breadcrumb: ["Memora"], route: { name: "memora" } },
-  trash: { id: "route.trash", title: "Trash", aliases: ["deleted cards"], breadcrumb: ["Trash"], route: { name: "trash" } },
-  settings: { id: "route.settings", title: "Settings", aliases: ["preferences"], breadcrumb: ["Settings"], route: { name: "settings" } },
-  statistics: { id: "route.statistics", title: "Statistics", aliases: ["analytics", "activity", "progress", "insights"], breadcrumb: ["Statistics"], route: { name: "statistics" } },
-} satisfies Record<PublicRouteName, PublicRouteDefinition>;
+const PUBLIC_ROUTE_BINDINGS = {
+  library: { contributionId: "route.library", route: { name: "library" } },
+  memora: { contributionId: "route.memora", route: { name: "memora" } },
+  trash: { contributionId: "route.trash", route: { name: "trash" } },
+  settings: { contributionId: "route.settings", route: { name: "settings" } },
+  statistics: { contributionId: "route.statistics", route: { name: "statistics" } },
+} as const satisfies Record<
+  PublicRouteName,
+  { contributionId: string; route: AppRoute }
+>;
+
+function publicRouteDefinition(name: PublicRouteName): PublicRouteDefinition {
+  const binding = PUBLIC_ROUTE_BINDINGS[name];
+  const surface = DEFAULT_PLUGIN_REGISTRY
+    .listSurfaces()
+    .find((candidate) => candidate.id === binding.contributionId);
+  if (!surface || surface.kind !== "page") {
+    throw new Error(`Public route has no registered page Surface: ${binding.contributionId}`);
+  }
+  return {
+    id: surface.id,
+    title: surface.title,
+    aliases: surface.aliases,
+    breadcrumb: surface.breadcrumb,
+    route: binding.route,
+  };
+}
+
+export const PUBLIC_ROUTE_CATALOG = Object.freeze({
+  library: publicRouteDefinition("library"),
+  memora: publicRouteDefinition("memora"),
+  trash: publicRouteDefinition("trash"),
+  settings: publicRouteDefinition("settings"),
+  statistics: publicRouteDefinition("statistics"),
+}) satisfies Record<PublicRouteName, PublicRouteDefinition>;

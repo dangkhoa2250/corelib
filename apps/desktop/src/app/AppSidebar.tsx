@@ -3,6 +3,7 @@ import { useContext, useCallback, useState, type ComponentType, type MouseEvent 
 import { IconLibrary, IconMemora, IconSearch, IconSettings, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
 import { primaryShortcut } from "../lib/platform";
+import type { PluginRegistry } from "../plugins/registry";
 
 export type AppSection = "library" | "memora" | "trash" | "settings" | "admin" | "statistics";
 
@@ -12,20 +13,65 @@ const SIDEBAR_DEFAULT_WIDTH = 220;
 
 interface AppSidebarProps {
   active: AppSection;
+  items: readonly AppSidebarItem[];
   onNavigate: (section: AppSection) => void;
   onSearchClick: () => void;
   onSettingsClick: () => void;
   onAdminClick?: () => void;
 }
 
-const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] = [
-  { section: "library", label: "Library", icon: IconLibrary },
-  { section: "memora", label: "Memora", icon: IconMemora },
-  { section: "statistics", label: "Statistics", icon: IconStatistics },
-  { section: "trash", label: "Trash", icon: IconTrash },
-];
+export interface AppSidebarItem {
+  readonly section: AppSection;
+  readonly label: string;
+  readonly icon: ComponentType;
+}
 
-export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick, onAdminClick }: AppSidebarProps) {
+function sectionForBinding(bindingId: string): AppSection {
+  switch (bindingId) {
+    case "route.library":
+      return "library";
+    case "route.memora":
+      return "memora";
+    case "route.statistics":
+      return "statistics";
+    case "route.trash":
+      return "trash";
+    default:
+      throw new Error(`Unsupported sidebar Surface binding: ${bindingId}`);
+  }
+}
+
+function iconForId(iconId: string | undefined): ComponentType {
+  switch (iconId) {
+    case "library":
+      return IconLibrary;
+    case "memora":
+      return IconMemora;
+    case "statistics":
+      return IconStatistics;
+    case "trash":
+      return IconTrash;
+    default:
+      throw new Error(`Unsupported sidebar icon: ${iconId ?? "(missing)"}`);
+  }
+}
+
+export function createDefaultSidebarItems(registry: PluginRegistry): readonly AppSidebarItem[] {
+  return Object.freeze(
+    registry
+      .listSurfaces()
+      .filter((surface) => surface.navigation?.defaultPinned)
+      .map((surface) =>
+        Object.freeze({
+          section: sectionForBinding(surface.bindingId),
+          label: surface.title,
+          icon: iconForId(surface.icon),
+        }),
+      ),
+  );
+}
+
+export function AppSidebar({ active, items, onNavigate, onSearchClick, onSettingsClick, onAdminClick }: AppSidebarProps) {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const searchShortcut = primaryShortcut("K");
   
@@ -74,7 +120,7 @@ export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick,
         <kbd className="app-sidebar__search-kbd">{searchShortcut}</kbd>
       </button>
       <ul className="app-sidebar__nav">
-        {NAV_ITEMS.map((item) => {
+        {items.map((item) => {
           const Icon = item.icon;
           return (
             <li key={item.section}>

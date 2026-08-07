@@ -31,7 +31,7 @@ import { ReviewPage } from "../features/review/ReviewPage";
 import type { CardSaveInput } from "../features/cards/CardComposer";
 import { MemoraPage } from "../features/memora/MemoraPage";
 import { DeckDetailPage } from "../features/memora/DeckDetailPage";
-import { AppSidebar, type AppSection } from "./AppSidebar";
+import { AppSidebar, createDefaultSidebarItems, type AppSection } from "./AppSidebar";
 import type { PendingImport } from "./ImportProgress";
 import { CardBrowser } from "../features/cards/CardBrowser";
 import { TrashPage } from "../features/cards/TrashPage";
@@ -53,6 +53,9 @@ import { createCommandRegistry } from "./commandRegistry";
 import type { AppRoute } from "./routes";
 import { useInputPrivacyGuard } from "../components/InputPrivacyGuard";
 import { translateWithWindowsOnDevice, windowsOnDeviceTranslationAvailable } from "../lib/windowsTranslation";
+import { DEFAULT_PLUGIN_REGISTRY } from "../plugins/firstParty";
+
+const DEFAULT_SIDEBAR_ITEMS = createDefaultSidebarItems(DEFAULT_PLUGIN_REGISTRY);
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -666,7 +669,7 @@ export function App({
     setTheme,
     setTranslationEngine: handleSetTranslationEngine,
     windowsOnDeviceTranslationAvailable: windowsTranslationAvailableForCommands,
-  }), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, handleSetTranslationEngine, setTheme, windowsTranslationAvailableForCommands]);
+  }, DEFAULT_PLUGIN_REGISTRY), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, handleSetTranslationEngine, setTheme, windowsTranslationAvailableForCommands]);
 
   const palette = (
     <>
@@ -801,6 +804,7 @@ export function App({
       <div className="app-shell">
       <AppSidebar
         active={activeSection}
+        items={DEFAULT_SIDEBAR_ITEMS}
         onNavigate={(section) => {
           if (isBrowserDirty) {
             if (!window.confirm("You have unsaved changes. Discard changes?")) return;
