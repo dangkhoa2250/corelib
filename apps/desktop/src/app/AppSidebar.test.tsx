@@ -66,7 +66,7 @@ describe("AppSidebar plugin navigation", () => {
     ]);
   });
 
-  it("routes drag-and-drop and accessible move controls through stable Surface IDs", async () => {
+  it("routes drag-and-drop through stable Surface IDs and hides arrow controls", async () => {
     const onReorder = vi.fn();
     const items = createDefaultSidebarItems(DEFAULT_PLUGIN_REGISTRY);
     render(
@@ -95,7 +95,7 @@ describe("AppSidebar plugin navigation", () => {
 
     expect(onReorder).toHaveBeenCalledWith("route.trash", "route.memora");
 
-    await userEvent.click(screen.getByRole("button", { name: "Move Memora down" }));
-    expect(onReorder).toHaveBeenLastCalledWith("route.memora", "route.trash");
+    expect(screen.queryByRole("button", { name: "Move Memora up" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Move Memora down" })).not.toBeInTheDocument();
   });
 });

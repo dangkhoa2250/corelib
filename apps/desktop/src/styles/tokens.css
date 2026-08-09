@@ -468,38 +468,11 @@ textarea::placeholder {
 }
 
 .app-sidebar__nav > li[draggable="true"] > .app-sidebar__nav-item {
-  padding-right: 54px;
+  cursor: grab;
 }
 
-.app-sidebar__reorder-controls {
-  position: absolute;
-  top: 50%;
-  right: 5px;
-  display: flex;
-  gap: 1px;
-  opacity: 0;
-  transform: translateY(-50%);
-}
-
-.app-sidebar__nav > li:hover .app-sidebar__reorder-controls,
-.app-sidebar__nav > li:focus-within .app-sidebar__reorder-controls {
-  opacity: 1;
-}
-
-.app-sidebar__reorder-controls button {
-  width: 21px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  border-radius: 5px;
-  color: var(--text-secondary);
-  background: var(--surface-2);
-  cursor: pointer;
-}
-
-.app-sidebar__reorder-controls button:disabled {
-  color: var(--text-disabled);
-  cursor: default;
+.app-sidebar__nav > li[draggable="true"] > .app-sidebar__nav-item:active {
+  cursor: grabbing;
 }
 
 :root[data-platform="windows"] .settings-page__sidebar {
