@@ -1,4 +1,4 @@
-import { useContext, useCallback, useState, type ComponentType, type DragEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useContext, useCallback, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 import { IconHome, IconLibrary, IconMemora, IconSearch, IconSettings, IconSparkles, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
@@ -86,19 +86,71 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
   const accountContext = useContext(AccountContext);
   const isAdmin = accountContext?.session?.profile?.role === "admin";
   const movableItems = items.filter((item) => item.movable);
+  const pointerDragRef = useRef<{
+    sourceId: string;
+    pointerId: number;
+    dragging: boolean;
+    targetId: string | null;
+  } | null>(null);
+  const suppressClickRef = useRef(false);
+  const [draggingSurfaceId, setDraggingSurfaceId] = useState<string | null>(null);
+  const [dragOverSurfaceId, setDragOverSurfaceId] = useState<string | null>(null);
 
-  const handleDrop = (item: AppSidebarItem, event: DragEvent<HTMLLIElement>) => {
+  const resolvePointerTarget = useCallback((clientX: number, clientY: number) => {
+    const element = document.elementFromPoint?.(clientX, clientY);
+    const row = element?.closest<HTMLElement>("[data-surface-id]");
+    const targetId = row?.dataset.surfaceId ?? null;
+    const isMovable = targetId !== null && movableItems.some((item) => item.surfaceId === targetId);
+    const resolvedTargetId = isMovable ? targetId : null;
+    const drag = pointerDragRef.current;
+    if (drag) drag.targetId = resolvedTargetId;
+    setDragOverSurfaceId(resolvedTargetId);
+  }, [movableItems]);
+
+  const finishPointerDrag = useCallback((clientX: number, clientY: number) => {
+    const drag = pointerDragRef.current;
+    if (!drag) return;
+    if (drag.dragging && drag.targetId && drag.targetId !== drag.sourceId && onReorder) {
+      const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-surface-id]");
+      const bounds = target?.getBoundingClientRect();
+      const targetIndex = movableItems.findIndex((item) => item.surfaceId === drag.targetId);
+      const droppedAfter = Boolean(bounds && clientY > bounds.top + bounds.height / 2);
+      const beforeSurfaceId = droppedAfter
+        ? movableItems[targetIndex + 1]?.surfaceId ?? null
+        : drag.targetId;
+      onReorder(drag.sourceId, beforeSurfaceId);
+    }
+    pointerDragRef.current = null;
+    setDraggingSurfaceId(null);
+    setDragOverSurfaceId(null);
+  }, [movableItems, onReorder]);
+
+  const handlePointerDown = (item: AppSidebarItem, event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!onReorder || !item.movable) return;
+    pointerDragRef.current = {
+      sourceId: item.surfaceId,
+      pointerId: event.pointerId,
+      dragging: false,
+      targetId: null,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    const drag = pointerDragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag.dragging) {
+      drag.dragging = true;
+      suppressClickRef.current = true;
+      setDraggingSurfaceId(drag.sourceId);
+    }
     event.preventDefault();
-    const sourceId = event.dataTransfer.getData("text/plain");
-    if (!sourceId || sourceId === item.surfaceId) return;
-    const itemIndex = movableItems.findIndex((candidate) => candidate.surfaceId === item.surfaceId);
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const droppedAfter = event.clientY > bounds.top + bounds.height / 2;
-    const beforeSurfaceId = droppedAfter
-      ? movableItems[itemIndex + 1]?.surfaceId ?? null
-      : item.surfaceId;
-    onReorder(sourceId, beforeSurfaceId);
+    resolvePointerTarget(event.clientX, event.clientY);
+  };
+
+  const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (pointerDragRef.current?.pointerId !== event.pointerId) return;
+    finishPointerDrag(event.clientX, event.clientY);
   };
 
   const handleResizeStart = useCallback((e: ReactMouseEvent) => {
@@ -134,21 +186,26 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
           const Icon = item.icon;
           return (
             <li
-              draggable={item.movable && Boolean(onReorder)}
+              data-dragging={draggingSurfaceId === item.surfaceId ? "true" : undefined}
+              data-drag-over={dragOverSurfaceId === item.surfaceId ? "true" : undefined}
+              data-reorderable={item.movable && Boolean(onReorder) ? "true" : undefined}
+              data-surface-id={item.surfaceId}
               key={item.surfaceId}
-              onDragOver={(event) => {
-                if (item.movable && onReorder) event.preventDefault();
-              }}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", item.surfaceId);
-              }}
-              onDrop={(event) => handleDrop(item, event)}
             >
               <button
                 aria-current={active === item.section ? "page" : undefined}
                 className={`app-sidebar__nav-item ${active === item.section ? "is-active" : ""}`}
-                onClick={() => onNavigate(item.surfaceId)}
+                onClick={() => {
+                  if (suppressClickRef.current) {
+                    suppressClickRef.current = false;
+                    return;
+                  }
+                  onNavigate(item.surfaceId);
+                }}
+                onPointerCancel={handlePointerUp}
+                onPointerDown={(event) => handlePointerDown(item, event)}
+                onPointerMove={handlePointerMove}
+                onPointerUp={handlePointerUp}
                 type="button"
               >
                 <span aria-hidden="true" className="app-sidebar__nav-icon"><Icon /></span>

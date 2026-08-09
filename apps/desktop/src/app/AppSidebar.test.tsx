@@ -66,7 +66,7 @@ describe("AppSidebar plugin navigation", () => {
     ]);
   });
 
-  it("routes drag-and-drop through stable Surface IDs and hides arrow controls", async () => {
+  it("renders reorderable tabs without arrow controls", () => {
     const onReorder = vi.fn();
     const items = createDefaultSidebarItems(DEFAULT_PLUGIN_REGISTRY);
     render(
@@ -79,23 +79,42 @@ describe("AppSidebar plugin navigation", () => {
         onSettingsClick={vi.fn()}
       />,
     );
-    const data = new Map<string, string>();
-    const dataTransfer = {
-      effectAllowed: "move",
-      dropEffect: "move",
-      setData: (type: string, value: string) => data.set(type, value),
-      getData: (type: string) => data.get(type) ?? "",
-    };
-    const trashRow = screen.getByRole("button", { name: "Trash" }).closest("li")!;
-    const memoraRow = screen.getByRole("button", { name: "Memora" }).closest("li")!;
-
-    fireEvent.dragStart(trashRow, { dataTransfer });
-    fireEvent.dragOver(memoraRow, { dataTransfer, clientY: 0 });
-    fireEvent.drop(memoraRow, { dataTransfer, clientY: 0 });
-
-    expect(onReorder).toHaveBeenCalledWith("route.trash", "route.memora");
+    expect(screen.getByRole("button", { name: "Trash" }).closest("li"))
+      .toHaveAttribute("data-reorderable", "true");
 
     expect(screen.queryByRole("button", { name: "Move Memora up" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Move Memora down" })).not.toBeInTheDocument();
+  });
+
+  it("reorders when a tab is dragged with pointer events", () => {
+    const onReorder = vi.fn();
+    const items = createDefaultSidebarItems(DEFAULT_PLUGIN_REGISTRY);
+    render(
+      <AppSidebar
+        active="library"
+        items={items}
+        onNavigate={vi.fn()}
+        onReorder={onReorder}
+        onSearchClick={vi.fn()}
+        onSettingsClick={vi.fn()}
+      />,
+    );
+    const trashButton = screen.getByRole("button", { name: "Trash" });
+    const memoraRow = screen.getByRole("button", { name: "Memora" }).closest("li")!;
+    const originalElementFromPoint = document.elementFromPoint;
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: () => memoraRow,
+    });
+
+    fireEvent.pointerDown(trashButton, { pointerId: 1, clientX: 20, clientY: 0 });
+    fireEvent.pointerMove(trashButton, { pointerId: 1, clientX: 30, clientY: 0 });
+    fireEvent.pointerUp(trashButton, { pointerId: 1, clientX: 30, clientY: 0 });
+
+    expect(onReorder).toHaveBeenCalledWith("route.trash", "route.memora");
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: originalElementFromPoint,
+    });
   });
 });

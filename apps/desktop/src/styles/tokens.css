@@ -467,11 +467,11 @@ textarea::placeholder {
   position: relative;
 }
 
-.app-sidebar__nav > li[draggable="true"] > .app-sidebar__nav-item {
+.app-sidebar__nav > li[data-reorderable="true"] > .app-sidebar__nav-item {
   cursor: grab;
 }
 
-.app-sidebar__nav > li[draggable="true"] > .app-sidebar__nav-item:active {
+.app-sidebar__nav > li[data-reorderable="true"] > .app-sidebar__nav-item:active {
   cursor: grabbing;
 }
 
