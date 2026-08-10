@@ -1,4 +1,4 @@
-import { useContext, useCallback, useLayoutEffect, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useContext, useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 import { IconHome, IconLibrary, IconMemora, IconSearch, IconSettings, IconSparkles, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
@@ -163,22 +163,46 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
-  const handlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
+  const updatePointerDrag = useCallback((pointerId: number, clientX: number, clientY: number) => {
     const drag = pointerDragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
+    if (!drag || drag.pointerId !== pointerId) return;
     if (!drag.dragging) {
       drag.dragging = true;
       suppressClickRef.current = true;
       setDraggingSurfaceId(drag.sourceId);
     }
+    resolvePointerTarget(clientX, clientY);
+  }, [resolvePointerTarget]);
+
+  const handlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    resolvePointerTarget(event.clientX, event.clientY);
+    updatePointerDrag(event.pointerId, event.clientX, event.clientY);
   };
 
   const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (pointerDragRef.current?.pointerId !== event.pointerId) return;
     finishPointerDrag(event.clientX, event.clientY);
   };
+
+  useEffect(() => {
+    const handleWindowPointerMove = (event: PointerEvent) => {
+      if (pointerDragRef.current?.pointerId !== event.pointerId) return;
+      event.preventDefault();
+      updatePointerDrag(event.pointerId, event.clientX, event.clientY);
+    };
+    const handleWindowPointerUp = (event: PointerEvent) => {
+      if (pointerDragRef.current?.pointerId !== event.pointerId) return;
+      finishPointerDrag(event.clientX, event.clientY);
+    };
+    window.addEventListener("pointermove", handleWindowPointerMove);
+    window.addEventListener("pointerup", handleWindowPointerUp);
+    window.addEventListener("pointercancel", handleWindowPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handleWindowPointerMove);
+      window.removeEventListener("pointerup", handleWindowPointerUp);
+      window.removeEventListener("pointercancel", handleWindowPointerUp);
+    };
+  }, [finishPointerDrag, updatePointerDrag]);
 
   const handleResizeStart = useCallback((e: ReactMouseEvent) => {
     e.preventDefault();
