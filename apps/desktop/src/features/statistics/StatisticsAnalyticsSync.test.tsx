@@ -521,6 +521,7 @@ test("retries the same idempotent snapshot after an upload failure", async () =>
 test("keeps consent and cursor state private to the opted-in account", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-07-18T16:00:00.000Z"));
+  vi.spyOn(Date.prototype, "getTimezoneOffset").mockReturnValue(-540);
   const getSnapshots = vi.fn().mockResolvedValue([]);
   const accountAApi = { upsertDailyStatistics: vi.fn() } as any;
   const accountBApi = { upsertDailyStatistics: vi.fn() } as any;
