@@ -130,4 +130,43 @@ describe("AppSidebar plugin navigation", () => {
     expect(onReorder).toHaveBeenCalledWith("route.trash", "route.memora");
     rectSpy.mockRestore();
   });
+
+  it("does not highlight the next tab while the dragged tab remains in its slot", () => {
+    const onReorder = vi.fn();
+    const defaultItems = createDefaultSidebarItems(DEFAULT_PLUGIN_REGISTRY);
+    const order = ["route.home", "route.library", "route.statistics", "route.memora", "route.trash"];
+    const items = order.map((surfaceId) => defaultItems.find((item) => item.surfaceId === surfaceId)!);
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("app-sidebar__nav")) return new DOMRect(0, 0, 220, 200);
+      if (this.dataset.surfaceId) {
+        const rows = [...document.querySelectorAll<HTMLElement>(".app-sidebar__nav > li[data-surface-id]")];
+        const baseTop = rows.indexOf(this) * 34;
+        const translateX = Number.parseFloat(this.style.getPropertyValue("--sidebar-drag-x")) || 0;
+        const translateY = Number.parseFloat(this.style.getPropertyValue("--sidebar-drag-y")) || 0;
+        return new DOMRect(translateX, baseTop + translateY, 220, 32);
+      }
+      return new DOMRect();
+    });
+    render(
+      <AppSidebar
+        active="library"
+        items={items}
+        onNavigate={vi.fn()}
+        onReorder={onReorder}
+        onSearchClick={vi.fn()}
+        onSettingsClick={vi.fn()}
+      />,
+    );
+    const memoraButton = screen.getByRole("button", { name: "Memora" });
+    const trashRow = screen.getByRole("button", { name: "Trash" }).closest("li")!;
+
+    fireEvent.pointerDown(memoraButton, { pointerId: 1, clientX: 20, clientY: 119 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 21, clientY: 120 });
+
+    expect(memoraButton.closest("li")).toHaveAttribute("data-dragging", "true");
+    expect(trashRow).not.toHaveAttribute("data-drag-over");
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 21, clientY: 120 });
+    expect(onReorder).not.toHaveBeenCalled();
+    rectSpy.mockRestore();
+  });
 });

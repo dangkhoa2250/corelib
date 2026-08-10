@@ -109,6 +109,7 @@ test("reorders sidebar tabs with a real browser drag", async ({ page }) => {
       draggedBox.y + draggedBox.height / 2 - followY,
     );
   }).toBeLessThan(3);
+  await expect(page.locator('.app-sidebar__nav > li[data-drag-over="true"]')).toHaveCount(0);
   const statistics = page.locator('li[data-surface-id="route.statistics"]');
   const statisticsBox = await statistics.boundingBox();
   if (!statisticsBox) throw new Error("Sidebar animation target is not measurable.");

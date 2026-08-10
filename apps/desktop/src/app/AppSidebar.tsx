@@ -215,8 +215,9 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
 
     const current = previewItemsRef.current ?? drag.initialItems;
     const next = reorderPreviewItems(current, drag.sourceId, clientY, drag.slotCenters);
-    setDragOverSurfaceId(next.overSurfaceId);
-    if (!sameSurfaceOrder(current, next.items)) {
+    const orderChanged = !sameSurfaceOrder(current, next.items);
+    setDragOverSurfaceId(orderChanged ? next.overSurfaceId : null);
+    if (orderChanged) {
       captureCurrentRowRects();
       previewItemsRef.current = next.items;
       setPreviewItems(next.items);
