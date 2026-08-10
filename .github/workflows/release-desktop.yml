@@ -23,35 +23,31 @@ jobs:
           cache: npm
           cache-dependency-path: apps/desktop/package-lock.json
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
       - name: Install dependencies
         working-directory: apps/desktop
         run: npm ci
-      - name: Build signed macOS artifacts
+      - name: Build signed universal macOS artifacts
         working-directory: apps/desktop
-        run: npm run tauri -- build
+        run: npm run tauri -- build --target universal-apple-darwin
       - name: Stage macOS release files
         working-directory: apps/desktop
         shell: bash
         run: |
           set -euo pipefail
+          bundle_dir="src-tauri/target/universal-apple-darwin/release/bundle"
           mkdir release-artifacts
-          cp src-tauri/target/release/bundle/macos/*.app.tar.gz release-artifacts/
-          cp src-tauri/target/release/bundle/macos/*.app.tar.gz.sig release-artifacts/
-          cp src-tauri/target/release/bundle/dmg/*.dmg release-artifacts/
+          cp "$bundle_dir"/macos/*.app.tar.gz release-artifacts/
+          cp "$bundle_dir"/macos/*.app.tar.gz.sig release-artifacts/
+          cp "$bundle_dir"/dmg/*.dmg release-artifacts/
           bundle=$(find release-artifacts -maxdepth 1 -name '*.app.tar.gz' -print -quit)
           test -n "$bundle"
           test -f "${bundle}.sig"
-          host=$(rustc -vV | sed -n 's/^host: //p')
-          case "$host" in
-            aarch64-apple-darwin) platform=darwin-aarch64 ;;
-            x86_64-apple-darwin) platform=darwin-x86_64 ;;
-            *) echo "Unsupported macOS Rust host: $host" >&2; exit 1 ;;
-          esac
           jq -n \
-            --arg platform "$platform" \
             --arg filename "$(basename "$bundle")" \
             --arg signature "$(cat "${bundle}.sig")" \
-            '{platform: $platform, filename: $filename, signature: $signature}' \
+            '{filename: $filename, signature: $signature}' \
             > release-artifacts/metadata.json
       - uses: actions/upload-artifact@v4
         with:
@@ -123,7 +119,6 @@ jobs:
           tag=${GITHUB_REF#refs/tags/}
           version=${tag#desktop-v}
           pub_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          mac_platform=$(jq -r .platform release-assets/macos/metadata.json)
           mac_filename=$(jq -r .filename release-assets/macos/metadata.json)
           mac_signature=$(jq -r .signature release-assets/macos/metadata.json)
           windows_platform=$(jq -r .platform release-assets/windows/metadata.json)
@@ -133,13 +128,12 @@ jobs:
             --arg version "$version" \
             --arg notes "Release $version" \
             --arg pub_date "$pub_date" \
-            --arg mac_platform "$mac_platform" \
             --arg mac_url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/${mac_filename}" \
             --arg mac_signature "$mac_signature" \
             --arg windows_platform "$windows_platform" \
             --arg windows_url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/${windows_filename}" \
             --arg windows_signature "$windows_signature" \
-            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {($mac_platform): {signature: $mac_signature, url: $mac_url}, ($windows_platform): {signature: $windows_signature, url: $windows_url}}}' \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"darwin-aarch64": {signature: $mac_signature, url: $mac_url}, "darwin-x86_64": {signature: $mac_signature, url: $mac_url}, ($windows_platform): {signature: $windows_signature, url: $windows_url}}}' \
             > latest.json
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
