@@ -1,4 +1,4 @@
-import { useContext, useCallback, useEffect, useLayoutEffect, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useContext, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 import { IconHome, IconLibrary, IconMemora, IconSearch, IconSettings, IconSparkles, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
@@ -27,6 +27,32 @@ export interface AppSidebarItem {
   readonly label: string;
   readonly icon: ComponentType;
   readonly movable: boolean;
+}
+
+function sameSurfaceOrder(left: readonly AppSidebarItem[], right: readonly AppSidebarItem[]): boolean {
+  return left.length === right.length && left.every((item, index) => item.surfaceId === right[index]?.surfaceId);
+}
+
+function reorderPreviewItems(
+  current: readonly AppSidebarItem[],
+  sourceId: string,
+  targetId: string,
+  clientY: number,
+  targetRow: HTMLElement | null,
+): readonly AppSidebarItem[] {
+  const movable = current.filter((item) => item.movable);
+  const sourceIndex = movable.findIndex((item) => item.surfaceId === sourceId);
+  const targetIndex = movable.findIndex((item) => item.surfaceId === targetId);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceId === targetId) return current;
+
+  const droppedAfter = Boolean(targetRow && clientY > targetRow.getBoundingClientRect().top + targetRow.getBoundingClientRect().height / 2);
+  const [source] = movable.splice(sourceIndex, 1);
+  let insertionIndex = targetIndex + (droppedAfter ? 1 : 0);
+  if (sourceIndex < insertionIndex) insertionIndex -= 1;
+  movable.splice(Math.max(0, Math.min(insertionIndex, movable.length)), 0, source);
+
+  let movableIndex = 0;
+  return current.map((item) => item.movable ? movable[movableIndex++] : item);
 }
 
 function sectionForBinding(bindingId: string): AppSection {
@@ -85,12 +111,16 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
   const searchShortcut = primaryShortcut("K");
   const accountContext = useContext(AccountContext);
   const isAdmin = accountContext?.session?.profile?.role === "admin";
-  const movableItems = items.filter((item) => item.movable);
+  const [previewItems, setPreviewItems] = useState<readonly AppSidebarItem[] | null>(null);
+  const previewItemsRef = useRef<readonly AppSidebarItem[] | null>(null);
+  const renderedItems = useMemo(() => previewItems ?? items, [items, previewItems]);
+  const movableItems = renderedItems.filter((item) => item.movable);
   const pointerDragRef = useRef<{
     sourceId: string;
     pointerId: number;
     dragging: boolean;
     targetId: string | null;
+    initialItems: readonly AppSidebarItem[];
   } | null>(null);
   const suppressClickRef = useRef(false);
   const [draggingSurfaceId, setDraggingSurfaceId] = useState<string | null>(null);
@@ -121,7 +151,14 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
       });
     }
     previousRowRects.current = nextRowRects;
-  }, [items]);
+  }, [renderedItems]);
+
+  useEffect(() => {
+    const preview = previewItemsRef.current;
+    if (!preview || draggingSurfaceId || !sameSurfaceOrder(items, preview)) return;
+    previewItemsRef.current = null;
+    setPreviewItems(null);
+  }, [draggingSurfaceId, items, previewItems]);
 
   const resolvePointerTarget = useCallback((clientX: number, clientY: number) => {
     const element = document.elementFromPoint?.(clientX, clientY);
@@ -130,27 +167,37 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
     const isMovable = targetId !== null && movableItems.some((item) => item.surfaceId === targetId);
     const resolvedTargetId = isMovable ? targetId : null;
     const drag = pointerDragRef.current;
-    if (drag) drag.targetId = resolvedTargetId;
+    if (drag) {
+      drag.targetId = resolvedTargetId;
+      if (drag.dragging && resolvedTargetId && resolvedTargetId !== drag.sourceId) {
+        const current = previewItemsRef.current ?? drag.initialItems;
+        const next = reorderPreviewItems(current, drag.sourceId, resolvedTargetId, clientY, row ?? null);
+        if (!sameSurfaceOrder(current, next)) {
+          previewItemsRef.current = next;
+          setPreviewItems(next);
+        }
+      }
+    }
     setDragOverSurfaceId(resolvedTargetId);
   }, [movableItems]);
 
-  const finishPointerDrag = useCallback((clientX: number, clientY: number) => {
+  const finishPointerDrag = useCallback((_clientX: number, _clientY: number) => {
     const drag = pointerDragRef.current;
     if (!drag) return;
-    if (drag.dragging && drag.targetId && drag.targetId !== drag.sourceId && onReorder) {
-      const target = document.elementFromPoint?.(clientX, clientY)?.closest<HTMLElement>("[data-surface-id]");
-      const bounds = target?.getBoundingClientRect();
-      const targetIndex = movableItems.findIndex((item) => item.surfaceId === drag.targetId);
-      const droppedAfter = Boolean(bounds && clientY > bounds.top + bounds.height / 2);
-      const beforeSurfaceId = droppedAfter
-        ? movableItems[targetIndex + 1]?.surfaceId ?? null
-        : drag.targetId;
-      onReorder(drag.sourceId, beforeSurfaceId);
+    const finalItems = previewItemsRef.current ?? drag.initialItems;
+    const changed = !sameSurfaceOrder(drag.initialItems, finalItems);
+    if (drag.dragging && changed && onReorder) {
+      const finalMovable = finalItems.filter((item) => item.movable);
+      const sourceIndex = finalMovable.findIndex((item) => item.surfaceId === drag.sourceId);
+      onReorder(drag.sourceId, finalMovable[sourceIndex + 1]?.surfaceId ?? null);
+    } else if (!changed) {
+      previewItemsRef.current = null;
+      setPreviewItems(null);
     }
     pointerDragRef.current = null;
     setDraggingSurfaceId(null);
     setDragOverSurfaceId(null);
-  }, [movableItems, onReorder]);
+  }, [onReorder]);
 
   const handlePointerDown = (item: AppSidebarItem, event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!onReorder || !item.movable) return;
@@ -159,7 +206,10 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
       pointerId: event.pointerId,
       dragging: false,
       targetId: null,
+      initialItems: items,
     };
+    previewItemsRef.current = items;
+    setPreviewItems(items);
     event.currentTarget.setPointerCapture?.(event.pointerId);
   };
 
@@ -233,7 +283,7 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
         <kbd className="app-sidebar__search-kbd">{searchShortcut}</kbd>
       </button>
       <ul className="app-sidebar__nav">
-        {items.map((item) => {
+        {renderedItems.map((item) => {
           const Icon = item.icon;
           return (
             <li

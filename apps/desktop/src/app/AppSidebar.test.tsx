@@ -111,6 +111,14 @@ describe("AppSidebar plugin navigation", () => {
     fireEvent.pointerMove(window, { pointerId: 1, clientX: 30, clientY: 0 });
     expect(trashButton.closest("li")).toHaveAttribute("data-dragging", "true");
     expect(memoraRow).toHaveAttribute("data-drag-over", "true");
+    expect([...document.querySelectorAll<HTMLElement>(".app-sidebar__nav > li[data-surface-id]")]
+      .map((row) => row.dataset.surfaceId)).toEqual([
+        "route.home",
+        "route.library",
+        "route.trash",
+        "route.memora",
+        "route.statistics",
+      ]);
     fireEvent.pointerUp(window, { pointerId: 1, clientX: 30, clientY: 0 });
 
     expect(onReorder).toHaveBeenCalledWith("route.trash", "route.memora");
