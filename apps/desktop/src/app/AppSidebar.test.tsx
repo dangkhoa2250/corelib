@@ -89,6 +89,17 @@ describe("AppSidebar plugin navigation", () => {
   it("reorders when a tab is dragged with pointer events", () => {
     const onReorder = vi.fn();
     const items = createDefaultSidebarItems(DEFAULT_PLUGIN_REGISTRY);
+    const rectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("app-sidebar__nav")) return new DOMRect(0, 0, 220, 200);
+      if (this.dataset.surfaceId) {
+        const rows = [...document.querySelectorAll<HTMLElement>(".app-sidebar__nav > li[data-surface-id]")];
+        const baseTop = rows.indexOf(this) * 34;
+        const translateX = Number.parseFloat(this.style.getPropertyValue("--sidebar-drag-x")) || 0;
+        const translateY = Number.parseFloat(this.style.getPropertyValue("--sidebar-drag-y")) || 0;
+        return new DOMRect(translateX, baseTop + translateY, 220, 32);
+      }
+      return new DOMRect();
+    });
     render(
       <AppSidebar
         active="library"
@@ -101,14 +112,9 @@ describe("AppSidebar plugin navigation", () => {
     );
     const trashButton = screen.getByRole("button", { name: "Trash" });
     const memoraRow = screen.getByRole("button", { name: "Memora" }).closest("li")!;
-    const originalElementFromPoint = document.elementFromPoint;
-    Object.defineProperty(document, "elementFromPoint", {
-      configurable: true,
-      value: () => memoraRow,
-    });
 
-    fireEvent.pointerDown(trashButton, { pointerId: 1, clientX: 20, clientY: 0 });
-    fireEvent.pointerMove(window, { pointerId: 1, clientX: 30, clientY: 0 });
+    fireEvent.pointerDown(trashButton, { pointerId: 1, clientX: 20, clientY: 153 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 30, clientY: 70 });
     expect(trashButton.closest("li")).toHaveAttribute("data-dragging", "true");
     expect(memoraRow).toHaveAttribute("data-drag-over", "true");
     expect([...document.querySelectorAll<HTMLElement>(".app-sidebar__nav > li[data-surface-id]")]
@@ -119,12 +125,9 @@ describe("AppSidebar plugin navigation", () => {
         "route.memora",
         "route.statistics",
       ]);
-    fireEvent.pointerUp(window, { pointerId: 1, clientX: 30, clientY: 0 });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 30, clientY: 70 });
 
     expect(onReorder).toHaveBeenCalledWith("route.trash", "route.memora");
-    Object.defineProperty(document, "elementFromPoint", {
-      configurable: true,
-      value: originalElementFromPoint,
-    });
+    rectSpy.mockRestore();
   });
 });

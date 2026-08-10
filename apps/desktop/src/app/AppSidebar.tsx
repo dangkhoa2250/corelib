@@ -36,23 +36,26 @@ function sameSurfaceOrder(left: readonly AppSidebarItem[], right: readonly AppSi
 function reorderPreviewItems(
   current: readonly AppSidebarItem[],
   sourceId: string,
-  targetId: string,
   clientY: number,
-  targetRow: HTMLElement | null,
-): readonly AppSidebarItem[] {
+  slotCenters: readonly number[],
+): { readonly items: readonly AppSidebarItem[]; readonly overSurfaceId: string | null } {
   const movable = current.filter((item) => item.movable);
   const sourceIndex = movable.findIndex((item) => item.surfaceId === sourceId);
-  const targetIndex = movable.findIndex((item) => item.surfaceId === targetId);
-  if (sourceIndex < 0 || targetIndex < 0 || sourceId === targetId) return current;
+  if (sourceIndex < 0) return { items: current, overSurfaceId: null };
 
-  const droppedAfter = Boolean(targetRow && clientY > targetRow.getBoundingClientRect().top + targetRow.getBoundingClientRect().height / 2);
   const [source] = movable.splice(sourceIndex, 1);
-  let insertionIndex = targetIndex + (droppedAfter ? 1 : 0);
+  const firstSlotAfterPointer = slotCenters.findIndex((center) => clientY < center);
+  let insertionIndex = firstSlotAfterPointer < 0 ? slotCenters.length : firstSlotAfterPointer;
   if (sourceIndex < insertionIndex) insertionIndex -= 1;
-  movable.splice(Math.max(0, Math.min(insertionIndex, movable.length)), 0, source);
+  insertionIndex = Math.max(0, Math.min(insertionIndex, movable.length));
+  const overSurfaceId = movable[insertionIndex]?.surfaceId ?? movable[movable.length - 1]?.surfaceId ?? null;
+  movable.splice(insertionIndex, 0, source);
 
   let movableIndex = 0;
-  return current.map((item) => item.movable ? movable[movableIndex++] : item);
+  return {
+    items: current.map((item) => item.movable ? movable[movableIndex++] : item),
+    overSurfaceId,
+  };
 }
 
 function sectionForBinding(bindingId: string): AppSection {
@@ -114,44 +117,86 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
   const [previewItems, setPreviewItems] = useState<readonly AppSidebarItem[] | null>(null);
   const previewItemsRef = useRef<readonly AppSidebarItem[] | null>(null);
   const renderedItems = useMemo(() => previewItems ?? items, [items, previewItems]);
-  const movableItems = renderedItems.filter((item) => item.movable);
   const pointerDragRef = useRef<{
     sourceId: string;
     pointerId: number;
     dragging: boolean;
-    targetId: string | null;
     initialItems: readonly AppSidebarItem[];
+    startClientX: number;
+    startClientY: number;
+    lastClientX: number;
+    lastClientY: number;
+    initialLeft: number;
+    initialTop: number;
+    translateX: number;
+    translateY: number;
+    slotCenters: readonly number[];
   } | null>(null);
   const suppressClickRef = useRef(false);
   const [draggingSurfaceId, setDraggingSurfaceId] = useState<string | null>(null);
   const [dragOverSurfaceId, setDragOverSurfaceId] = useState<string | null>(null);
+  const navRef = useRef<HTMLUListElement>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const previousRowRects = useRef<Map<string, DOMRect> | null>(null);
+  const rowAnimationsRef = useRef(new Map<string, Animation>());
+
+  const captureCurrentRowRects = useCallback(() => {
+    const rects = new Map<string, DOMRect>();
+    rowRefs.current.forEach((row, surfaceId) => rects.set(surfaceId, row.getBoundingClientRect()));
+    previousRowRects.current = rects;
+    return rects;
+  }, []);
+
+  const positionDraggedRow = useCallback((drag: NonNullable<typeof pointerDragRef.current>) => {
+    const row = rowRefs.current.get(drag.sourceId);
+    if (!row) return;
+    const currentRect = row.getBoundingClientRect();
+    const baseLeft = currentRect.left - drag.translateX;
+    const baseTop = currentRect.top - drag.translateY;
+    const desiredLeft = drag.initialLeft + drag.lastClientX - drag.startClientX;
+    const desiredTop = drag.initialTop + drag.lastClientY - drag.startClientY;
+    drag.translateX = desiredLeft - baseLeft;
+    drag.translateY = desiredTop - baseTop;
+    row.style.setProperty("--sidebar-drag-x", `${drag.translateX}px`);
+    row.style.setProperty("--sidebar-drag-y", `${drag.translateY}px`);
+  }, []);
 
   useLayoutEffect(() => {
+    rowAnimationsRef.current.forEach((animation) => animation.cancel());
+    rowAnimationsRef.current.clear();
+    const drag = pointerDragRef.current;
+    if (drag?.dragging) positionDraggedRow(drag);
+
     const nextRowRects = new Map<string, DOMRect>();
     rowRefs.current.forEach((row, surfaceId) => nextRowRects.set(surfaceId, row.getBoundingClientRect()));
     const beforeRects = previousRowRects.current;
     if (beforeRects) {
       nextRowRects.forEach((after, surfaceId) => {
+        if (surfaceId === drag?.sourceId) return;
         const before = beforeRects.get(surfaceId);
         const row = rowRefs.current.get(surfaceId);
         if (!before || !row) return;
         const deltaX = before.left - after.left;
         const deltaY = before.top - after.top;
         if ((deltaX || deltaY) && typeof row.animate === "function") {
-          row.animate(
+          const animation = row.animate(
             [
               { transform: `translate(${deltaX}px, ${deltaY}px)` },
               { transform: "translate(0, 0)" },
             ],
             { duration: 180, easing: "ease-out" },
           );
+          rowAnimationsRef.current.set(surfaceId, animation);
+          animation.onfinish = () => {
+            if (rowAnimationsRef.current.get(surfaceId) === animation) {
+              rowAnimationsRef.current.delete(surfaceId);
+            }
+          };
         }
       });
     }
     previousRowRects.current = nextRowRects;
-  }, [renderedItems]);
+  }, [positionDraggedRow, renderedItems]);
 
   useEffect(() => {
     const preview = previewItemsRef.current;
@@ -161,25 +206,22 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
   }, [draggingSurfaceId, items, previewItems]);
 
   const resolvePointerTarget = useCallback((clientX: number, clientY: number) => {
-    const element = document.elementFromPoint?.(clientX, clientY);
-    const row = element?.closest<HTMLElement>("[data-surface-id]");
-    const targetId = row?.dataset.surfaceId ?? null;
-    const isMovable = targetId !== null && movableItems.some((item) => item.surfaceId === targetId);
-    const resolvedTargetId = isMovable ? targetId : null;
     const drag = pointerDragRef.current;
-    if (drag) {
-      drag.targetId = resolvedTargetId;
-      if (drag.dragging && resolvedTargetId && resolvedTargetId !== drag.sourceId) {
-        const current = previewItemsRef.current ?? drag.initialItems;
-        const next = reorderPreviewItems(current, drag.sourceId, resolvedTargetId, clientY, row ?? null);
-        if (!sameSurfaceOrder(current, next)) {
-          previewItemsRef.current = next;
-          setPreviewItems(next);
-        }
-      }
+    const navBounds = navRef.current?.getBoundingClientRect();
+    if (!drag || !navBounds || clientX < navBounds.left || clientX > navBounds.right) {
+      setDragOverSurfaceId(null);
+      return;
     }
-    setDragOverSurfaceId(resolvedTargetId);
-  }, [movableItems]);
+
+    const current = previewItemsRef.current ?? drag.initialItems;
+    const next = reorderPreviewItems(current, drag.sourceId, clientY, drag.slotCenters);
+    setDragOverSurfaceId(next.overSurfaceId);
+    if (!sameSurfaceOrder(current, next.items)) {
+      captureCurrentRowRects();
+      previewItemsRef.current = next.items;
+      setPreviewItems(next.items);
+    }
+  }, [captureCurrentRowRects]);
 
   const finishPointerDrag = useCallback((_clientX: number, _clientY: number) => {
     const drag = pointerDragRef.current;
@@ -194,6 +236,9 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
       previewItemsRef.current = null;
       setPreviewItems(null);
     }
+    const row = rowRefs.current.get(drag.sourceId);
+    row?.style.removeProperty("--sidebar-drag-x");
+    row?.style.removeProperty("--sidebar-drag-y");
     pointerDragRef.current = null;
     setDraggingSurfaceId(null);
     setDragOverSurfaceId(null);
@@ -201,12 +246,29 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
 
   const handlePointerDown = (item: AppSidebarItem, event: ReactPointerEvent<HTMLButtonElement>) => {
     if (!onReorder || !item.movable) return;
+    const row = rowRefs.current.get(item.surfaceId);
+    const bounds = row?.getBoundingClientRect();
+    if (!bounds) return;
+    const slotCenters = items
+      .filter((candidate) => candidate.movable)
+      .map((candidate) => rowRefs.current.get(candidate.surfaceId)?.getBoundingClientRect())
+      .filter((candidateBounds): candidateBounds is DOMRect => Boolean(candidateBounds))
+      .map((candidateBounds) => candidateBounds.top + candidateBounds.height / 2)
+      .sort((left, right) => left - right);
     pointerDragRef.current = {
       sourceId: item.surfaceId,
       pointerId: event.pointerId,
       dragging: false,
-      targetId: null,
       initialItems: items,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      lastClientX: event.clientX,
+      lastClientY: event.clientY,
+      initialLeft: bounds.left,
+      initialTop: bounds.top,
+      translateX: 0,
+      translateY: 0,
+      slotCenters,
     };
     previewItemsRef.current = items;
     setPreviewItems(items);
@@ -221,18 +283,11 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
       suppressClickRef.current = true;
       setDraggingSurfaceId(drag.sourceId);
     }
+    drag.lastClientX = clientX;
+    drag.lastClientY = clientY;
+    positionDraggedRow(drag);
     resolvePointerTarget(clientX, clientY);
-  }, [resolvePointerTarget]);
-
-  const handlePointerMove = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    event.preventDefault();
-    updatePointerDrag(event.pointerId, event.clientX, event.clientY);
-  };
-
-  const handlePointerUp = (event: ReactPointerEvent<HTMLButtonElement>) => {
-    if (pointerDragRef.current?.pointerId !== event.pointerId) return;
-    finishPointerDrag(event.clientX, event.clientY);
-  };
+  }, [positionDraggedRow, resolvePointerTarget]);
 
   useEffect(() => {
     const handleWindowPointerMove = (event: PointerEvent) => {
@@ -282,7 +337,7 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
         <span className="app-sidebar__search-label">Search</span>
         <kbd className="app-sidebar__search-kbd">{searchShortcut}</kbd>
       </button>
-      <ul className="app-sidebar__nav">
+      <ul className="app-sidebar__nav" ref={navRef}>
         {renderedItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -307,10 +362,7 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
                   }
                   onNavigate(item.surfaceId);
                 }}
-                onPointerCancel={handlePointerUp}
                 onPointerDown={(event) => handlePointerDown(item, event)}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
                 type="button"
               >
                 <span aria-hidden="true" className="app-sidebar__nav-icon"><Icon /></span>

@@ -98,8 +98,35 @@ test("reorders sidebar tabs with a real browser drag", async ({ page }) => {
   if (!sourceBox || !targetBox) throw new Error("Sidebar drag targets are not measurable.");
   await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
   await page.mouse.down();
-  await page.mouse.move(sourceBox.x + sourceBox.width / 2 + 24, sourceBox.y + sourceBox.height / 2, { steps: 4 });
-  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height * 0.75, { steps: 12 });
+  const followX = sourceBox.x + sourceBox.width / 2 + 48;
+  const followY = sourceBox.y + sourceBox.height / 2 + 6;
+  await page.mouse.move(followX, followY, { steps: 4 });
+  await expect.poll(async () => {
+    const draggedBox = await source.boundingBox();
+    if (!draggedBox) return Number.POSITIVE_INFINITY;
+    return Math.hypot(
+      draggedBox.x + draggedBox.width / 2 - followX,
+      draggedBox.y + draggedBox.height / 2 - followY,
+    );
+  }).toBeLessThan(3);
+  const statistics = page.locator('li[data-surface-id="route.statistics"]');
+  const statisticsBox = await statistics.boundingBox();
+  if (!statisticsBox) throw new Error("Sidebar animation target is not measurable.");
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height * 0.25);
+  await page.mouse.move(statisticsBox.x + statisticsBox.width / 2, statisticsBox.y + statisticsBox.height * 0.75);
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height * 0.25);
+  const animationCounts = await page.locator(".app-sidebar__nav > li[data-surface-id]").evaluateAll(
+    (rows) => rows.map((row) => ({
+      surfaceId: row.getAttribute("data-surface-id"),
+      animations: row.getAnimations().length,
+    })),
+  );
+  expect(animationCounts.find(({ surfaceId }) => surfaceId === "route.trash")?.animations).toBe(0);
+  expect(Math.max(...animationCounts.map(({ animations }) => animations))).toBeLessThanOrEqual(1);
+  await page.waitForTimeout(220);
+  const finalTargetBox = await target.boundingBox();
+  if (!finalTargetBox) throw new Error("Final sidebar drag target is not measurable.");
+  await page.mouse.move(finalTargetBox.x + finalTargetBox.width / 2, finalTargetBox.y + finalTargetBox.height * 0.75, { steps: 12 });
   await page.mouse.up();
 
   await expect.poll(async () => page.evaluate(() =>

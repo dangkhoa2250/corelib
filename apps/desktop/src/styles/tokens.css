@@ -465,11 +465,13 @@ textarea::placeholder {
 
 .app-sidebar__nav > li {
   position: relative;
-  transition: transform 180ms ease, opacity 180ms ease;
+  transition: opacity 120ms ease;
 }
 
 .app-sidebar__nav > li[data-reorderable="true"] > .app-sidebar__nav-item {
   cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
 .app-sidebar__nav > li[data-reorderable="true"] > .app-sidebar__nav-item:active {
@@ -477,9 +479,16 @@ textarea::placeholder {
 }
 
 .app-sidebar__nav > li[data-dragging="true"] {
-  z-index: 2;
-  opacity: 0.82;
-  transform: scale(1.03);
+  z-index: 3;
+  opacity: 0.9;
+  transform: translate3d(var(--sidebar-drag-x, 0), var(--sidebar-drag-y, 0), 0);
+  transition: none;
+  will-change: transform;
+}
+
+.app-sidebar__nav > li[data-dragging="true"] > .app-sidebar__nav-item {
+  transform: scale(1.02);
+  box-shadow: var(--shadow-md);
 }
 
 .app-sidebar__nav > li[data-drag-over="true"] > .app-sidebar__nav-item {
