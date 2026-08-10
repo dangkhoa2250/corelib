@@ -3,6 +3,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 
+const normalizeNewlines = (value: string) => value.replace(/\r\n?/g, "\n");
+
 test("does not apply global color transitions to every element", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
@@ -66,16 +68,21 @@ test("defines a theme-aware blue Statistics accent for charts and sparklines", (
   expect(sparkline).toContain('stroke="var(--statistics-accent)"');
 });
 
-test("keeps the native window transparent for the sidebar glass surface", () => {
+test("keeps transparency macOS-only and uses standard Windows decorations", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const config = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.conf.json"), "utf8"));
+  const macConfig = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.macos.conf.json"), "utf8"));
+  const windowsConfig = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.windows.conf.json"), "utf8"));
 
-  expect(config.app.windows[0].transparent).toBe(true);
+  expect(config.app.windows[0]).toMatchObject({ transparent: false, decorations: true });
+  expect(macConfig.app.windows[0]).toMatchObject({ transparent: true, titleBarStyle: "Overlay" });
+  expect(windowsConfig.app.windows[0]).toMatchObject({ transparent: false, decorations: true });
+  expect(windowsConfig.bundle.targets).toBe("nsis");
 });
 
 test("uses a tinted glass fallback instead of a fully transparent sidebar", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "tokens.css"), "utf8"));
   const sidebar = css.match(/\.app-sidebar \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(css).toMatch(/--sidebar-bg:\s*rgb\([^)]*\/\s*\d+%\);/);
@@ -86,7 +93,7 @@ test("uses a tinted glass fallback instead of a fully transparent sidebar", () =
 
 test("uses one transparent-track scrollbar primitive across the app", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "tokens.css"), "utf8"));
 
   expect(css).toContain("--scrollbar-track: transparent;");
   expect(css).toContain("--scrollbar-thumb:");
@@ -100,7 +107,7 @@ test("uses one transparent-track scrollbar primitive across the app", () => {
 
 test("uses semantic tokens in Statistics CSS with proper scroll-surface padding", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const statCss = normalizeNewlines(readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8"));
   const desktopCss = statCss.slice(0, statCss.indexOf("@media"));
   const statCssWithoutStatisticsAccent = statCss.replace(/--statistics-accent:\s*#[0-9a-fA-F]{3,8};/g, "");
 
@@ -123,7 +130,7 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
 
 test("pins every approved desktop Statistics density token", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const statCss = readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8");
+  const statCss = normalizeNewlines(readFileSync(join(currentDir, "../features/statistics/statistics.css"), "utf8"));
   const desktopCss = statCss.slice(0, statCss.indexOf("@media"));
   const block = (selector: string) => desktopCss.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
   const shellPaddings = [...statCss.matchAll(/\.statistics-shell__content\s*\{[^}]*padding:\s*([^;]+);/g)].map((match) => match[1].trim());
@@ -350,7 +357,7 @@ test("uses only public macOS view APIs to enable overlay scrollers", () => {
 
 test("anchors the review route and source split to the viewport height", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "tokens.css"), "utf8"));
   const root = css.match(/html,\nbody,\n#root \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const reviewPage = css.match(/\.review-page \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const reviewSplit = css.match(/\.review-page__split \{([\s\S]*?)\n\}/)?.[1] ?? "";
@@ -360,6 +367,16 @@ test("anchors the review route and source split to the viewport height", () => {
   expect(reviewPage).toContain("overflow: hidden;");
   expect(reviewPage).toContain("padding: 24px 24px 0 24px;");
   expect(reviewSplit).toContain("height: 100%;");
+});
+
+test("uses Windows typography and removes macOS titlebar spacing without changing scroll surfaces", () => {
+  const currentDir = dirname(fileURLToPath(import.meta.url));
+  const css = normalizeNewlines(readFileSync(join(currentDir, "tokens.css"), "utf8"));
+
+  expect(css).toContain(':root[data-platform="windows"] {\n  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;');
+  expect(css).toContain(':root[data-platform="windows"] .app-sidebar {\n  padding-top: 16px;');
+  expect(css).toContain(':root[data-platform="windows"] .app-sidebar__drag-region {\n  display: none;');
+  expect(css).toContain(':root[data-platform="windows"] .settings-page__sidebar {\n  padding-top: 22px;');
 });
 
 test("keeps the flashcard compact while the source panel can fill the viewport", () => {

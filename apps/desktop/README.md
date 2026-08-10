@@ -1,68 +1,69 @@
-# Library
+# Library desktop
 
-Desktop application built with Tauri, React, and TypeScript.
+Library is the Corelib desktop application. The macOS and Windows editions share the same React, TypeScript, Rust, SQLite, and Tauri codebase; platform integrations live behind explicit platform boundaries.
 
-## Native learning cards
+## Run and verify
 
-Select text in the PDF reader and choose **Create flashcard**. The selected text becomes Front; write and edit Back yourself, then choose a deck and optional tags. Review today uses FSRS 6.6 with Again, Hard, Good, and Easy ratings. Show source returns to the original PDF page when it is still available.
+```bash
+npm ci
+npm test
+npm run build
+cargo test --all-targets --manifest-path src-tauri/Cargo.toml
+cargo clippy --all-targets --all-features --manifest-path src-tauri/Cargo.toml -- -D warnings -A linker-messages
+```
 
-Memora uses fixed 1-minute and 10-minute learning steps before FSRS takes over long-term scheduling. Review Today is built by the native backend, prioritizes due learning and review cards, and applies the configured new-card allowance. Practice All never changes the real schedule.
+Run the current checkout with `npm run tauri dev`.
 
-The default new-card allowance and desired retention live under Settings → Apps → Memora. A deck can override only its new-card allowance from the deck row's … → Learning settings menu.
+## Windows 11 x64
+
+The supported Windows target is Windows 11 x64 with the evergreen Microsoft Edge WebView2 Runtime. Library uses the standard Windows title bar, Segoe UI, Windows spacing, and Ctrl-based shortcuts. The user-facing product name and Tauri identifier remain `Library` and `com.library.desktop`.
+
+Build a local, unsigned NSIS installer without updater signing secrets:
+
+```powershell
+npm run tauri:build:windows
+```
+
+The installer is written to `src-tauri/target/release/bundle/nsis/*-setup.exe`. It installs for the current user and downloads the evergreen WebView2 bootstrapper when needed. Unsigned local builds may show a Microsoft Defender SmartScreen warning; public Authenticode signing is intentionally deferred until the certificate and CI secrets are available.
+
+Windows creates a new local library under the application's Windows roaming AppData directory. It does not import or synchronize a macOS library. The SQLite schema and application identifier remain shared so future product features can evolve without a Windows-only fork.
+
+Set `ACCOUNT_API_BASE_URL` while building to connect account features to the shared PocketBase service. CI and releases read it from the GitHub repository variable named `ACCOUNT_API_BASE_URL`; the backend URL is not committed to source.
+
+## Translation
+
+Apple Translation is shown only on macOS. On supported Windows WebView2 runtimes, Library exposes **Windows Translation**, which uses the browser's on-device `Translator` and `LanguageDetector` APIs without an API key. The first use of a language pair may download a model; translation then runs locally and can work offline. The integration is runtime feature-detected, so unsupported WebView2 versions do not show it.
+
+Google Translate and configured AI providers remain explicit alternatives. Library does not silently send text to a cloud provider when a user selected the private Windows engine.
 
 ## Command surfaces
 
-- **Cmd/Ctrl+K — Quick Open:** navigates to internal destinations only: Library, Memora, Trash, Settings sections, documents, decks, cards, and deleted cards. Results show internal breadcrumbs such as `Library › Documents` or `Memora › Calculus › Cards`; these are application locations, not filesystem folders.
-- **Shift+Cmd/Ctrl+K — Command Palette:** runs actions only, including Import PDF, Review today, and Theme: Light/Dark/System. Theme commands apply the setting directly; opening Appearance from Quick Open only navigates there.
+- **Cmd/Ctrl+K — Quick Open:** navigate to internal destinations such as Library, Memora, Trash, Settings, documents, decks, and cards.
+- **Shift+Cmd/Ctrl+K — Command Palette:** run actions such as Import PDF, Review today, theme changes, and selecting an available translation engine.
 
-Public destinations are declared once in the typed command-route catalog. CI tests require the public catalog and Quick Open registry to stay aligned when a new public route is added.
+Public destinations and actions are declared in the typed command registry. Registry coverage tests must pass whenever a public route or action is added.
 
-The learning data is local SQLite data. Removing a source PDF keeps its card and quote, but marks the source unavailable. Sync, AI card generation, cloze cards, and advanced statistics are intentionally deferred.
+## Learning data
 
-## Memora
+PDF reading, cards, decks, study scheduling, trash, statistics, and settings use the shared native backend. Learning data is stored in local SQLite. Removing a source PDF keeps its card and quote but marks the source unavailable. OAuth and account tokens use the operating-system credential store.
 
-A persistent sidebar (Search, Library, Memora) provides navigation. Inside Memora, each deck opens a Card Browser with the full card lifecycle: create, edit (front/back/tags/deck), move between decks, suspend/unsuspend, trash, restore (to original or a different deck), delete permanently, and empty trash. Tag pills, status filters, sort, and infinite scroll are supported.
+## CI and releases
 
-Editing a card's content and moving it to another deck is a single atomic backend operation (`update_and_move_card`) — if the deck move fails, the content change rolls back too.
+`.github/workflows/windows-desktop.yml` tests the frontend and Rust backend on Windows, runs Clippy, builds an unsigned NSIS installer, and uploads it as a workflow artifact.
 
-The Trash page lists soft-deleted cards with their original deck name. Deleting a deck soft-deletes its cards into Trash, preserving them for restore to any other deck. Migration 0006 (`card_lifecycle`) adds the `deleted_at`, `deleted_from_deck_name`, and `suspended_from_state` columns that power this lifecycle.
+Tags matching `desktop-vX.Y.Z` run `.github/workflows/release-desktop.yml`. The workflow builds signed Tauri updater artifacts for the native macOS runner architecture and Windows x64, then publishes one `latest.json` containing both platform entries.
 
-## Tests
+Before publishing a tag:
 
-- **91 frontend** unit tests (Vitest + Testing Library)
-- **89 Rust** unit tests + **1** PDF extraction isolation test
-- **3 Playwright E2E** tests (library import + learning card lifecycle + practical learning flow)
+1. Match the version in `src-tauri/tauri.conf.json` to the tag.
+2. Set `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets.
+3. Replace the updater public-key placeholder in `tauri.conf.json` with the matching public key.
+4. Set the `ACCOUNT_API_BASE_URL` repository variable.
+5. Verify the previous signed build can install the new update and relaunch on both platforms.
+6. Confirm the release contains the macOS archive and signature, Windows setup executable, Windows `.nsis.zip` and signature, and the combined `latest.json`.
 
-```bash
-npm test                                    # frontend unit tests
-npm run build                               # TypeScript + Vite production build
-cargo test --all-targets --manifest-path src-tauri/Cargo.toml
-cargo clippy --all-targets --all-features --manifest-path src-tauri/Cargo.toml -- -D warnings
-npx playwright test                         # E2E tests
-```
+Tauri updater signatures authenticate updates but do not replace Windows Authenticode signing. Add certificate-backed Authenticode signing before treating the NSIS installer as a public production release.
 
-## Release workflow
+## End-to-end release checks
 
-Signed macOS releases are published automatically by `.github/workflows/release-macos.yml`. Before tagging a release, complete this checklist **in order**:
-
-1. **Version tag** — create and push a tag matching `desktop-vX.Y.Z` (e.g. `desktop-v0.2.0`).
-2. **Signing secrets** — confirm the GitHub repository secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are set to the values generated by `npm run tauri signer generate`.
-3. **Public key** — confirm `tauri.conf.json` → `plugins.updater.pubkey` matches the public half of the signing key pair.
-4. **Signed update test** — manually verify a signed update from the immediately preceding version installs and relaunches correctly.
-5. **No secret leakage** — confirm no private signing value appears in workflow checkout logs, build output, or the published `latest.json`.
-6. **Artifacts** — after the workflow completes, confirm the GitHub Release contains the `.app.tar.gz`, its `.sig` file, and `latest.json`.
-
-> The workflow fails if any expected `.sig` file is absent or if the signing secrets are missing.
-
-## End-to-end release checklist
-
-Complete these steps **in order** before announcing a release. If any step fails, stop and fix only the first root cause.
-
-1. **Register** a fresh account from the desktop app; verify it sees only the Pending screen.
-2. **Token boundary** — verify a pending account cannot call `/me`, analytics, or admin routes with a forged or stale token.
-3. **Approve** the account from the desktop Admin section; sign out, sign back in, and open Library.
-4. **Feature gates** — assign a group feature; verify it appears in the desktop UI. Add a user-level deny for the same feature; verify it disappears.
-5. **Analytics opt-in** — opt in to analytics, open a feature, and verify the Admin → Overview Metrics shows only aggregate counts (no emails, IDs, or raw payloads).
-6. **Analytics opt-out** — opt out; verify new events return `analytics_disabled` and are **not** queued locally.
-7. **Signed update** — install the previous signed build, publish a higher signed tag (`desktop-vX.Y.Z`), wait for the release workflow, then check/install/relaunch the update from Account Settings.
-8. **Backup restoration** — restore the latest encrypted server backup into `/tmp/corelib-restore` (see `services/pocketbase/README.md` → Restoration drill) and run smoke tests against it.
+Before announcing a release, verify account registration and approval, feature gates, analytics opt-in and opt-out, PDF import and reading, Memora card creation and study, local translation, cloud-provider translation when configured, updater installation, and the PocketBase backup restoration drill documented under `services/pocketbase`.

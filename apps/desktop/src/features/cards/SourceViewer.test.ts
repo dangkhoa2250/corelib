@@ -56,7 +56,7 @@ test("limits concurrent PDF text extraction while searching the full source", ()
 
 test("locks the initial viewport to the saved page top before searching the rest of the document", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8").replace(/\r\n?/g, "\n");
 
   expect(viewer).toContain("container.scrollTop = pageDiv.offsetTop;");
   expect(viewer).toContain("const startDocumentSearch = () => {");

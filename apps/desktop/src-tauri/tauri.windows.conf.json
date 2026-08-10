@@ -1,0 +1,25 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "windows": [
+      {
+        "title": "Library",
+        "width": 1200,
+        "height": 800,
+        "transparent": false,
+        "decorations": true
+      }
+    ]
+  },
+  "bundle": {
+    "targets": "nsis",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

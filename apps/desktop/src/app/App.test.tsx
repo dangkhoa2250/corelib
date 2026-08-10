@@ -15,6 +15,7 @@ vi.mock("pdfjs-dist", () => {
           getViewport: vi.fn().mockReturnValue({ width: 200, height: 300 }),
           render: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
           getTextContent: vi.fn().mockResolvedValue({ items: [] }),
+          getAnnotations: vi.fn().mockResolvedValue([]),
           streamTextContent: vi.fn().mockReturnValue({
             getReader: vi.fn().mockReturnValue({
               read: vi.fn()
@@ -624,6 +625,8 @@ test("opens the card composer with the live source document and editable front/b
 });
 
 test("uses Apple Translation by default for a new installation", async () => {
+  const platform = vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+  const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
   const user = userEvent.setup();
   const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
   await openReaderAndSelectText(
@@ -652,6 +655,8 @@ test("uses Apple Translation by default for a new installation", async () => {
     "Vietnamese",
   );
   expect(screen.getByRole("textbox", { name: "Back" })).toHaveValue("Văn bản nguồn đã chọn");
+  userAgent.mockRestore();
+  platform.mockRestore();
 });
 
 test("keeps the composer visible and reports deck loading errors", async () => {
@@ -1141,7 +1146,7 @@ test("Quick Open resolves insights alias to the statistics route", async () => {
     />,
   );
 
-  const searchButton = screen.getByRole("button", { name: "Search (Command K)" });
+  const searchButton = screen.getByRole("button", { name: "Search (Ctrl+K)" });
   await user.click(searchButton);
   await screen.findByRole("searchbox", { name: "Quick Open" });
   const searchbox = screen.getByRole("searchbox", { name: "Quick Open" });
@@ -1164,7 +1169,7 @@ test("opens the search palette from the sidebar search field", async () => {
     />,
   );
 
-  await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
+  await user.click(screen.getByRole("button", { name: "Search (Ctrl+K)" }));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(screen.getByRole("searchbox", { name: "Quick Open" })).toHaveFocus();
 });
@@ -1214,7 +1219,7 @@ test("Quick Open surfaces Settings → Memora and deep-links its section", async
     />,
   );
 
-  await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
+  await user.click(screen.getByRole("button", { name: "Search (Ctrl+K)" }));
   await user.type(await screen.findByRole("searchbox", { name: "Quick Open" }), "Settings Memora");
   await user.click(await screen.findByRole("button", { name: /Open Memora/ }));
 

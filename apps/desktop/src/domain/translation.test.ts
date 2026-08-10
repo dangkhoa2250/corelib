@@ -6,6 +6,7 @@ import {
   defaultTranslationSelection,
   parseAiEngineId,
   readTranslationSelection,
+  targetLanguageCode,
   TRANSLATION_ENGINE_KEY,
 } from "./translation";
 
@@ -22,9 +23,10 @@ function memoryStorage(entries: Record<string, string> = {}): Storage {
 }
 
 describe("translation engines", () => {
-  it("orders Apple before Google Cloud Translation", () => {
+  it("keeps platform-native engines ahead of Google Cloud Translation", () => {
     expect(builtinTranslationEngines(true).map((engine) => engine.id)).toEqual([
       "apple-translation",
+      "windows-translation",
       "google-translation",
     ]);
   });
@@ -32,6 +34,13 @@ describe("translation engines", () => {
   it("defaults to Apple only when the native framework is available", () => {
     expect(defaultTranslationSelection(true)).toBe("apple-translation");
     expect(defaultTranslationSelection(false)).toBeNull();
+    expect(defaultTranslationSelection(false, true)).toBe("windows-translation");
+  });
+
+  it("maps settings language names to BCP 47 codes", () => {
+    expect(targetLanguageCode("Japanese")).toBe("ja");
+    expect(targetLanguageCode("vi-VN")).toBe("vi");
+    expect(targetLanguageCode("unknown")).toBeNull();
   });
 
   it("round-trips AI engine IDs whose model names contain punctuation", () => {
@@ -45,6 +54,12 @@ describe("translation engines", () => {
   it("preserves a valid saved engine selection", () => {
     const storage = memoryStorage({ [TRANSLATION_ENGINE_KEY]: "google-translation" });
     expect(readTranslationSelection(storage, true)).toBe("google-translation");
+  });
+
+  it("uses a saved native engine only on a runtime that supports it", () => {
+    const storage = memoryStorage({ [TRANSLATION_ENGINE_KEY]: "windows-translation" });
+    expect(readTranslationSelection(storage, false, true)).toBe("windows-translation");
+    expect(readTranslationSelection(storage, false, false)).toBeNull();
   });
 
   it("migrates a legacy AI provider and model selection", () => {

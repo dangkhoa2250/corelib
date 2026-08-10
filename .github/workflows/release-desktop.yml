@@ -1,0 +1,149 @@
+name: Release desktop
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    env:
+      ACCOUNT_API_BASE_URL: ${{ vars.ACCOUNT_API_BASE_URL }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Build signed universal macOS artifacts
+        working-directory: apps/desktop
+        run: npm run tauri -- build --target universal-apple-darwin
+      - name: Stage macOS release files
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_dir="src-tauri/target/universal-apple-darwin/release/bundle"
+          mkdir release-artifacts
+          cp "$bundle_dir"/macos/*.app.tar.gz release-artifacts/
+          cp "$bundle_dir"/macos/*.app.tar.gz.sig release-artifacts/
+          cp "$bundle_dir"/dmg/*.dmg release-artifacts/
+          bundle=$(find release-artifacts -maxdepth 1 -name '*.app.tar.gz' -print -quit)
+          test -n "$bundle"
+          test -f "${bundle}.sig"
+          jq -n \
+            --arg filename "$(basename "$bundle")" \
+            --arg signature "$(cat "${bundle}.sig")" \
+            '{filename: $filename, signature: $signature}' \
+            > release-artifacts/metadata.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-macos
+          path: apps/desktop/release-artifacts
+          if-no-files-found: error
+
+  build-windows:
+    runs-on: windows-latest
+    env:
+      ACCOUNT_API_BASE_URL: ${{ vars.ACCOUNT_API_BASE_URL }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install dependencies
+        working-directory: apps/desktop
+        run: npm ci
+      - name: Build signed Windows NSIS artifacts
+        working-directory: apps/desktop
+        run: npm run tauri -- build --bundles nsis
+      - name: Stage Windows release files
+        working-directory: apps/desktop
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-artifacts | Out-Null
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe release-artifacts/
+          Copy-Item src-tauri/target/release/bundle/nsis/*.nsis.zip release-artifacts/
+          Copy-Item src-tauri/target/release/bundle/nsis/*.nsis.zip.sig release-artifacts/
+          $bundle = Get-ChildItem release-artifacts/*.nsis.zip | Select-Object -First 1
+          if (-not $bundle -or -not (Test-Path "$($bundle.FullName).sig")) {
+            throw "The signed Windows updater bundle is missing"
+          }
+          @{
+            platform = "windows-x86_64"
+            filename = $bundle.Name
+            signature = (Get-Content "$($bundle.FullName).sig" -Raw).Trim()
+          } | ConvertTo-Json | Set-Content release-artifacts/metadata.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-release-windows
+          path: apps/desktop/release-artifacts
+          if-no-files-found: error
+
+  publish:
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download macOS files
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-release-macos
+          path: release-assets/macos
+      - name: Download Windows files
+        uses: actions/download-artifact@v4
+        with:
+          name: desktop-release-windows
+          path: release-assets/windows
+      - name: Generate cross-platform latest.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=${GITHUB_REF#refs/tags/}
+          version=${tag#desktop-v}
+          pub_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          mac_filename=$(jq -r .filename release-assets/macos/metadata.json)
+          mac_signature=$(jq -r .signature release-assets/macos/metadata.json)
+          windows_platform=$(jq -r .platform release-assets/windows/metadata.json)
+          windows_filename=$(jq -r .filename release-assets/windows/metadata.json)
+          windows_signature=$(jq -r .signature release-assets/windows/metadata.json)
+          jq -n \
+            --arg version "$version" \
+            --arg notes "Release $version" \
+            --arg pub_date "$pub_date" \
+            --arg mac_url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/${mac_filename}" \
+            --arg mac_signature "$mac_signature" \
+            --arg windows_platform "$windows_platform" \
+            --arg windows_url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/${windows_filename}" \
+            --arg windows_signature "$windows_signature" \
+            '{version: $version, notes: $notes, pub_date: $pub_date, platforms: {"darwin-aarch64": {signature: $mac_signature, url: $mac_url}, "darwin-x86_64": {signature: $mac_signature, url: $mac_url}, ($windows_platform): {signature: $windows_signature, url: $windows_url}}}' \
+            > latest.json
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-assets/macos/*.app.tar.gz
+            release-assets/macos/*.app.tar.gz.sig
+            release-assets/macos/*.dmg
+            release-assets/windows/*-setup.exe
+            release-assets/windows/*.nsis.zip
+            release-assets/windows/*.nsis.zip.sig
+            latest.json
+          generate_release_notes: true
