@@ -109,6 +109,8 @@ describe("AppSidebar plugin navigation", () => {
 
     fireEvent.pointerDown(trashButton, { pointerId: 1, clientX: 20, clientY: 0 });
     fireEvent.pointerMove(trashButton, { pointerId: 1, clientX: 30, clientY: 0 });
+    expect(trashButton.closest("li")).toHaveAttribute("data-dragging", "true");
+    expect(memoraRow).toHaveAttribute("data-drag-over", "true");
     fireEvent.pointerUp(trashButton, { pointerId: 1, clientX: 30, clientY: 0 });
 
     expect(onReorder).toHaveBeenCalledWith("route.trash", "route.memora");

@@ -99,11 +99,21 @@ test("reorders sidebar tabs with a real browser drag", async ({ page }) => {
   await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(sourceBox.x + sourceBox.width / 2 + 24, sourceBox.y + sourceBox.height / 2, { steps: 4 });
-  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 12 });
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height * 0.75, { steps: 12 });
   await page.mouse.up();
 
   await expect.poll(async () => page.evaluate(() =>
     (window as Window & { __corelibInvokeCalls?: string[] }).__corelibInvokeCalls
       ?.filter((command) => command === "save_plugin_lifecycle_state").length ?? 0,
   )).toBeGreaterThan(0);
+
+  await expect.poll(async () => page.locator(".app-sidebar__nav > li[data-surface-id]").evaluateAll(
+    (rows) => rows.map((row) => row.getAttribute("data-surface-id")),
+  )).toEqual([
+    "route.home",
+    "route.library",
+    "route.memora",
+    "route.trash",
+    "route.statistics",
+  ]);
 });

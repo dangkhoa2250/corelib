@@ -1,4 +1,4 @@
-import { useContext, useCallback, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useContext, useCallback, useLayoutEffect, useRef, useState, type ComponentType, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 import { IconHome, IconLibrary, IconMemora, IconSearch, IconSettings, IconSparkles, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
@@ -95,6 +95,33 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
   const suppressClickRef = useRef(false);
   const [draggingSurfaceId, setDraggingSurfaceId] = useState<string | null>(null);
   const [dragOverSurfaceId, setDragOverSurfaceId] = useState<string | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLLIElement>());
+  const previousRowRects = useRef<Map<string, DOMRect> | null>(null);
+
+  useLayoutEffect(() => {
+    const nextRowRects = new Map<string, DOMRect>();
+    rowRefs.current.forEach((row, surfaceId) => nextRowRects.set(surfaceId, row.getBoundingClientRect()));
+    const beforeRects = previousRowRects.current;
+    if (beforeRects) {
+      nextRowRects.forEach((after, surfaceId) => {
+        const before = beforeRects.get(surfaceId);
+        const row = rowRefs.current.get(surfaceId);
+        if (!before || !row) return;
+        const deltaX = before.left - after.left;
+        const deltaY = before.top - after.top;
+        if ((deltaX || deltaY) && typeof row.animate === "function") {
+          row.animate(
+            [
+              { transform: `translate(${deltaX}px, ${deltaY}px)` },
+              { transform: "translate(0, 0)" },
+            ],
+            { duration: 180, easing: "ease-out" },
+          );
+        }
+      });
+    }
+    previousRowRects.current = nextRowRects;
+  }, [items]);
 
   const resolvePointerTarget = useCallback((clientX: number, clientY: number) => {
     const element = document.elementFromPoint?.(clientX, clientY);
@@ -191,6 +218,10 @@ export function AppSidebar({ active, items, onNavigate, onReorder, onSearchClick
               data-reorderable={item.movable && Boolean(onReorder) ? "true" : undefined}
               data-surface-id={item.surfaceId}
               key={item.surfaceId}
+              ref={(row) => {
+                if (row) rowRefs.current.set(item.surfaceId, row);
+                else rowRefs.current.delete(item.surfaceId);
+              }}
             >
               <button
                 aria-current={active === item.section ? "page" : undefined}
