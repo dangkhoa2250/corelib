@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import type { Deck, CardBrowserRow } from "../../domain/learning";
+import type { Deck, CardBrowserRow, CardMedia } from "../../domain/learning";
 import { createCard, updateAndMoveCard } from "../../lib/learning";
 import { detectLanguage } from "../../lib/languageDetector";
 import { derivePlainText, type RichDocument } from "../../domain/richDocument";
 import { LanguagePicker } from "./LanguagePicker";
 import { Combobox } from "../../components/Combobox";
+import { ScrollArea } from "../../components/ScrollArea";
 import {
   CardRichTextEditor,
   type CardRichTextEditorHandle,
   type MediaSourceType,
 } from "./CardRichTextEditor";
 import { CardRichTextToolbar } from "./CardRichTextToolbar";
+import { stageCardMedia } from "../../lib/media";
+import { discardMediaDraft, resolveCardMedia, resolveStagedMedia, searchMultiSourceImages, stageRemoteCardMedia, stageRemoteImageResult } from "../../lib/media";
+import type { StageMediaInput } from "../../domain/media";
+import type { ImageSearchResult, MultiImageSearchPage } from "../../domain/media";
+import { MediaPicker } from "./MediaPicker";
 
 export interface CardSidePanelProps {
   card: CardBrowserRow | null;
@@ -22,6 +28,12 @@ export interface CardSidePanelProps {
   onDirtyStateChange?: (dirty: boolean) => void;
   createCard?: typeof createCard;
   updateAndMoveCard?: typeof updateAndMoveCard;
+  stageCardMedia?: typeof stageCardMedia;
+  searchMultiSourceImages?: (query: string, page: number) => Promise<MultiImageSearchPage>;
+  stageRemoteCardMedia?: (draftId: string, sourceUrl: string, attribution?: string | null) => Promise<CardMedia>;
+  resolveStagedMedia?: (draftId: string, mediaId: string) => Promise<string>;
+  resolveCardMedia?: (cardId: string, mediaId: string) => Promise<string>;
+  discardMediaDraft?: (draftId: string) => Promise<void>;
 }
 
 /** Builds a rich document from plain text, one paragraph per line. */
@@ -48,6 +60,12 @@ export function CardSidePanel({
   onDirtyStateChange,
   createCard: customCreate = createCard,
   updateAndMoveCard: customUpdateAndMove = updateAndMoveCard,
+  stageCardMedia: customStageCardMedia = stageCardMedia,
+  searchMultiSourceImages: searchImages = searchMultiSourceImages,
+  stageRemoteCardMedia: stageRemoteImage = stageRemoteCardMedia,
+  resolveStagedMedia: resolveStagedMediaBridge = resolveStagedMedia,
+  resolveCardMedia: resolveCardMediaBridge = resolveCardMedia,
+  discardMediaDraft: discardDraftBridge = discardMediaDraft,
 }: CardSidePanelProps) {
   const [frontDoc, setFrontDoc] = useState<RichDocument>(() =>
     paragraphDocFromText(card?.front ?? ""),
@@ -55,7 +73,6 @@ export function CardSidePanel({
   const [backDoc, setBackDoc] = useState<RichDocument>(() =>
     paragraphDocFromText(card?.back ?? ""),
   );
-  const [tags, setTags] = useState("");
   const [deckId, setDeckId] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +81,9 @@ export function CardSidePanel({
   const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [mediaDraftId] = useState(() => createDraftId());
   const [stagedMediaUrls, setStagedMediaUrls] = useState<Record<string, string>>({});
+  const [committedMediaReady, setCommittedMediaReady] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const discardedRef = useRef(false);
 
   const resolveMedia = (mediaId: string): string => stagedMediaUrls[mediaId] ?? "";
 
@@ -103,7 +123,7 @@ export function CardSidePanel({
     if (card) {
       setFrontDoc(card.frontDoc ?? paragraphDocFromText(card.front));
       setBackDoc(card.backDoc ?? paragraphDocFromText(card.back));
-      setTags(card.tags.join(", "));
+      setCommittedMediaReady(false);
       setDeckId(card.deckId ?? decks[0]?.id ?? "");
       setError(null);
       setFrontLanguage(card.frontLanguage ?? null);
@@ -111,6 +131,36 @@ export function CardSidePanel({
       setDetectedLanguage(detectLanguage(card.front));
     }
   }, [card, decks]);
+
+  // Resolve media already committed to the card so the editors can render
+  // existing images while editing, not just freshly staged ones.
+  useEffect(() => {
+    let cancelled = false;
+    const media = card?.media ?? [];
+    setCommittedMediaReady(false);
+    if (!card?.id || media.length === 0) return;
+    void Promise.all(
+      media.map(async (item) => {
+        try {
+          const absolutePath = await resolveCardMediaBridge(card.id, item.id);
+          return [item.id, convertFileSrc(absolutePath)] as const;
+        } catch {
+          return [item.id, ""] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setStagedMediaUrls((prev) => {
+        const next = { ...prev };
+        for (const [mediaId, url] of entries) next[mediaId] = url;
+        return next;
+      });
+      setCommittedMediaReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [card, resolveCardMediaBridge]);
 
   const handleFrontDocChange = (doc: RichDocument) => {
     setFrontDoc(doc);
@@ -138,7 +188,6 @@ export function CardSidePanel({
       ? false
       : JSON.stringify(frontDoc) !== JSON.stringify(originalFrontDoc) ||
         JSON.stringify(backDoc) !== JSON.stringify(originalBackDoc) ||
-        tags !== (card.tags.join(", ") ?? "") ||
         deckId !== (card.deckId ?? decks[0]?.id ?? "") ||
         frontLanguage !== (card.frontLanguage ?? null);
 
@@ -156,23 +205,53 @@ export function CardSidePanel({
         return;
       }
     }
+    if (!discardedRef.current) {
+      discardedRef.current = true;
+      void discardDraftBridge(mediaDraftId);
+    }
     onClose();
   };
 
   if (!card) return null;
+  const hasCommittedMedia = (card.media?.length ?? 0) > 0;
+  // Image node views read the resolved URL when they are created, so the
+  // editors mount once the committed-media URLs are available; otherwise
+  // existing images would render blank until the next document change.
+  const editorKey = hasCommittedMedia && !committedMediaReady ? "media-pending" : "media-ready";
 
-  const stageMedia = async (
-    file: File | Blob,
-  ): Promise<{ id: string; attribution?: string }> => {
-    const id = createDraftId();
-    let previewUrl = "";
-    if (typeof window !== "undefined" && window.URL && typeof window.URL.createObjectURL === "function") {
-      previewUrl = URL.createObjectURL(file);
+  const stageMedia = async (file: File | Blob, sourceType: MediaSourceType): Promise<{ id: string; attribution?: string }> => {
+    const input: StageMediaInput = { draftId: mediaDraftId, sourceType };
+    if (sourceType === "file") {
+      const filePath = (file as File & { path?: string }).path;
+      input.filePath = typeof filePath === "string" && filePath.length > 0 ? filePath : null;
+    } else {
+      input.bytesBase64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const value = reader.result;
+          if (typeof value !== "string") return reject(new Error("Could not read the image data."));
+          const comma = value.indexOf(",");
+          resolve(comma >= 0 ? value.slice(comma + 1) : value);
+        };
+        reader.onerror = () => reject(new Error("Could not read the image data."));
+        reader.readAsDataURL(file);
+      });
     }
-    if (previewUrl) {
-      setStagedMediaUrls((prev) => ({ ...prev, [id]: previewUrl }));
-    }
-    return { id };
+    const media = await customStageCardMedia(input);
+    const absolutePath = await resolveStagedMediaBridge(mediaDraftId, media.id);
+    setStagedMediaUrls((prev) => ({ ...prev, [media.id]: convertFileSrc(absolutePath) }));
+    return { id: media.id, attribution: media.attribution ?? undefined };
+  };
+
+  const handleStageRemote = async (result: ImageSearchResult): Promise<{ mediaId: string; alt: string }> => {
+    const media = await stageRemoteImageResult(mediaDraftId, result, stageRemoteImage);
+    const absolutePath = await resolveStagedMediaBridge(mediaDraftId, media.id);
+    setStagedMediaUrls((prev) => ({ ...prev, [media.id]: convertFileSrc(absolutePath) }));
+    const alt = result.title || result.attribution;
+    const append = (doc: RichDocument) => ({ ...doc, content: [...doc.content, { type: "image" as const, attrs: { mediaId: media.id, alt, widthPercent: 100 } }] });
+    if (focusedFace === "front") setFrontDoc(append);
+    else setBackDoc(append);
+    return { mediaId: media.id, alt };
   };
 
   const handleSave = async (e: FormEvent) => {
@@ -193,10 +272,9 @@ export function CardSidePanel({
     setSaving(true);
     setError(null);
     try {
-      const tagList = tags
-        .split(",")
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
+      // Tag editing is hidden; new cards start untagged while edited cards
+      // keep whatever tags they already had.
+      const tagsForSave = card.id ? [...card.tags] : [];
 
       if (card.id) {
         // Edit mode: update content + optional deck move in one atomic operation.
@@ -207,7 +285,7 @@ export function CardSidePanel({
           frontDoc,
           backDoc,
           mediaDraftId,
-          tags: tagList,
+          tags: tagsForSave,
           destinationDeckId: deckId !== card.deckId ? deckId : null,
           frontLanguage,
         });
@@ -222,9 +300,13 @@ export function CardSidePanel({
           frontDoc,
           backDoc,
           mediaDraftId,
-          tags: tagList,
+          tags: tagsForSave,
           frontLanguage,
         });
+      }
+      if (!discardedRef.current) {
+        discardedRef.current = true;
+        void discardDraftBridge(mediaDraftId);
       }
       onSaveSuccess();
     } catch (err) {
@@ -247,6 +329,7 @@ export function CardSidePanel({
           </button>
         </div>
 
+        <ScrollArea className="card-side-panel__scroll-area">
         <form className="card-side-panel__form" onSubmit={handleSave}>
           {error && (
             <div className="card-side-panel__error" role="alert">
@@ -281,6 +364,7 @@ export function CardSidePanel({
             <div className="card-side-panel__label">Front</div>
             <CardRichTextEditor
               ariaLabel="Front"
+              key={editorKey}
               value={frontDoc}
               onChange={handleFrontDocChange}
               onDiscardMedia={() => {}}
@@ -305,9 +389,15 @@ export function CardSidePanel({
           </div>
 
           <div className="card-side-panel__field">
-            <div className="card-side-panel__label">Back</div>
+            <div className="card-side-panel__label" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Back</span>
+              <button aria-expanded={pickerOpen} aria-label="Images" disabled={saving} onClick={() => setPickerOpen((open) => !open)} type="button">
+                {pickerOpen ? "Close" : "Images"}
+              </button>
+            </div>
             <CardRichTextEditor
               ariaLabel="Back"
+              key={editorKey}
               value={backDoc}
               onChange={setBackDoc}
               onDiscardMedia={() => {}}
@@ -318,18 +408,7 @@ export function CardSidePanel({
               showToolbar={false}
               disabled={saving}
             />
-          </div>
-
-          <div className="card-side-panel__field">
-            <label className="card-side-panel__label">Tags (comma-separated)</label>
-            <input
-              className="card-side-panel__input"
-              type="text"
-              value={tags}
-              onChange={e => setTags(e.target.value)}
-              placeholder="e.g. biology, exam1"
-              aria-label="Tags"
-            />
+            {pickerOpen ? <MediaPicker frontText={frontText} onClose={() => setPickerOpen(false)} onSearch={searchImages} onStage={handleStageRemote} /> : null}
           </div>
 
           <div className="card-side-panel__actions">
@@ -350,6 +429,7 @@ export function CardSidePanel({
             </button>
           </div>
         </form>
+        </ScrollArea>
       </div>
     </div>
   );

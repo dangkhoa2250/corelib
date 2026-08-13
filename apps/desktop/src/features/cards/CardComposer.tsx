@@ -5,15 +5,18 @@ import { IconPhoto } from "@tabler/icons-react";
 
 import { PronunciationButton } from "../../components/PronunciationButton";
 import { Combobox } from "../../components/Combobox";
+import { ScrollArea } from "../../components/ScrollArea";
 import type { CardSource, NewCardSource } from "../reader/readerSelection";
 import { detectLanguage } from "../../lib/languageDetector";
 import { derivePlainText, type RichDocument } from "../../domain/richDocument";
 import type { CardMedia } from "../../domain/learning";
-import type { PixabayImage, StageMediaInput } from "../../domain/media";
+import type { ImageSearchResult, MultiImageSearchPage, StageMediaInput } from "../../domain/media";
 import {
-  checkPixabayKey,
   discardMediaDraft,
-  searchPixabayImages,
+  resolveStagedMedia,
+  searchMultiSourceImages,
+  stageRemoteCardMedia,
+  stageRemoteImageResult,
   stageCardMedia,
 } from "../../lib/media";
 import { LanguagePicker } from "./LanguagePicker";
@@ -82,17 +85,13 @@ export interface CardComposerProps {
    */
   stageCardMedia?: (input: StageMediaInput) => Promise<CardMedia>;
   discardMediaDraft?: (draftId: string) => Promise<void>;
-  checkPixabayKey?: () => Promise<boolean>;
-  searchPixabayImages?: (query: string, page: number) => Promise<PixabayImage[]>;
-  downloadPixabayPreview?: (previewUrl: string) => Promise<string>;
+  searchMultiSourceImages?: (query: string, page: number) => Promise<MultiImageSearchPage>;
+  stageRemoteCardMedia?: (draftId: string, sourceUrl: string, attribution?: string | null) => Promise<CardMedia>;
+  resolveStagedMedia?: (draftId: string, mediaId: string) => Promise<string>;
 }
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function tagsFromInput(tags: string): string[] {
-  return [...new Set(tags.split(",").map((tag) => tag.trim()).filter(Boolean))];
 }
 
 function hasRequiredDocumentId(source: CardSource): source is NewCardSource {
@@ -115,7 +114,7 @@ function createDraftId(): string {
     : `draft-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-/** Reads a Blob as base64 bytes (the payload the media bridge expects). */
+/** Reads a Blob as base64 bytes for local file/clipboard media. */
 function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -133,33 +132,6 @@ function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
-/**
- * Downloads a Pixabay preview into base64 bytes through an `<img>` + canvas,
- * which is the only path that fits the app CSP: `fetch` to the CDN would need
- * a `connect-src` loosening, so full-size images never load remotely. A tainted
- * canvas or failed load surfaces as a per-result download failure.
- */
-async function downloadPixabayPreviewToBase64(previewUrl: string): Promise<string> {
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("Could not download the image from Pixabay."));
-    img.src = previewUrl;
-  });
-  const canvas = document.createElement("canvas");
-  canvas.width = img.naturalWidth || img.width || 0;
-  canvas.height = img.naturalHeight || img.height || 0;
-  const context = canvas.getContext("2d");
-  if (!context || canvas.width === 0 || canvas.height === 0) {
-    throw new Error("Could not download the image from Pixabay.");
-  }
-  context.drawImage(img, 0, 0);
-  const dataUrl = canvas.toDataURL("image/jpeg");
-  const comma = dataUrl.indexOf(",");
-  return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
-}
-
 export function CardComposer({
   draft,
   decks,
@@ -171,24 +143,26 @@ export function CardComposer({
   externalError,
   stageCardMedia: stageCardMediaBridge = stageCardMedia,
   discardMediaDraft: discardMediaDraftBridge = discardMediaDraft,
-  checkPixabayKey: checkPixabayKeyBridge = checkPixabayKey,
-  searchPixabayImages: searchPixabayImagesBridge = searchPixabayImages,
-  downloadPixabayPreview: downloadPixabayPreviewBridge = downloadPixabayPreviewToBase64,
+  searchMultiSourceImages: searchMultiSourceImagesBridge = searchMultiSourceImages,
+  stageRemoteCardMedia: stageRemoteCardMediaBridge = stageRemoteCardMedia,
+  resolveStagedMedia: resolveStagedMediaBridge = resolveStagedMedia,
 }: CardComposerProps) {
   const activeDecks = decks.filter((deck) => !deck.archived);
   const [frontDoc, setFrontDoc] = useState<RichDocument>(() => paragraphDocFromText(draft.quote));
   const [backDoc, setBackDoc] = useState<RichDocument>(() => paragraphDocFromText(""));
-  const [tags, setTags] = useState("");
   const [deckValue, setDeckValue] = useState(() => activeDecks[0]?.id ?? NEW_DECK_VALUE);
   const [newDeckName, setNewDeckName] = useState("");
   const [saving, setSaving] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [autoTranslating, setAutoTranslating] = useState(false);
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mediaDraftId] = useState(() => createDraftId());
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pixabayHasKey, setPixabayHasKey] = useState<boolean | null>(null);
   const draftDiscardedRef = useRef(false);
+  // Set once the user takes over the back face (typing, images, or a manual
+  // translation) so a later auto-translation never replaces their content.
+  const backEditedRef = useRef(false);
 
   const frontText = derivePlainText(frontDoc);
   const backText = derivePlainText(backDoc);
@@ -204,6 +178,38 @@ export function CardComposer({
       setFrontLanguage(lang);
     }
   }, [draft.quote, isManualLanguage]);
+
+  // A new selection confirmed from the reader replaces the auto-filled front
+  // while the composer stays open.
+  useEffect(() => {
+    setFrontDoc(paragraphDocFromText(draft.quote));
+  }, [draft.quote]);
+
+  // Auto-translate the selected quote into the back when the composer opens
+  // or the selection changes. Best-effort: failures stay silent and the
+  // manual Translate button still surfaces them.
+  useEffect(() => {
+    if (!onTranslate || !draft.quote.trim()) return;
+    let cancelled = false;
+    setAutoTranslating(true);
+    Promise.resolve()
+      .then(() => (cancelled ? null : onTranslate(draft.quote, frontLanguage)))
+      .then((translation) => {
+        // A slow translation must never clobber an image or text the user
+        // already placed in the back face.
+        if (cancelled || backEditedRef.current || translation === null) return;
+        setBackDoc(paragraphDocFromText(translation));
+      })
+      .catch(() => {
+        // Keep whatever the back already holds.
+      })
+      .finally(() => {
+        if (!cancelled) setAutoTranslating(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draft.quote, frontLanguage, onTranslate]);
 
   const handleFrontDocChange = (doc: RichDocument) => {
     setFrontDoc(doc);
@@ -287,20 +293,6 @@ export function CardComposer({
     }
   }, [closed]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void checkPixabayKeyBridge()
-      .then((has) => {
-        if (!cancelled) setPixabayHasKey(has);
-      })
-      .catch(() => {
-        if (!cancelled) setPixabayHasKey(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [checkPixabayKeyBridge]);
-
   /**
    * Staged media is owned by the composer draft. Removing a single image node
    * has no backend call (best-effort); the whole draft is discarded on cancel
@@ -380,7 +372,7 @@ export function CardComposer({
         backDoc,
         mediaDraftId,
         source: draft,
-        tags: tagsFromInput(tags),
+        tags: [],
         frontLanguage,
       });
     } catch (saveError) {
@@ -393,7 +385,8 @@ export function CardComposer({
   };
 
   const handleTranslate = async () => {
-    if (!onTranslate || translating || saving || !frontText) return;
+    if (!onTranslate || translating || autoTranslating || saving || !frontText) return;
+    backEditedRef.current = true;
     setTranslating(true);
     setError(null);
     try {
@@ -440,24 +433,19 @@ export function CardComposer({
     if (previewUrl) {
       setStagedMediaUrls((prev) => ({ ...prev, [media.id]: previewUrl }));
     }
-    return { id: media.id, attribution: media.pixabayAttribution ?? undefined };
+    return { id: media.id, attribution: media.attribution ?? undefined };
   };
 
   const stageMedia = onStageMedia ?? stageFileOrClipboard;
 
-  const handleStagePixabay = async (
-    result: PixabayImage,
+  const handleStageRemote = async (
+    result: ImageSearchResult,
   ): Promise<{ mediaId: string; alt: string }> => {
-    const bytesBase64 = await downloadPixabayPreviewBridge(result.previewUrl);
-    const media = await stageCardMediaBridge({
-      draftId: mediaDraftId,
-      sourceType: "pixabay",
-      bytesBase64,
-      pixabayAttribution: `Photo by ${result.user} on Pixabay`,
-    });
-    const alt = result.tags || `Photo by ${result.user} on Pixabay`;
-    const dataUrl = `data:image/jpeg;base64,${bytesBase64}`;
-    setStagedMediaUrls((prev) => ({ ...prev, [media.id]: dataUrl }));
+    const media = await stageRemoteImageResult(mediaDraftId, result, stageRemoteCardMediaBridge);
+    const alt = result.title || result.attribution;
+    const absolutePath = await resolveStagedMediaBridge(mediaDraftId, media.id);
+    backEditedRef.current = true;
+    setStagedMediaUrls((prev) => ({ ...prev, [media.id]: convertFileSrc(absolutePath) }));
     setBackDoc((current) => ({
       ...current,
       content: [
@@ -559,7 +547,7 @@ export function CardComposer({
             Back
             <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               <button
-                aria-label="Pixabay"
+                 aria-label="Images"
                 aria-expanded={pickerOpen}
                 disabled={saving || translating}
                 onClick={() => setPickerOpen((open) => !open)}
@@ -582,14 +570,14 @@ export function CardComposer({
                 <span>{pickerOpen ? "Close" : "Image"}</span>
               </button>
               {onTranslate ? (
-                <button
-                  aria-label="Translate"
-                  disabled={saving || translating || !frontText}
+              <button
+                 aria-label="Translate"
+                  disabled={saving || translating || autoTranslating || !frontText}
                   onClick={() => void handleTranslate()}
                   style={{ border: 0, borderRadius: "999px", padding: "5px 10px", color: "var(--link)", background: "var(--interactive-hover)", cursor: "pointer", fontSize: "12px", fontWeight: 600 }}
                   type="button"
                 >
-                  {translating ? "Translating…" : "Translate"}
+                  {translating || autoTranslating ? "Translating…" : "Translate"}
                 </button>
               ) : null}
             </span>
@@ -597,7 +585,10 @@ export function CardComposer({
           <CardRichTextEditor
             ariaLabel="Back"
             disabled={saving || translating}
-            onChange={setBackDoc}
+            onChange={(doc) => {
+              backEditedRef.current = true;
+              setBackDoc(doc);
+            }}
             onDiscardMedia={() => {}}
             onFocusChange={handleFaceFocus("back")}
             onStageMedia={stageMedia}
@@ -608,32 +599,8 @@ export function CardComposer({
           />
         </div>
 
-        <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
-          Tags
-          <input
-            aria-label="Tags"
-            disabled={saving}
-            onChange={(event) => setTags(event.target.value)}
-            placeholder="e.g. algebra, definitions"
-            type="text"
-            value={tags}
-          />
-        </label>
-
         {pickerOpen ? (
-          pixabayHasKey === null ? (
-            <p role="status" style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)" }}>
-              Checking Pixabay…
-            </p>
-          ) : (
-            <MediaPicker
-              frontText={frontText}
-              hasKey={pixabayHasKey}
-              onClose={() => setPickerOpen(false)}
-              onSearch={searchPixabayImagesBridge}
-              onStage={handleStagePixabay}
-            />
-          )
+          <MediaPicker frontText={frontText} onClose={() => setPickerOpen(false)} onSearch={searchMultiSourceImagesBridge} onStage={handleStageRemote} />
         ) : null}
 
         {visibleError ? (
@@ -695,7 +662,7 @@ export function CardComposer({
           height: "100%",
           display: "flex",
           flexDirection: "column",
-          overflowY: "auto",
+           overflow: "hidden",
           padding: "20px",
           borderLeft: "1px solid var(--border-subtle)",
           background: "var(--panel-bg)",
@@ -722,7 +689,9 @@ export function CardComposer({
             ×
           </button>
         </header>
-        {form}
+         <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+           <div style={{ paddingRight: "20px" }}>{form}</div>
+         </ScrollArea>
       </section>
     );
   }
@@ -747,8 +716,10 @@ export function CardComposer({
         role="dialog"
         style={{
           width: "min(680px, 100%)",
-          maxHeight: "calc(100vh - 40px)",
-          overflowY: "auto",
+           maxHeight: "calc(100vh - 40px)",
+           display: "flex",
+           flexDirection: "column",
+           overflow: "hidden",
           padding: "24px",
           border: "1px solid var(--border-subtle)",
           borderRadius: "18px",
@@ -765,7 +736,9 @@ export function CardComposer({
             Your selected text is ready to edit on the front of the card.
           </p>
         </header>
-        {form}
+         <ScrollArea style={{ flex: 1, minHeight: 0 }}>
+           <div style={{ paddingRight: "20px" }}>{form}</div>
+         </ScrollArea>
       </section>
     </div>
   );

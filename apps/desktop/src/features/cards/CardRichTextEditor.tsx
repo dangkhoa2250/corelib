@@ -33,7 +33,7 @@ import "./CardRichTextEditor.css";
  * The review renderer (`RichDocumentRenderer`) displays the same node shape.
  */
 
-export type MediaSourceType = "file" | "clipboard" | "pixabay";
+export type MediaSourceType = "file" | "clipboard" | "web";
 
 /** Imperative control surface for hosts that drive the editor externally. */
 export interface CardRichTextEditorHandle {
@@ -48,6 +48,11 @@ export interface CardRichTextEditorHandle {
   getEditor(): Editor | null;
   /** Opens this editor's hidden image file picker. */
   openImagePicker(): void;
+  /**
+   * Re-renders the current document so image nodes pick up freshly resolved
+   * media URLs (e.g. committed media resolving after the panel mounts).
+   */
+  refreshMedia(): void;
 }
 
 export interface CardRichTextEditorProps {
@@ -232,8 +237,6 @@ const CardImage = Image.extend<CardImageOptions>({
       const img = document.createElement("img");
       img.draggable = false;
       img.style.width = `${node.attrs.widthPercent}%`;
-      const src = resolveMedia(node.attrs.mediaId);
-      if (src) img.src = src;
       img.alt = node.attrs.alt ?? "";
 
       const handle = document.createElement("button");
@@ -292,10 +295,23 @@ const CardImage = Image.extend<CardImageOptions>({
         window.addEventListener("mouseup", onUp);
       });
 
+      // Resolved media URLs (staged or committed) can arrive after the node
+      // view is created. Re-apply the source on every transaction so a
+      // host-side refresh (setContent) repaints the image without waiting
+      // for the node itself to change.
+      const applySource = () => {
+        const src = resolveMedia(node.attrs.mediaId);
+        if (src) img.setAttribute("src", src);
+        else img.removeAttribute("src");
+      };
+      applySource();
+      editor.on("transaction", applySource);
+
       container.append(img, handle);
 
       return {
         dom: container,
+        destroy: () => editor.off("transaction", applySource),
         selectNode: () => container.classList.add("is-selected"),
         deselectNode: () => container.classList.remove("is-selected"),
         update: (updatedNode) => {
@@ -303,6 +319,10 @@ const CardImage = Image.extend<CardImageOptions>({
           img.style.width = `${updatedNode.attrs.widthPercent}%`;
           if (updatedNode.attrs.alt !== img.getAttribute("alt")) {
             img.setAttribute("alt", updatedNode.attrs.alt ?? "");
+          }
+          const src = resolveMedia(updatedNode.attrs.mediaId);
+          if (src && img.getAttribute("src") !== src) {
+            img.setAttribute("src", src);
           }
           return true;
         },
@@ -459,6 +479,11 @@ export const CardRichTextEditor = forwardRef<CardRichTextEditorHandle, CardRichT
       },
       openImagePicker(): void {
         fileInputRef.current?.click();
+      },
+      refreshMedia(): void {
+        const current = editorRef.current;
+        if (!current) return;
+        current.commands.setContent(current.getJSON(), { emitUpdate: false });
       },
     }),
     [],

@@ -1,6 +1,20 @@
 import { type ReactNode } from "react";
 import { useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
+import {
+  IconAlignCenter,
+  IconAlignJustified,
+  IconAlignLeft,
+  IconAlignRight,
+  IconArrowBackUp,
+  IconArrowForwardUp,
+  IconList,
+  IconListNumbers,
+  IconPhoto,
+  IconPilcrow,
+  IconTypography,
+} from "@tabler/icons-react";
+import { CompactToolbarMenu } from "./CompactToolbarMenu";
 
 interface ToolbarState {
   canUndo: boolean;
@@ -44,24 +58,27 @@ function ToolbarButton({
   label,
   active = false,
   disabled = false,
+  iconOnly = false,
   onClick,
   children,
 }: {
   label: string;
   active?: boolean;
   disabled?: boolean;
+  iconOnly?: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
+  const className = [
+    "card-rich-text-editor__toolbar-button",
+    iconOnly ? "card-rich-text-editor__toolbar-button--icon" : "",
+    active ? "is-active" : "",
+  ].filter(Boolean).join(" ");
   return (
     <button
       aria-label={label}
       aria-pressed={active}
-      className={
-        active
-          ? "card-rich-text-editor__toolbar-button is-active"
-          : "card-rich-text-editor__toolbar-button"
-      }
+      className={className}
       disabled={disabled}
       onClick={onClick}
       onMouseDown={(event) => event.preventDefault()}
@@ -126,142 +143,70 @@ export function CardRichTextToolbar({
     >
       <ToolbarButton
         disabled={isDisabled || !toolbar.canUndo}
+        iconOnly
         label="Undo"
         onClick={() => editor?.chain().focus().undo().run()}
       >
-        ↺
+        <IconArrowBackUp size={14} stroke={1.5} />
       </ToolbarButton>
       <ToolbarButton
         disabled={isDisabled || !toolbar.canRedo}
+        iconOnly
         label="Redo"
         onClick={() => editor?.chain().focus().redo().run()}
       >
-        ↻
+        <IconArrowForwardUp size={14} stroke={1.5} />
       </ToolbarButton>
 
       <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
 
-      <ToolbarButton
-        active={toolbar.bold}
+      <CompactToolbarMenu
+        active={toolbar.bold || toolbar.italic || toolbar.underline || toolbar.strike}
         disabled={isDisabled}
-        label="Bold"
-        onClick={() => editor?.chain().focus().toggleBold().run()}
-      >
-        <strong>B</strong>
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.italic}
+        icon={<IconTypography size={14} stroke={1.5} />}
+        items={[
+          { label: "Bold", active: toolbar.bold, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleBold().run() },
+          { label: "Italic", active: toolbar.italic, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleItalic().run() },
+          { label: "Underline", active: toolbar.underline, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleUnderline().run() },
+          { label: "Strikethrough", active: toolbar.strike, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleStrike().run() },
+        ]}
+        label="Text formatting"
+      />
+      <CompactToolbarMenu
+        active={toolbar.paragraph || toolbar.heading1 || toolbar.heading2 || toolbar.heading3}
         disabled={isDisabled}
-        label="Italic"
-        onClick={() => editor?.chain().focus().toggleItalic().run()}
-      >
-        <em>I</em>
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.underline}
+        icon={<IconPilcrow size={14} stroke={1.5} />}
+        items={[
+          { label: "Paragraph", active: toolbar.paragraph, role: "menuitemradio", onSelect: () => editor?.chain().focus().setParagraph().run() },
+          { label: "Heading 1", active: toolbar.heading1, role: "menuitemradio", onSelect: () => editor?.chain().focus().toggleHeading({ level: 1 }).run() },
+          { label: "Heading 2", active: toolbar.heading2, role: "menuitemradio", onSelect: () => editor?.chain().focus().toggleHeading({ level: 2 }).run() },
+          { label: "Heading 3", active: toolbar.heading3, role: "menuitemradio", onSelect: () => editor?.chain().focus().toggleHeading({ level: 3 }).run() },
+        ]}
+        label="Paragraph style"
+      />
+      <CompactToolbarMenu
+        active={toolbar.bulletList || toolbar.orderedList}
         disabled={isDisabled}
-        label="Underline"
-        onClick={() => editor?.chain().focus().toggleUnderline().run()}
-      >
-        <u>U</u>
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.strike}
+        icon={<IconList size={14} stroke={1.5} />}
+        items={[
+          { label: "Bullet list", active: toolbar.bulletList, icon: <IconList size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => editor?.chain().focus().toggleBulletList().run() },
+          { label: "Numbered list", active: toolbar.orderedList, icon: <IconListNumbers size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => editor?.chain().focus().toggleOrderedList().run() },
+        ]}
+        label="Lists"
+      />
+      <CompactToolbarMenu
+        active={toolbar.alignCenter || toolbar.alignRight || toolbar.alignJustify}
         disabled={isDisabled}
-        label="Strikethrough"
-        onClick={() => editor?.chain().focus().toggleStrike().run()}
-      >
-        <s>S</s>
-      </ToolbarButton>
-
-      <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-      <ToolbarButton
-        active={toolbar.paragraph}
-        disabled={isDisabled}
-        label="Paragraph"
-        onClick={() => editor?.chain().focus().setParagraph().run()}
-      >
-        ¶
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.heading1}
-        disabled={isDisabled}
-        label="Heading 1"
-        onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()}
-      >
-        H1
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.heading2}
-        disabled={isDisabled}
-        label="Heading 2"
-        onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()}
-      >
-        H2
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.heading3}
-        disabled={isDisabled}
-        label="Heading 3"
-        onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-      >
-        H3
-      </ToolbarButton>
-
-      <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-      <ToolbarButton
-        active={toolbar.bulletList}
-        disabled={isDisabled}
-        label="Bullet list"
-        onClick={() => editor?.chain().focus().toggleBulletList().run()}
-      >
-        • List
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.orderedList}
-        disabled={isDisabled}
-        label="Numbered list"
-        onClick={() => editor?.chain().focus().toggleOrderedList().run()}
-      >
-        1. List
-      </ToolbarButton>
-
-      <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
-
-      <ToolbarButton
-        active={toolbar.alignLeft}
-        disabled={isDisabled}
-        label="Align left"
-        onClick={() => setAlign("left")}
-      >
-        ⯇
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.alignCenter}
-        disabled={isDisabled}
-        label="Align center"
-        onClick={() => setAlign("center")}
-      >
-        ⯈
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.alignRight}
-        disabled={isDisabled}
-        label="Align right"
-        onClick={() => setAlign("right")}
-      >
-        ≣
-      </ToolbarButton>
-      <ToolbarButton
-        active={toolbar.alignJustify}
-        disabled={isDisabled}
-        label="Align justify"
-        onClick={() => setAlign("justify")}
-      >
-        ☰
-      </ToolbarButton>
+        icon={<IconAlignLeft size={14} stroke={1.5} />}
+        items={[
+          { label: "Align left", active: toolbar.alignLeft, icon: <IconAlignLeft size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("left") },
+          { label: "Align center", active: toolbar.alignCenter, icon: <IconAlignCenter size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("center") },
+          { label: "Align right", active: toolbar.alignRight, icon: <IconAlignRight size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("right") },
+          { label: "Align justify", active: toolbar.alignJustify, icon: <IconAlignJustified size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("justify") },
+        ]}
+        label="Alignment"
+        layout="horizontal"
+      />
 
       <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
 
@@ -294,10 +239,11 @@ export function CardRichTextToolbar({
 
       <ToolbarButton
         disabled={isDisabled}
+        iconOnly
         label="Insert image"
         onClick={onInsertImage}
       >
-        Image
+        <IconPhoto size={14} stroke={1.5} />
       </ToolbarButton>
       <ToolbarButton
         disabled={isDisabled}

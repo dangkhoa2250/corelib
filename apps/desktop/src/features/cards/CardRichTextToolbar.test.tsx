@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { TextStyle } from "@tiptap/extension-text-style";
+import Color from "@tiptap/extension-color";
+import Highlight from "@tiptap/extension-highlight";
+import TextAlign from "@tiptap/extension-text-align";
 import { CardRichTextToolbar } from "./CardRichTextToolbar";
 
 // ---------------------------------------------------------------------------
@@ -32,7 +36,16 @@ if (typeof document !== "undefined" && typeof document.elementFromPoint !== "fun
 }
 
 function Harness({ onInsertImage }: { onInsertImage: () => void }) {
-  const editor = useEditor({ extensions: [StarterKit], content: "<p>hi</p>" });
+  const editor = useEditor({
+    extensions: [
+      StarterKit,
+      TextStyle,
+      Color,
+      Highlight.configure({ multicolor: true }),
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+    ],
+    content: "<p>hi</p>",
+  });
   if (!editor) return null;
   return (
     <div>
@@ -42,18 +55,73 @@ function Harness({ onInsertImage }: { onInsertImage: () => void }) {
   );
 }
 
-test("applies formatting to the given editor and reflects active marks", async () => {
+test("groups formatting controls into compact menus", () => {
+  render(<Harness onInsertImage={vi.fn()} />);
+  expect(screen.getByRole("button", { name: "Text formatting" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Paragraph style" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Lists" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Alignment" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Undo" }).querySelector("svg")).not.toBeNull();
+  expect(screen.getByRole("button", { name: "Redo" }).querySelector("svg")).not.toBeNull();
+  expect(screen.getByRole("button", { name: "Insert image" }).querySelector("svg")).not.toBeNull();
+  expect(screen.getByRole("button", { name: "Clear formatting" })).toHaveTextContent("Clear");
+  expect(screen.queryByRole("button", { name: "Bold" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Heading 2" })).not.toBeInTheDocument();
+});
+
+test("applies formatting from the text formatting menu and reflects active marks", async () => {
   const user = userEvent.setup();
   const { container } = render(<Harness onInsertImage={vi.fn()} />);
   const editable = container.querySelector(".tiptap")!;
   await user.click(editable);
-  const bold = screen.getByRole("button", { name: "Bold" });
-  await user.click(bold);
+  await user.click(screen.getByRole("button", { name: "Text formatting" }));
+  await user.click(screen.getByRole("menuitemcheckbox", { name: "Bold" }));
   await user.keyboard("text");
-  expect(bold).toHaveAttribute("aria-pressed", "true");
-  // Scope to the editor body: the toolbar's own Bold button renders a
-  // `<strong>` glyph and appears earlier in the DOM.
+  // Scope to the editor body: the menu trigger renders an icon, not a glyph.
   expect(container.querySelector(".tiptap strong")?.textContent).toBe("text");
+  await user.click(screen.getByRole("button", { name: "Text formatting" }));
+  expect(screen.getByRole("menuitemcheckbox", { name: "Bold" })).toHaveAttribute("aria-checked", "true");
+});
+
+test("paragraph style menu applies headings", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<Harness onInsertImage={vi.fn()} />);
+  await user.click(container.querySelector(".tiptap")!);
+  await user.click(screen.getByRole("button", { name: "Paragraph style" }));
+  await user.click(screen.getByRole("menuitemradio", { name: "Heading 2" }));
+  await user.keyboard("title");
+  const heading = container.querySelector(".tiptap h2");
+  expect(heading).not.toBeNull();
+  expect(heading?.textContent).toContain("title");
+});
+
+test("list menu applies bullet and numbered lists with distinct icons", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<Harness onInsertImage={vi.fn()} />);
+  await user.click(container.querySelector(".tiptap")!);
+  await user.click(screen.getByRole("button", { name: "Lists" }));
+  const bullet = screen.getByRole("menuitemradio", { name: "Bullet list" });
+  const numbered = screen.getByRole("menuitemradio", { name: "Numbered list" });
+  expect(bullet.querySelector("svg")).not.toBeNull();
+  expect(numbered.querySelector("svg")).not.toBeNull();
+  expect(bullet.querySelector("svg")?.outerHTML).not.toEqual(numbered.querySelector("svg")?.outerHTML);
+  await user.click(bullet);
+  await user.keyboard("item");
+  const item = container.querySelector(".tiptap ul li");
+  expect(item).not.toBeNull();
+  expect(item?.textContent).toContain("item");
+});
+
+test("alignment menu applies alignment with distinct icons", async () => {
+  const user = userEvent.setup();
+  const { container } = render(<Harness onInsertImage={vi.fn()} />);
+  await user.click(container.querySelector(".tiptap")!);
+  await user.click(screen.getByRole("button", { name: "Alignment" }));
+  const alignLeft = screen.getByRole("menuitemradio", { name: "Align left" });
+  const alignRight = screen.getByRole("menuitemradio", { name: "Align right" });
+  expect(alignLeft.querySelector("svg")?.outerHTML).not.toEqual(alignRight.querySelector("svg")?.outerHTML);
+  await user.click(alignRight);
+  expect(container.querySelector(".tiptap p")).toHaveStyle({ textAlign: "right" });
 });
 
 test("disables every button when the editor is null", () => {
@@ -74,8 +142,8 @@ test("insert image button invokes onInsertImage", async () => {
 test("preserves native color input mousedown while buttons prevent it", () => {
   render(<Harness onInsertImage={vi.fn()} />);
   const colorInput = screen.getByLabelText("Text color");
-  const bold = screen.getByRole("button", { name: "Bold" });
+  const trigger = screen.getByRole("button", { name: "Text formatting" });
 
   expect(fireEvent.mouseDown(colorInput)).toBe(true);
-  expect(fireEvent.mouseDown(bold)).toBe(false);
+  expect(fireEvent.mouseDown(trigger)).toBe(false);
 });

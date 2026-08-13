@@ -12,9 +12,9 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   flex-shrink: 0;
-  padding: 6px 8px;
+  padding: 3px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-2);
 }
@@ -23,16 +23,21 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 30px;
-  height: 30px;
-  padding: 0 7px;
+  min-width: 23px;
+  height: 23px;
+  padding: 0 4px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 4px;
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: 13px;
+  font-size: 11px;
   cursor: pointer;
+}
+
+.card-rich-text-editor__toolbar-button--icon {
+  width: 23px;
+  padding: 0;
 }
 
 .card-rich-text-editor__toolbar-button:hover:not(:disabled) {
@@ -60,8 +65,8 @@
 
 .card-rich-text-editor__toolbar-separator {
   width: 1px;
-  height: 18px;
-  margin: 0 4px;
+  height: 14px;
+  margin: 0 2px;
   background: var(--border-subtle);
 }
 
@@ -69,11 +74,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
-  padding: 3px;
+  width: 23px;
+  height: 23px;
+  padding: 2px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
@@ -88,6 +93,64 @@
   border: 0;
   background: transparent;
   cursor: pointer;
+}
+
+.card-rich-text-editor__toolbar-menu-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.card-rich-text-editor__toolbar-menu-root .card-rich-text-editor__toolbar-button {
+  width: 23px;
+  padding: 0;
+}
+
+.card-rich-text-editor__toolbar-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 3px);
+  left: 0;
+  display: grid;
+  min-width: max-content;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-md);
+}
+
+.card-rich-text-editor__toolbar-menu--horizontal {
+  grid-auto-flow: column;
+}
+
+.card-rich-text-editor__toolbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 23px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.card-rich-text-editor__toolbar-menu-item:hover:not(:disabled),
+.card-rich-text-editor__toolbar-menu-item:focus-visible {
+  background: var(--interactive-hover);
+}
+
+.card-rich-text-editor__toolbar-menu-item.is-active {
+  background: var(--interactive-selected);
+}
+
+.card-rich-text-editor__toolbar-menu-item:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
 }
 
 /* ScrollArea's overlay thumb needs a clear right-side gutter in WKWebView. */

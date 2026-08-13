@@ -5,7 +5,10 @@ import { describe, expect, test, vi } from "vitest";
 import { derivePlainText, type RichDocument } from "../../domain/richDocument";
 import { createCard, updateAndMoveCard } from "../../lib/learning";
 import type { CardBrowserRow } from "../../domain/learning";
+import type { MultiImageSearchPage } from "../../domain/media";
 import { CardSidePanel } from "./CardSidePanel";
+
+vi.mock("./RemoteImagePreview", () => ({ RemoteImagePreview: ({ alt }: { alt: string }) => <img alt={alt} /> }));
 
 // ---------------------------------------------------------------------------
 // jsdom shims. ProseMirror (and user-event) need APIs jsdom does not provide:
@@ -96,6 +99,24 @@ function editor(name: string): HTMLElement {
 }
 
 describe("CardSidePanel rich documents", () => {
+  test("opens the keyless image picker and stages a remote result into the focused face", async () => {
+    const searchMultiSourceImages = vi.fn().mockResolvedValue({
+      results: [{ id: "wiki-1", source: "wikimedia", title: "Cell", previewUrl: "preview", imageUrl: "full", sourceUrl: "source", attribution: "Ada", license: "CC BY", width: 10, height: 10 }],
+      warnings: [],
+      hasMore: false,
+    } satisfies MultiImageSearchPage);
+    const stageRemoteCardMedia = vi.fn().mockResolvedValue({ id: "media-1", relativePath: "media/media-1.png", attribution: "Ada" });
+    const resolveStagedMedia = vi.fn().mockResolvedValue("/app-data/card-media/staging/draft/media-1.png");
+    const { user } = renderPanel(baseCard(), { searchMultiSourceImages, stageRemoteCardMedia, resolveStagedMedia });
+
+    await user.click(screen.getByRole("button", { name: "Images" }));
+    await waitFor(() => expect(searchMultiSourceImages).toHaveBeenCalledWith("ATP front", 1));
+    await user.click(await screen.findByRole("button", { name: "Cell" }));
+    await waitFor(() => expect(stageRemoteCardMedia).toHaveBeenCalledWith(expect.any(String), "full", "Ada"));
+    await waitFor(() => expect(resolveStagedMedia).toHaveBeenCalledWith(expect.any(String), "media-1"));
+    expect(editor("Back").querySelector("[data-card-image] img")).toHaveAttribute("src", "/app-data/card-media/staging/draft/media-1.png");
+  });
+
   test("create passes frontDoc, backDoc, and mediaDraftId to createCard", async () => {
     const newCard = baseCard({ id: "", front: "", back: "", tags: [] });
     const { user } = renderPanel(newCard);
@@ -148,6 +169,33 @@ describe("CardSidePanel rich documents", () => {
     expect(derivePlainText(payload.backDoc!)).toBe("ATP back");
   });
 
+  test("hides tags and creates a new card with no tags", async () => {
+    const newCard = baseCard({ id: "", front: "", back: "", tags: ["legacy"] });
+    vi.mocked(createCard).mockClear();
+    const { user } = renderPanel(newCard);
+    expect(screen.queryByRole("textbox", { name: "Tags" })).not.toBeInTheDocument();
+
+    await user.click(editor("Front"));
+    await user.keyboard("Question");
+    await user.click(editor("Back"));
+    await user.keyboard("Answer");
+    await user.click(screen.getByRole("button", { name: "Add Card" }));
+
+    await waitFor(() => expect(createCard).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(createCard).mock.calls[0][0].tags).toEqual([]);
+  });
+
+  test("hides tags and preserves existing tags when editing", async () => {
+    vi.mocked(updateAndMoveCard).mockClear();
+    const { user } = renderPanel(baseCard({ tags: ["energy", "biology"] }));
+    expect(screen.queryByRole("textbox", { name: "Tags" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+    await waitFor(() => expect(updateAndMoveCard).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(updateAndMoveCard).mock.calls[0][0].tags).toEqual(["energy", "biology"]);
+  });
+
   test("initializes editors from existing rich documents", async () => {
     const frontDoc: RichDocument = {
       type: "doc",
@@ -170,6 +218,40 @@ describe("CardSidePanel rich documents", () => {
     expect(editor("Back")).toHaveTextContent("Rich Back");
   });
 
+  test("resolves media already committed to the card when editing", async () => {
+    const backDoc: RichDocument = {
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: { mediaId: "media-1", alt: "Cell diagram", widthPercent: 100 },
+        },
+      ],
+    };
+    const resolveCardMedia = vi.fn().mockResolvedValue("/app-data/card-media/c1/media-1.png");
+    renderPanel(baseCard({
+      backDoc,
+      media: [{
+        id: "media-1",
+        cardId: "c1",
+        mimeType: "image/png",
+        relativePath: "c1/media-1.png",
+        sourceType: "web",
+        attribution: "Artist · CC BY",
+        createdAt: "2026-07-09T12:00:00Z",
+        updatedAt: "2026-07-09T12:00:00Z",
+      }],
+    }), { resolveCardMedia });
+
+    await waitFor(() => expect(resolveCardMedia).toHaveBeenCalledWith("c1", "media-1"));
+    await waitFor(() => {
+      expect(editor("Back").querySelector("[data-card-image] img")).toHaveAttribute(
+        "src",
+        "/app-data/card-media/c1/media-1.png",
+      );
+    });
+  });
+
   test("tracks dirty state from rich content changes", async () => {
     const onDirtyStateChange = vi.fn();
     const { user } = renderPanel(baseCard(), { onDirtyStateChange });
@@ -190,10 +272,10 @@ describe("CardSidePanel rich documents", () => {
     const { user } = renderPanel(baseCard());
     const front = editor("Front");
     const back = editor("Back");
-    const h2Button = screen.getByRole("button", { name: "Heading 2" });
 
     await user.click(front);
-    await user.click(h2Button);
+    await user.click(screen.getByRole("button", { name: "Paragraph style" }));
+    await user.click(screen.getByRole("menuitemradio", { name: "Heading 2" }));
     await user.keyboard("Panel Heading");
     expect(front.querySelector("h2")?.textContent).toContain("Panel Heading");
 
@@ -210,7 +292,7 @@ describe("CardSidePanel rich documents", () => {
     await user.click(deck);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Text formatting" })).toBeDisabled();
       expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
     });
   });

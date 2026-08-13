@@ -6,6 +6,8 @@ import type { CardSource, NewCardSource } from "../reader/readerSelection";
 import { derivePlainText } from "../../domain/richDocument";
 import { CardComposer } from "./CardComposer";
 
+vi.mock("./RemoteImagePreview", () => ({ RemoteImagePreview: ({ alt }: { alt: string }) => <img alt={alt} /> }));
+
 // ---------------------------------------------------------------------------
 // jsdom shims. ProseMirror (and user-event) need APIs jsdom does not provide:
 // Text/Range geometry queries and document.elementFromPoint.
@@ -71,34 +73,17 @@ function renderComposer(overrides: Partial<React.ComponentProps<typeof CardCompo
       mimeType: "image/png",
       relativePath: "media/media-1.png",
       sourceType: "file",
-      pixabayAttribution: null,
+      attribution: null,
       createdAt: "",
       updatedAt: "",
     }),
     discardMediaDraft: vi.fn().mockResolvedValue(undefined),
-    checkPixabayKey: vi.fn().mockResolvedValue(false),
-    searchPixabayImages: vi.fn().mockResolvedValue([]),
-    downloadPixabayPreview: vi.fn().mockResolvedValue("aGVsbG8="),
+    resolveStagedMedia: vi.fn().mockResolvedValue("/app-data/card-media/staging/draft/media.png"),
     ...overrides,
   };
-  render(<CardComposer {...props} />);
-  return { onSave, onCancel, user, props };
+  const view = render(<CardComposer {...props} />);
+  return { onSave, onCancel, user, props, view };
 }
-
-const pixabayImage = {
-  id: 1,
-  pageUrl: "https://pixabay.com/photos/1",
-  previewUrl: "https://cdn.pixabay.com/preview-1.jpg",
-  imageUrl: "https://cdn.pixabay.com/full-1.jpg",
-  previewWidth: 150,
-  previewHeight: 100,
-  width: 640,
-  height: 427,
-  tags: "algebra, board",
-  user: "JaneDoe",
-  userId: 42,
-  mediaType: "photo",
-};
 
 /** The Tiptap contenteditable backing a labeled editor face. */
 function editor(name: string): HTMLElement {
@@ -135,6 +120,17 @@ test("prefills the front from the selection and lets both card sides be edited",
   expect(back).toHaveTextContent("A set closed under vector addition and scalar multiplication.");
 });
 
+test("replaces the front when a new selection arrives while the composer is open", () => {
+  const { props, view } = renderComposer();
+  const updatedDraft: NewCardSource = {
+    ...draft,
+    quote: "A basis spans the space.",
+  };
+  view.rerender(<CardComposer {...props} draft={updatedDraft} />);
+
+  expect(editor("Front")).toHaveTextContent("A basis spans the space.");
+});
+
 test("renders one shared formatting toolbar between Deck and Front", () => {
   renderComposer();
 
@@ -151,14 +147,17 @@ test("targets the focused card face while keeping one shared toolbar", async () 
   const { user } = renderComposer();
   const front = editor("Front");
   const back = editor("Back");
-  const bold = () => screen.getByRole("button", { name: "Bold" });
+  const openFormatting = () => screen.getByRole("button", { name: "Text formatting" });
+  const bold = () => screen.getByRole("menuitemcheckbox", { name: "Bold" });
 
   await user.click(front);
+  await user.click(openFormatting());
   await user.click(bold());
   await user.keyboard("FRONT_BOLD ");
 
   await user.click(back);
   await user.keyboard("BACK_PLAIN ");
+  await user.click(openFormatting());
   await user.click(bold());
   await user.keyboard("BACK_BOLD");
 
@@ -176,7 +175,7 @@ test("disables the shared toolbar when neither face is focused", async () => {
   await user.click(deck);
 
   await waitFor(() => {
-    expect(toolbar.querySelector('button[aria-label="Bold"]')).toBeDisabled();
+    expect(toolbar.querySelector('button[aria-label="Text formatting"]')).toBeDisabled();
     expect(toolbar.querySelector('button[aria-label="Undo"]')).toBeDisabled();
   });
 });
@@ -206,14 +205,14 @@ test("delegates shared image insertion to the focused face", async () => {
   expect(screen.getAllByRole("toolbar", { name: "Card formatting" })).toHaveLength(1);
 });
 
-test("translates the derived plain text into a new back paragraph when the back is empty", async () => {
+test("auto-translates the selected text into the back when the composer opens", async () => {
   const onTranslate = vi.fn().mockResolvedValue("Tôi đã định gọi cho bạn.");
-  const { user } = renderComposer({ onTranslate });
-
-  await user.click(screen.getByRole("button", { name: "Translate" }));
+  renderComposer({ onTranslate });
 
   // The translate call receives the plain text derived from the front document and detected source language.
-  expect(onTranslate).toHaveBeenCalledWith(draft.quote, expect.anything());
+  await waitFor(() => {
+    expect(onTranslate).toHaveBeenCalledWith(draft.quote, expect.anything());
+  });
   const back = await waitFor(() => {
     const element = editor("Back");
     expect(element).toHaveTextContent("Tôi đã định gọi cho bạn.");
@@ -228,6 +227,12 @@ test("inserts the translation at the current back selection without losing exist
   const { user } = renderComposer({ onTranslate });
   const back = editor("Back");
 
+  await waitFor(() => {
+    expect(back).toHaveTextContent("X");
+  });
+  await user.click(back);
+  await user.keyboard("{Control>}a{/Control}");
+  await user.keyboard("{Delete}");
   await user.click(back);
   await user.keyboard("Hello world");
   await user.keyboard("{Control>}a{/Control}");
@@ -239,6 +244,56 @@ test("inserts the translation at the current back selection without losing exist
   await waitFor(() => {
     expect(back).toHaveTextContent("XHello world");
   });
+});
+
+test("re-translates the back when a new selection replaces the front while open", async () => {
+  const onTranslate = vi.fn()
+    .mockResolvedValueOnce("Dịch đầu")
+    .mockResolvedValueOnce("Dịch mới");
+  const { props, view } = renderComposer({ onTranslate });
+  await waitFor(() => {
+    expect(editor("Back")).toHaveTextContent("Dịch đầu");
+  });
+
+  const updatedDraft: NewCardSource = {
+    ...draft,
+    quote: "A basis spans the space.",
+  };
+  view.rerender(<CardComposer {...props} draft={updatedDraft} />);
+
+  await waitFor(() => {
+    expect(onTranslate).toHaveBeenLastCalledWith("A basis spans the space.", expect.anything());
+  });
+  await waitFor(() => {
+    expect(editor("Front")).toHaveTextContent("A basis spans the space.");
+  });
+  await waitFor(() => {
+    expect(editor("Back")).toHaveTextContent("Dịch mới");
+  });
+});
+
+test("keeps user edits to the back when a newer selection triggers auto-translate", async () => {
+  const onTranslate = vi.fn().mockResolvedValue("Dịch mới");
+  const { user, props, view } = renderComposer({ onTranslate });
+
+  await waitFor(() => {
+    expect(editor("Back")).toHaveTextContent("Dịch mới");
+  });
+  await user.click(editor("Back"));
+  await user.keyboard("{Control>}a{/Control}");
+  await user.keyboard("{Delete}");
+  await user.keyboard("Ghi chú của tôi");
+
+  const updatedDraft: NewCardSource = {
+    ...draft,
+    quote: "A basis spans the space.",
+  };
+  view.rerender(<CardComposer {...props} draft={updatedDraft} />);
+
+  await waitFor(() => {
+    expect(onTranslate).toHaveBeenLastCalledWith("A basis spans the space.", expect.anything());
+  });
+  expect(editor("Back")).toHaveTextContent("Ghi chú của tôi");
 });
 
 test("keeps the composer usable when translation fails", async () => {
@@ -257,9 +312,6 @@ test("hydrates the first loaded deck when the composer opened before decks resol
   const bridges = {
     stageCardMedia: vi.fn().mockResolvedValue({ id: "media-1" }),
     discardMediaDraft: vi.fn().mockResolvedValue(undefined),
-    checkPixabayKey: vi.fn().mockResolvedValue(false),
-    searchPixabayImages: vi.fn().mockResolvedValue([]),
-    downloadPixabayPreview: vi.fn().mockResolvedValue("aGVsbG8="),
   };
   const view = render(
     <CardComposer
@@ -314,9 +366,6 @@ test("does not replace an explicit new deck choice when decks finish loading", a
   const bridges = {
     stageCardMedia: vi.fn().mockResolvedValue({ id: "media-1" }),
     discardMediaDraft: vi.fn().mockResolvedValue(undefined),
-    checkPixabayKey: vi.fn().mockResolvedValue(false),
-    searchPixabayImages: vi.fn().mockResolvedValue([]),
-    downloadPixabayPreview: vi.fn().mockResolvedValue("aGVsbG8="),
   };
   const view = render(
     <CardComposer
@@ -362,7 +411,19 @@ test("disables saving and explains when the selected source is no longer availab
   expect(onSave).not.toHaveBeenCalled();
 });
 
-test("saves the selected source, chosen deck, tags, and rich documents", async () => {
+test("hides tags and saves an empty tag list", async () => {
+  const { onSave, user } = renderComposer();
+  expect(screen.queryByRole("textbox", { name: "Tags" })).not.toBeInTheDocument();
+
+  await user.click(editor("Back"));
+  await user.keyboard("A set with vector operations.");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+
+  await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+  expect(onSave.mock.calls[0][0].tags).toEqual([]);
+});
+
+test("saves the selected source, chosen deck, and rich documents", async () => {
   const { onSave, user } = renderComposer();
 
   await user.click(screen.getByRole("combobox", { name: "Deck" }));
@@ -373,7 +434,6 @@ test("saves the selected source, chosen deck, tags, and rich documents", async (
   await user.keyboard("What is a vector space?");
   await user.click(editor("Back"));
   await user.keyboard("A set with vector operations.");
-  await user.type(screen.getByRole("textbox", { name: "Tags" }), "algebra, definition, algebra");
   await user.click(screen.getByRole("button", { name: "Save" }));
 
   await waitFor(() => {
@@ -385,7 +445,7 @@ test("saves the selected source, chosen deck, tags, and rich documents", async (
     front: "What is a vector space?",
     back: "A set with vector operations.",
     source: draft,
-    tags: ["algebra", "definition"],
+    tags: [],
     frontLanguage: "en",
     mediaDraftId: expect.any(String),
   });
@@ -541,7 +601,7 @@ test("stages a dropped file through the media bridge under the composer draft", 
     mimeType: "image/png",
     relativePath: "media/media-1.png",
     sourceType: "file",
-    pixabayAttribution: null,
+      attribution: null,
     createdAt: "",
     updatedAt: "",
   });
@@ -594,11 +654,8 @@ test("discards the media draft when the panel composer is closed via its X butto
       onSave={vi.fn().mockResolvedValue(undefined)}
       onCancel={onCancel}
       variant="panel"
-      stageCardMedia={vi.fn().mockResolvedValue({ id: "media-1", cardId: null, mimeType: "image/png", relativePath: "media/media-1.png", sourceType: "file", pixabayAttribution: null, createdAt: "", updatedAt: "" })}
+      stageCardMedia={vi.fn().mockResolvedValue({ id: "media-1", cardId: null, mimeType: "image/png", relativePath: "media/media-1.png", sourceType: "file", attribution: null, createdAt: "", updatedAt: "" })}
       discardMediaDraft={discardMediaDraft}
-      checkPixabayKey={vi.fn().mockResolvedValue(false)}
-      searchPixabayImages={vi.fn().mockResolvedValue([])}
-      downloadPixabayPreview={vi.fn().mockResolvedValue("aGVsbG8=")}
     />,
   );
 
@@ -608,75 +665,41 @@ test("discards the media draft when the panel composer is closed via its X butto
   expect(discardMediaDraft).toHaveBeenCalledExactlyOnceWith(expect.any(String));
 });
 
-test("toggles the Pixabay picker from the Back header", async () => {
-  const { user } = renderComposer({
-    checkPixabayKey: vi.fn().mockResolvedValue(true),
-    searchPixabayImages: vi.fn().mockResolvedValue([pixabayImage]),
-  });
-
-  expect(screen.queryByText(/Photo by JaneDoe on Pixabay/i)).not.toBeInTheDocument();
-  await user.click(screen.getByRole("button", { name: "Pixabay" }));
-  expect(await screen.findByRole("button", { name: /Photo by JaneDoe on Pixabay/i })).toBeInTheDocument();
+test("opens the keyless Images picker and auto-searches the front text", async () => {
+  const searchMultiSourceImages = vi.fn().mockResolvedValue({ results: [{ id: "wiki-1", source: "wikimedia", title: "Vector", previewUrl: "preview", imageUrl: "full", sourceUrl: "source", attribution: "Ada", license: "CC BY", width: 10, height: 10 }], warnings: [], hasMore: false });
+  const { user } = renderComposer({ searchMultiSourceImages });
+  await user.click(screen.getByRole("button", { name: "Images" }));
+  await waitFor(() => expect(searchMultiSourceImages).toHaveBeenCalledWith(draft.quote, 1));
+  expect(await screen.findByRole("button", { name: "Vector" })).toBeInTheDocument();
 });
 
-test("auto-searches the front text when the picker opens", async () => {
-  const searchPixabayImages = vi.fn().mockResolvedValue([pixabayImage]);
-  const { user } = renderComposer({
-    checkPixabayKey: vi.fn().mockResolvedValue(true),
-    searchPixabayImages,
-  });
-
-  await user.click(screen.getByRole("button", { name: "Pixabay" }));
-  await waitFor(() => expect(searchPixabayImages).toHaveBeenCalledWith(draft.quote, 1));
-});
-
-test("shows the no-key CTA when no Pixabay key is configured", async () => {
-  const searchPixabayImages = vi.fn().mockResolvedValue([]);
-  const { user } = renderComposer({
-    checkPixabayKey: vi.fn().mockResolvedValue(false),
-    searchPixabayImages,
-  });
-
-  await user.click(screen.getByRole("button", { name: "Pixabay" }));
-  expect(await screen.findByText(/Settings › Media/i)).toBeInTheDocument();
-  expect(searchPixabayImages).not.toHaveBeenCalled();
-});
-
-test("stages a Pixabay result and inserts it into the back face", async () => {
-  const downloadPixabayPreview = vi.fn().mockResolvedValue("aGVsbG8=");
-  const stageCardMedia = vi.fn().mockResolvedValue({
+test("stages a remote result and inserts it into the back face", async () => {
+  const stageRemoteCardMedia = vi.fn().mockResolvedValue({
     id: "media-9",
     cardId: null,
     mimeType: "image/jpeg",
     relativePath: "media/media-9.jpg",
-    sourceType: "pixabay",
-    pixabayAttribution: "Photo by JaneDoe on Pixabay",
+    sourceType: "web",
+    attribution: "Ada · CC BY",
     createdAt: "",
     updatedAt: "",
   });
+  const resolveStagedMedia = vi.fn().mockResolvedValue("/app-data/card-media/staging/draft/media-9.jpg");
   const { user, onSave } = renderComposer({
-    checkPixabayKey: vi.fn().mockResolvedValue(true),
-    searchPixabayImages: vi.fn().mockResolvedValue([pixabayImage]),
-    downloadPixabayPreview,
-    stageCardMedia,
+    searchMultiSourceImages: vi.fn().mockResolvedValue({ results: [{ id: "wiki-1", source: "wikimedia", title: "Vector", previewUrl: "preview", imageUrl: "full", sourceUrl: "source", attribution: "Ada", license: "CC BY", width: 10, height: 10 }], warnings: [], hasMore: false }),
+    stageRemoteCardMedia,
+    resolveStagedMedia,
   });
 
-  await user.click(screen.getByRole("button", { name: "Pixabay" }));
-  await user.click(await screen.findByRole("button", { name: /Photo by JaneDoe on Pixabay/i }));
-
-  await waitFor(() => expect(downloadPixabayPreview).toHaveBeenCalledWith(pixabayImage.previewUrl));
-  await waitFor(() => expect(stageCardMedia).toHaveBeenCalledWith(
-    expect.objectContaining({
-      draftId: expect.any(String),
-      sourceType: "pixabay",
-      bytesBase64: "aGVsbG8=",
-      pixabayAttribution: "Photo by JaneDoe on Pixabay",
-    }),
-  ));
+  await user.click(screen.getByRole("button", { name: "Images" }));
+  await user.click(await screen.findByRole("button", { name: "Vector" }));
+  await waitFor(() => expect(stageRemoteCardMedia).toHaveBeenCalledWith(expect.any(String), "full", "Ada"));
+  await waitFor(() => expect(resolveStagedMedia).toHaveBeenCalledWith(expect.any(String), "media-9"));
 
   const back = editor("Back");
   await waitFor(() => {
     expect(back.querySelector("[data-card-image]")).not.toBeNull();
+    expect(back.querySelector("[data-card-image] img")).toHaveAttribute("src", "/app-data/card-media/staging/draft/media-9.jpg");
   });
 
   await user.click(screen.getByRole("button", { name: "Save" }));
@@ -685,6 +708,51 @@ test("stages a Pixabay result and inserts it into the back face", async () => {
   const imageBlock = input.backDoc.content.find((block: any) => block.type === "image");
   expect(imageBlock).toEqual({
     type: "image",
-    attrs: { mediaId: "media-9", alt: "algebra, board", widthPercent: 100 },
+    attrs: { mediaId: "media-9", alt: "Vector", widthPercent: 100 },
   });
+});
+
+test("a slow auto-translate never clobbers an image added to the back", async () => {
+  const translation = deferred<string>();
+  const onTranslate = vi.fn().mockReturnValue(translation.promise);
+  const stageRemoteCardMedia = vi.fn().mockResolvedValue({
+    id: "media-9",
+    cardId: null,
+    mimeType: "image/jpeg",
+    relativePath: "media/media-9.jpg",
+    sourceType: "web",
+    attribution: "Ada · CC BY",
+    createdAt: "",
+    updatedAt: "",
+  });
+  const resolveStagedMedia = vi.fn().mockResolvedValue("/app-data/card-media/staging/draft/media-9.jpg");
+  const { user, onSave } = renderComposer({
+    onTranslate,
+    searchMultiSourceImages: vi.fn().mockResolvedValue({
+      results: [{ id: "wiki-1", source: "wikimedia", title: "Vector", previewUrl: "preview", imageUrl: "full", sourceUrl: "source", attribution: "Ada", license: "CC BY", width: 10, height: 10 }],
+      warnings: [],
+      hasMore: false,
+    }),
+    stageRemoteCardMedia,
+    resolveStagedMedia,
+  });
+
+  await user.click(screen.getByRole("button", { name: "Images" }));
+  await user.click(await screen.findByRole("button", { name: "Vector" }));
+  await waitFor(() => {
+    expect(editor("Back").querySelector("[data-card-image]")).not.toBeNull();
+  });
+
+  // The translation resolves after the image was already placed in the back.
+  translation.resolve("Bản dịch đến muộn.");
+  await waitFor(() => expect(onTranslate).toHaveBeenCalledTimes(1));
+  await waitFor(() => {
+    expect(editor("Back")).not.toHaveTextContent("Bản dịch đến muộn.");
+    expect(editor("Back").querySelector("[data-card-image]")).not.toBeNull();
+  });
+
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+  const input = onSave.mock.calls[0][0];
+  expect(input.backDoc.content.some((block: any) => block.type === "image")).toBe(true);
 });

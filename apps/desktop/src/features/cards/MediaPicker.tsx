@@ -1,117 +1,81 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ImageSearchResult, MultiImageSearchPage, ProviderWarning } from "../../domain/media";
+import { RemoteImagePreview } from "./RemoteImagePreview";
 
-import type { PixabayImage } from "../../domain/media";
-
-/**
- * Pixabay image picker for the flashcard composer.
- *
- * Renders inside the composer's own scroll container: the grid is never its
- * own scroll surface (no nested `overflow`), so long result sets scroll with
- * the parent dialog/panel per the WKWebView scroll-surface rules.
- */
 export interface MediaPickerProps {
-  /** Plain text from the front face, used as the initial auto-search query. */
   frontText: string;
-  /** Whether a Pixabay API key is configured. */
-  hasKey: boolean;
-  /** Searches Pixabay; the backend returns one page of hits. */
-  onSearch: (query: string, page: number) => Promise<PixabayImage[]>;
-  /** Stages a chosen image and returns its stored media id and alt text. */
-  onStage: (result: PixabayImage) => Promise<{ mediaId: string; alt: string }>;
-  /** Dismisses the picker. */
+  onSearch: (query: string, page: number) => Promise<MultiImageSearchPage>;
+  onStage: (result: ImageSearchResult) => Promise<{ mediaId: string; alt: string }>;
   onClose?: () => void;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
+const message = (error: unknown) => error instanceof Error ? error.message : String(error);
+const keyOf = (result: ImageSearchResult) => `${result.source}:${result.id}`;
+const providerName = (source: string) => source === "wikimedia" ? "Wikimedia" : source === "duckduckgo" ? "DuckDuckGo" : source === "openverse" ? "Openverse" : source;
 
-export function MediaPicker({
-  frontText,
-  hasKey,
-  onSearch,
-  onStage,
-  onClose,
-}: MediaPickerProps) {
+export function MediaPicker({ frontText, onSearch, onStage }: MediaPickerProps) {
   const [query, setQuery] = useState(frontText);
-  const [images, setImages] = useState<PixabayImage[]>([]);
+  const [images, setImages] = useState<ImageSearchResult[]>([]);
+  const [warnings, setWarnings] = useState<ProviderWarning[]>([]);
   const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
-  const [stagingId, setStagingId] = useState<number | null>(null);
-  const [stageErrors, setStageErrors] = useState<Record<number, string>>({});
+  const [stagingId, setStagingId] = useState<string | null>(null);
+  const [stageErrors, setStageErrors] = useState<Record<string, string>>({});
+  const searchSequence = useRef(0);
+  const mounted = useRef(true);
 
   const runSearch = async (nextQuery: string, nextPage: number) => {
+    const sequence = ++searchSequence.current;
     setLoading(true);
     setSearchError(null);
     try {
-      const next = await onSearch(nextQuery, nextPage);
-      setImages((current) => (nextPage === 1 ? next : [...current, ...next]));
+      const result = await onSearch(nextQuery, nextPage);
+      if (!mounted.current || sequence !== searchSequence.current) return;
+      setImages((current) => {
+        const seen = new Set<string>();
+        return (nextPage === 1 ? result.results : [...current, ...result.results]).filter((item) => {
+          const key = keyOf(item);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      });
+      setWarnings(result.warnings);
+      setHasMore(result.hasMore ?? result.results.length > 0);
       setPage(nextPage);
     } catch (error) {
-      setSearchError(errorMessage(error));
+      if (!mounted.current || sequence !== searchSequence.current) return;
+      setSearchError(message(error));
     } finally {
-      setLoading(false);
+      if (mounted.current && sequence === searchSequence.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!hasKey) return;
+    mounted.current = true;
     void runSearch(frontText, 1);
-    // Auto-search happens once per picker open; typing in the search box is
-    // the explicit re-search path.
+    return () => {
+      mounted.current = false;
+      searchSequence.current += 1;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasKey]);
+  }, []);
 
-  const handleStage = async (result: PixabayImage) => {
-    setStagingId(result.id);
-    setStageErrors((current) => {
-      const next = { ...current };
-      delete next[result.id];
-      return next;
-    });
-    try {
-      await onStage(result);
-    } catch (error) {
-      setStageErrors((current) => ({ ...current, [result.id]: errorMessage(error) }));
-    } finally {
-      setStagingId(null);
-    }
+  const stage = async (result: ImageSearchResult) => {
+    const key = keyOf(result);
+    setStagingId(key);
+    setStageErrors((current) => { const next = { ...current }; delete next[key]; return next; });
+    try { await onStage(result); } catch (error) { setStageErrors((current) => ({ ...current, [key]: message(error) })); } finally { setStagingId(null); }
   };
 
-  if (!hasKey) {
-    return (
-      <div style={{ display: "grid", gap: "8px", padding: "12px 14px", borderRadius: "12px", background: "var(--interactive-hover)" }}>
-        <p style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)" }}>
-          Pixabay adds stock photos to your cards.
-        </p>
-        <button
-          aria-label="Add a Pixabay API key in Settings › Media"
-          onClick={() => onClose?.()}
-          style={{
-            justifySelf: "start",
-            border: 0,
-            borderRadius: "999px",
-            padding: "5px 10px",
-            color: "var(--link)",
-            background: "transparent",
-            cursor: "pointer",
-            fontSize: "12px",
-            fontWeight: 600,
-          }}
-          type="button"
-        >
-          Settings › Media
-        </button>
-      </div>
-    );
-  }
-
   return (
-    <div style={{ display: "grid", gap: "10px" }}>
-      <div style={{ display: "flex", gap: "6px" }}>
+    <div className="media-picker">
+      <div className="media-picker__search-row">
         <input
-          aria-label="Search Pixabay"
+          aria-label="Search images"
+          className="media-picker__search-input"
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter") {
@@ -119,159 +83,67 @@ export function MediaPicker({
               void runSearch(query, 1);
             }
           }}
-          placeholder="Search Pixabay…"
-          style={{ flex: 1, minWidth: 0, borderRadius: "8px", border: "1px solid var(--border-strong)", padding: "6px 10px", fontSize: "13px" }}
+          placeholder="Search images…"
           type="search"
           value={query}
         />
         <button
+          className="media-picker__button media-picker__button--primary"
           disabled={loading}
           onClick={() => void runSearch(query, 1)}
-          style={{
-            border: 0,
-            borderRadius: "8px",
-            padding: "6px 12px",
-            color: "var(--button-primary-text)",
-            background: "var(--button-primary-bg)",
-            cursor: "pointer",
-            fontSize: "13px",
-            fontWeight: 600,
-          }}
           type="button"
         >
           Search
         </button>
       </div>
 
-      {loading && images.length === 0 ? (
-        <p role="status" style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)" }}>
-          Loading Pixabay images…
-        </p>
-      ) : null}
-
-      {searchError && images.length === 0 ? (
-        <div role="alert" style={{ display: "grid", gap: "6px", justifyItems: "start" }}>
-          <p style={{ margin: 0, fontSize: "13px", color: "var(--warning)" }}>{searchError}</p>
-          <button
-            onClick={() => void runSearch(query, 1)}
-            style={{
-              border: "1px solid var(--border-strong)",
-              borderRadius: "999px",
-              padding: "4px 10px",
-              color: "var(--button-secondary-text)",
-              background: "var(--button-secondary-bg)",
-              cursor: "pointer",
-              fontSize: "12px",
-            }}
-            type="button"
-          >
+      {loading && images.length === 0 ? <p className="media-picker__status" role="status">Loading images…</p> : null}
+      {searchError ? (
+        <div className="media-picker__message media-picker__message--error" role="alert">
+          <p>{searchError}</p>
+          <button className="media-picker__button media-picker__button--secondary" disabled={loading} onClick={() => void runSearch(query, 1)} type="button">
             Retry search
           </button>
         </div>
       ) : null}
-
-      {!loading && !searchError && images.length === 0 ? (
-        <p style={{ margin: 0, fontSize: "13px", color: "var(--text-secondary)" }}>
-          No images found for “{query}”.
-        </p>
+      {warnings.length > 0 ? (
+        <div className="media-picker__message media-picker__message--warning" role="status" aria-label="Provider warnings">
+          {warnings.map((warning) => <p key={warning.provider}>{providerName(warning.provider)}: {warning.message}</p>)}
+        </div>
       ) : null}
+      {!loading && !searchError && images.length === 0 ? <p className="media-picker__status">No images found for “{query}”.</p> : null}
 
       {images.length > 0 ? (
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-            gap: "10px",
-          }}
-        >
-          {images.map((result) => (
-            <div
-              data-media-result
-              key={result.id}
-              style={{
-                display: "grid",
-                gap: "6px",
-                padding: "8px",
-                borderRadius: "12px",
-                border: "1px solid var(--border-subtle)",
-                background: "var(--panel-bg)",
-              }}
-            >
-              <button
-                disabled={stagingId === result.id}
-                onClick={() => void handleStage(result)}
-                style={{
-                  border: 0,
-                  padding: 0,
-                  background: "transparent",
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-                type="button"
-              >
-                <img
-                  alt=""
-                  src={result.previewUrl}
-                  style={{ width: "100%", height: "auto", aspectRatio: "3 / 2", objectFit: "cover", borderRadius: "8px", display: "block" }}
-                />
-                <span
-                  style={{
-                    display: "block",
-                    marginTop: "6px",
-                    fontSize: "11px",
-                    lineHeight: 1.4,
-                    color: "var(--text-secondary)",
-                  }}
+        <div className="media-picker__results">
+          {images.map((result) => {
+            const key = keyOf(result);
+            return (
+              <div className="media-picker__result" data-media-result key={key}>
+                <button
+                  aria-label={result.title || "Image result"}
+                  className="media-picker__result-button"
+                  disabled={stagingId === key}
+                  onClick={() => void stage(result)}
+                  type="button"
                 >
-                  Photo by {result.user} on Pixabay
-                </span>
-              </button>
-              {stagingId === result.id ? (
-                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>Adding…</span>
-              ) : null}
-              {stageErrors[result.id] ? (
-                <div style={{ display: "grid", gap: "6px", justifyItems: "start" }}>
-                  <p role="alert" style={{ margin: 0, fontSize: "12px", color: "var(--warning)" }}>
-                    {stageErrors[result.id]}
-                  </p>
-                  <button
-                    onClick={() => void handleStage(result)}
-                    style={{
-                      border: "1px solid var(--border-strong)",
-                      borderRadius: "999px",
-                      padding: "3px 8px",
-                      color: "var(--button-secondary-text)",
-                      background: "var(--button-secondary-bg)",
-                      cursor: "pointer",
-                      fontSize: "11px",
-                    }}
-                    type="button"
-                  >
-                    Retry download
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ))}
+                  <RemoteImagePreview url={result.previewUrl} fallbackUrl={result.imageUrl} alt={result.title} />
+                </button>
+                {stagingId === key ? <span className="media-picker__result-status">Adding…</span> : null}
+                {stageErrors[key] ? (
+                  <div className="media-picker__stage-error">
+                    <p role="alert">{stageErrors[key]}</p>
+                    <button className="media-picker__button media-picker__button--secondary" onClick={() => void stage(result)} type="button">Retry download</button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       ) : null}
 
-      {images.length > 0 && !loading ? (
-        <button
-          onClick={() => void runSearch(query, page + 1)}
-          style={{
-            justifySelf: "start",
-            border: "1px solid var(--border-strong)",
-            borderRadius: "999px",
-            padding: "5px 12px",
-            color: "var(--button-secondary-text)",
-            background: "var(--button-secondary-bg)",
-            cursor: "pointer",
-            fontSize: "12px",
-          }}
-          type="button"
-        >
-          Load more
+      {images.length > 0 && hasMore ? (
+        <button className="media-picker__button media-picker__button--secondary media-picker__load-more" disabled={loading} onClick={() => void runSearch(query, page + 1)} type="button">
+          {loading ? "Loading…" : "Load more"}
         </button>
       ) : null}
     </div>

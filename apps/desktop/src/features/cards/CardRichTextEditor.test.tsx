@@ -206,34 +206,40 @@ describe("CardRichTextEditor", () => {
     expect(derivePlainText(doc)).toBe("Hello");
   });
 
-  test("toolbar buttons act on the focused editor and reflect active marks via aria-pressed", async () => {
+  test("toolbar menus act on the focused editor and reflect active marks via aria-checked", async () => {
     const editable = result.container.querySelector(".tiptap")!;
     await result.user.click(editable);
 
-    const bold = screen.getByRole("button", { name: "Bold" });
-    const italic = screen.getByRole("button", { name: "Italic" });
-    await result.user.click(bold);
-    await result.user.click(italic);
-    expect(bold).toHaveAttribute("aria-pressed", "true");
-    expect(italic).toHaveAttribute("aria-pressed", "true");
+    const openFormatting = () => screen.getByRole("button", { name: "Text formatting" });
+    await result.user.click(openFormatting());
+    await result.user.click(screen.getByRole("menuitemcheckbox", { name: "Bold" }));
+    await result.user.click(openFormatting());
+    await result.user.click(screen.getByRole("menuitemcheckbox", { name: "Italic" }));
 
     await result.user.keyboard("text");
     const doc = lastDoc(result.onChange);
     expect(hasMark(doc, "text", "bold")).toBe(true);
     expect(hasMark(doc, "text", "italic")).toBe(true);
+
+    await result.user.click(openFormatting());
+    expect(screen.getByRole("menuitemcheckbox", { name: "Bold" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("menuitemcheckbox", { name: "Italic" })).toHaveAttribute("aria-checked", "true");
   });
 
   test("underline, strike, and clear-formatting buttons work", async () => {
     const editable = result.container.querySelector(".tiptap")!;
     await result.user.click(editable);
-    await result.user.click(screen.getByRole("button", { name: "Underline" }));
+    const openFormatting = () => screen.getByRole("button", { name: "Text formatting" });
+    await result.user.click(openFormatting());
+    await result.user.click(screen.getByRole("menuitemcheckbox", { name: "Underline" }));
     await result.user.keyboard("u");
 
     const underlined = lastDoc(result.onChange);
     expect(hasMark(underlined, "u", "underline")).toBe(true);
 
     await result.user.keyboard("{Control>}a{/Control}");
-    await result.user.click(screen.getByRole("button", { name: "Strikethrough" }));
+    await result.user.click(openFormatting());
+    await result.user.click(screen.getByRole("menuitemcheckbox", { name: "Strikethrough" }));
     const struck = lastDoc(result.onChange);
     expect(hasMark(struck, "u", "strike")).toBe(true);
 
@@ -245,16 +251,16 @@ describe("CardRichTextEditor", () => {
   test("heading and paragraph buttons convert blocks", async () => {
     const editable = result.container.querySelector(".tiptap")!;
     await result.user.click(editable);
-    await result.user.click(screen.getByRole("button", { name: "Heading 2" }));
+    const openParagraphStyle = () => screen.getByRole("button", { name: "Paragraph style" });
+    await result.user.click(openParagraphStyle());
+    await result.user.click(screen.getByRole("menuitemradio", { name: "Heading 2" }));
     await result.user.keyboard("Title");
     const heading = lastDoc(result.onChange);
     expect(heading.content[0]).toMatchObject({ type: "heading", attrs: { level: 2 } });
-    expect(screen.getByRole("button", { name: "Heading 2" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
 
-    await result.user.click(screen.getByRole("button", { name: "Paragraph" }));
+    await result.user.click(openParagraphStyle());
+    expect(screen.getByRole("menuitemradio", { name: "Heading 2" })).toHaveAttribute("aria-checked", "true");
+    await result.user.click(screen.getByRole("menuitemradio", { name: "Paragraph" }));
     await result.user.keyboard(" body");
     const paragraph = lastDoc(result.onChange);
     expect(paragraph.content[0].type).toBe("paragraph");
@@ -263,21 +269,20 @@ describe("CardRichTextEditor", () => {
   test("bullet and ordered list buttons create lists", async () => {
     const editable = result.container.querySelector(".tiptap")!;
     await result.user.click(editable);
-    await result.user.click(screen.getByRole("button", { name: "Bullet list" }));
+    const openLists = () => screen.getByRole("button", { name: "Lists" });
+    await result.user.click(openLists());
+    await result.user.click(screen.getByRole("menuitemradio", { name: "Bullet list" }));
     await result.user.keyboard("item");
     const bullet = lastDoc(result.onChange);
     expect(bullet.content[0].type).toBe("bulletList");
-    expect(screen.getByRole("button", { name: "Bullet list" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
 
     await result.user.keyboard("{Enter}");
     // A second Enter inside the empty list item exits the list, so the
     // numbered list is created as a separate block instead of converting the
     // bullet list in place.
     await result.user.keyboard("{Enter}");
-    await result.user.click(screen.getByRole("button", { name: "Numbered list" }));
+    await result.user.click(openLists());
+    await result.user.click(screen.getByRole("menuitemradio", { name: "Numbered list" }));
     await result.user.keyboard("second");
     const ordered = lastDoc(result.onChange);
     expect(findImages(ordered)).toHaveLength(0);
@@ -291,15 +296,12 @@ describe("CardRichTextEditor", () => {
   test("alignment buttons apply textAlign to the paragraph", async () => {
     const editable = result.container.querySelector(".tiptap")!;
     await result.user.click(editable);
-    await result.user.click(screen.getByRole("button", { name: "Align right" }));
+    await result.user.click(screen.getByRole("button", { name: "Alignment" }));
+    await result.user.click(screen.getByRole("menuitemradio", { name: "Align right" }));
     await result.user.keyboard("right");
     const doc = lastDoc(result.onChange);
     const paragraph = doc.content[0] as any;
     expect(paragraph.attrs?.textAlign).toBe("right");
-    expect(screen.getByRole("button", { name: "Align right" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
   });
 
   test("text color and highlight controls apply color marks", async () => {
@@ -492,7 +494,7 @@ describe("CardRichTextEditor", () => {
     result.rerender({ disabled: true });
     const editable = result.container.querySelector(".tiptap")!;
     expect(editable.getAttribute("contenteditable")).toBe("false");
-    expect(screen.getByRole("button", { name: "Bold" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Text formatting" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Insert image" })).toBeDisabled();
 
     await result.user.click(editable);
