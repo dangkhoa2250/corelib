@@ -46,7 +46,7 @@ test("renders an accessible image-only result grid", async () => {
 test("keeps picker controls and result content within the parent scroll surface", () => {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "MediaPicker.tsx"), "utf8");
   const preview = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "RemoteImagePreview.tsx"), "utf8");
-  const styles = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles/tokens.css"), "utf8");
+  const styles = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "cards.css"), "utf8");
 
   expect(source).toContain('className="media-picker__search-input"');
   expect(source).toContain('className="media-picker__results"');

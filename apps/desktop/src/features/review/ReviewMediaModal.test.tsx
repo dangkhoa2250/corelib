@@ -160,7 +160,7 @@ test("closes immediately when reduced motion is preferred", async () => {
 
 test("gives review media dialogs a wider video surface and a balanced borderless header", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "../../styles/tokens.css"), "utf8");
+  const css = readFileSync(join(currentDir, "review.css"), "utf8");
   const video = css.match(/\.review-media-modal__dialog--video \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const header = css.match(/\.review-media-modal__header \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const close = css.match(/\.review-media-modal__close \{([\s\S]*?)\n\}/)?.[1] ?? "";

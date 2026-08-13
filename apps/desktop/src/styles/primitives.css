@@ -1,0 +1,332 @@
+.model-brand-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  vertical-align: -0.125em;
+}
+
+.provider-brand-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.provider-brand-icon--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.model-brand-icon--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.ui-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  padding: 5px 11px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.ui-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ui-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ui-button--primary {
+  color: var(--button-primary-text);
+  background: var(--button-primary-bg);
+}
+
+.ui-button--primary:not(:disabled):hover {
+  background: var(--button-primary-hover);
+}
+
+.ui-button--secondary {
+  color: var(--button-secondary-text);
+  border-color: var(--border-subtle);
+  background: var(--button-secondary-bg);
+}
+
+.ui-button--secondary:not(:disabled):hover {
+  background: var(--button-secondary-hover);
+}
+
+.ui-button--quiet {
+  color: var(--button-quiet-text);
+  background: transparent;
+}
+
+.ui-button--quiet:not(:disabled):hover {
+  background: var(--button-quiet-hover);
+}
+
+.ui-button--destructive {
+  color: var(--button-destructive-text);
+  border-color: color-mix(in srgb, var(--button-destructive-text) 32%, transparent);
+  background: var(--button-destructive-bg);
+}
+
+.ui-button--destructive:not(:disabled):hover {
+  background: var(--button-destructive-hover);
+}
+
+.action-menu {
+  position: relative;
+}
+
+.action-menu__trigger {
+  min-width: 62px;
+}
+
+.action-menu__trigger:disabled,
+.action-menu__item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-menu__popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 152px;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.action-menu__item {
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  color: var(--text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-menu__item:not(:disabled):hover {
+  background: var(--interactive-hover);
+}
+
+.action-menu__item--destructive {
+  color: var(--error);
+}
+
+/* ScrollArea owns scrolling itself so WebKit cannot reserve a native track.
+   The thumb is portal-mounted and floats directly over the owning surface. */
+.scroll-area__thumb {
+  position: fixed;
+  z-index: 1000;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb);
+  opacity: 0.9;
+  touch-action: none;
+  cursor: default;
+}
+
+.scroll-area__thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  opacity: 1;
+}
+
+.scroll-area__thumb--vertical {
+  width: 8px;
+}
+
+.scroll-area__thumb--horizontal {
+  height: 8px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ── Combobox ──────────────────────────────────── */
+
+.combobox {
+  position: relative;
+  width: 100%;
+}
+
+.combobox__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.combobox__trigger:hover {
+  border-color: var(--border-strong);
+  background: var(--interactive-hover);
+}
+
+.combobox__trigger:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.combobox__trigger[aria-expanded="true"] {
+  border-color: var(--border-strong);
+}
+
+.combobox__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.combobox__trigger:disabled:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-1);
+}
+
+.combobox__trigger-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combobox__panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 50;
+  min-width: 180px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--window-bg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.combobox__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-disabled);
+}
+
+.combobox__search-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.combobox__search-input::placeholder {
+  color: var(--text-disabled);
+}
+
+.combobox__list {
+  max-height: 240px;
+  overflow-y: auto;
+  /* 20px thumb-side gutter keeps options clear of the floating thumb. */
+  padding: 4px 20px 4px 4px;
+}
+
+.combobox__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.combobox__option--highlighted {
+  background: var(--interactive-hover);
+}
+
+.combobox__option--selected {
+  font-weight: 600;
+}
+
+.combobox__option-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combobox__empty {
+  padding: 16px 10px;
+  color: var(--text-disabled);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* Compact variant for inline language pickers */
+.combobox--compact .combobox__trigger {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.combobox--compact .combobox__panel {
+  min-width: 160px;
+}
+
+.combobox--compact .combobox__search-input {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.combobox--compact .combobox__option-label {
+  font-size: 12px;
+}
+
+/* Pull the dropdown off the container's right edge so a native scrollbar
+   never covers it (used by the target-language picker in the composer). */
+.combobox--inset .combobox__panel {
+  left: auto;
+  right: 16px;
+}
