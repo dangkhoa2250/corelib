@@ -7,6 +7,8 @@ import { expect, test, vi } from "vitest";
 import type { ImageSearchResult, MultiImageSearchPage, ProviderWarning } from "../../domain/media";
 import { MediaPicker } from "./MediaPicker";
 
+const normalizeNewlines = (value: string) => value.replace(/\r\n?/g, "\n");
+
 vi.mock("./RemoteImagePreview", () => ({ RemoteImagePreview: ({ alt }: { alt: string }) => <img alt={alt} /> }));
 
 const image = (overrides: Partial<ImageSearchResult> = {}): ImageSearchResult => ({
@@ -44,9 +46,9 @@ test("renders an accessible image-only result grid", async () => {
 });
 
 test("keeps picker controls and result content within the parent scroll surface", () => {
-  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "MediaPicker.tsx"), "utf8");
-  const preview = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "RemoteImagePreview.tsx"), "utf8");
-  const styles = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "cards.css"), "utf8");
+  const source = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "MediaPicker.tsx"), "utf8"));
+  const preview = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "RemoteImagePreview.tsx"), "utf8"));
+  const styles = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "cards.css"), "utf8"));
 
   expect(source).toContain('className="media-picker__search-input"');
   expect(source).toContain('className="media-picker__results"');
@@ -127,9 +129,9 @@ test("ignores a search resolution after the picker unmounts", async () => {
 });
 
 test("keeps Deck/Front/Back and actions unscrolled, routing only the image picker through ScrollArea", () => {
-  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "MediaPicker.tsx"), "utf8");
-  const composer = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardComposer.tsx"), "utf8");
-  const panel = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardSidePanel.tsx"), "utf8");
+  const source = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "MediaPicker.tsx"), "utf8"));
+  const composer = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardComposer.tsx"), "utf8"));
+  const panel = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardSidePanel.tsx"), "utf8"));
 
   // MediaPicker itself never scrolls internally; its host wraps it in a
   // ScrollArea instead.

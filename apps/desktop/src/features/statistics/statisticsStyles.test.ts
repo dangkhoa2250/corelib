@@ -3,10 +3,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 
+const normalizeNewlines = (value: string) => value.replace(/\r\n?/g, "\n");
+
 test("defines a theme-aware blue Statistics accent for charts and sparklines", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const statisticsCss = readFileSync(join(currentDir, "statistics.css"), "utf8");
-  const sparkline = readFileSync(join(currentDir, "components/MiniSparkline.tsx"), "utf8");
+  const statisticsCss = normalizeNewlines(readFileSync(join(currentDir, "statistics.css"), "utf8"));
+  const sparkline = normalizeNewlines(readFileSync(join(currentDir, "components/MiniSparkline.tsx"), "utf8"));
 
   expect(statisticsCss).toMatch(/\.statistics-shell\s*\{[\s\S]*?--statistics-accent:\s*#456079;/);
   expect(statisticsCss).toMatch(/\[data-theme="dark"\]\s+\.statistics-shell\s*\{[\s\S]*?--statistics-accent:\s*#83c3ff;/);
@@ -16,7 +18,7 @@ test("defines a theme-aware blue Statistics accent for charts and sparklines", (
 
 test("uses semantic tokens in Statistics CSS with proper scroll-surface padding", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const statCss = readFileSync(join(currentDir, "statistics.css"), "utf8");
+  const statCss = normalizeNewlines(readFileSync(join(currentDir, "statistics.css"), "utf8"));
   const desktopCss = statCss.slice(0, statCss.indexOf("@media"));
   const statCssWithoutStatisticsAccent = statCss.replace(/--statistics-accent:\s*#[0-9a-fA-F]{3,8};/g, "");
 
@@ -39,7 +41,7 @@ test("uses semantic tokens in Statistics CSS with proper scroll-surface padding"
 
 test("pins every approved desktop Statistics density token", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const statCss = readFileSync(join(currentDir, "statistics.css"), "utf8");
+  const statCss = normalizeNewlines(readFileSync(join(currentDir, "statistics.css"), "utf8"));
   const desktopCss = statCss.slice(0, statCss.indexOf("@media"));
   const block = (selector: string) => desktopCss.match(new RegExp(`${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
   const shellPaddings = [...statCss.matchAll(/\.statistics-shell__content\s*\{[^}]*padding:\s*([^;]+);/g)].map((match) => match[1].trim());
@@ -102,7 +104,7 @@ test("pins every approved desktop Statistics density token", () => {
 
 test("keeps the statistics dashboard flat, responsive, and token-correct", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const statCss = readFileSync(join(currentDir, "statistics.css"), "utf8");
+  const statCss = normalizeNewlines(readFileSync(join(currentDir, "statistics.css"), "utf8"));
   const statCssWithoutStatisticsAccent = statCss.replace(/--statistics-accent:\s*#[0-9a-fA-F]{3,8};/g, "");
   const kpiGrid = statCss.match(/\.statistics-kpi-grid\s*\{([^}]*)\}/)?.[1] ?? "";
   const appGrid = statCss.match(/\.statistics-app-grid\s*\{([^}]*)\}/)?.[1] ?? "";
@@ -141,7 +143,7 @@ test("keeps the statistics dashboard flat, responsive, and token-correct", () =>
 
 test("keeps non-interactive Statistics insight cards free of clickable affordances", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const statCss = readFileSync(join(currentDir, "statistics.css"), "utf8");
+  const statCss = normalizeNewlines(readFileSync(join(currentDir, "statistics.css"), "utf8"));
 
   expect(statCss).not.toContain(".statistics-app-card:not(:disabled)");
   expect(statCss).not.toContain(".statistics-app-card:disabled");
@@ -151,8 +153,8 @@ test("keeps non-interactive Statistics insight cards free of clickable affordanc
 
 test("keeps the calendar time heatmap inside its card without horizontal scrolling", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const statCss = readFileSync(join(currentDir, "statistics.css"), "utf8");
-  const heatmap = readFileSync(join(currentDir, "components/ActivityHeatmap.tsx"), "utf8");
+  const statCss = normalizeNewlines(readFileSync(join(currentDir, "statistics.css"), "utf8"));
+  const heatmap = normalizeNewlines(readFileSync(join(currentDir, "components/ActivityHeatmap.tsx"), "utf8"));
 
   expect(heatmap).not.toContain("ScrollArea");
   expect(heatmap).not.toContain("overflow-x");
@@ -180,9 +182,11 @@ test("keeps the calendar time heatmap inside its card without horizontal scrolli
 
 test("pins the Statistics master detail and WKWebView inset contract", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(
-    join(currentDir, "statistics.css"),
-    "utf8",
+  const css = normalizeNewlines(
+    readFileSync(
+      join(currentDir, "statistics.css"),
+      "utf8",
+    ),
   );
   const workspace = css.match(
     /\.statistics-master-detail\s*\{([^}]*)\}/,
@@ -247,7 +251,7 @@ test("pins the Statistics master detail and WKWebView inset contract", () => {
 
 test("loads the Statistics stylesheet from the application entry point", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const entry = readFileSync(join(currentDir, "../../main.tsx"), "utf8");
+  const entry = normalizeNewlines(readFileSync(join(currentDir, "../../main.tsx"), "utf8"));
 
   expect(entry).toContain('import "./features/statistics/statistics.css";');
 });

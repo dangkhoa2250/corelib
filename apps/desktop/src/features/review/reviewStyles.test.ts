@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 
+const normalizeNewlines = (value: string) => value.replace(/\r\n?/g, "\n");
+
 test("moves lowered review states down responsively", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "review.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "review.css"), "utf8"));
   const lowered = css.match(/\.review-page--lowered \.review-page__done-content \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(lowered).toContain("transform: translateY(clamp(32px, 6vh, 64px));");
@@ -14,8 +16,8 @@ test("moves lowered review states down responsively", () => {
 test("anchors the review route and source split to the viewport height", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = [
-    readFileSync(join(currentDir, "../../styles/base.css"), "utf8"),
-    readFileSync(join(currentDir, "review.css"), "utf8"),
+    normalizeNewlines(readFileSync(join(currentDir, "../../styles/base.css"), "utf8")),
+    normalizeNewlines(readFileSync(join(currentDir, "review.css"), "utf8")),
   ].join("\n");
   const root = css.match(/html,\nbody,\n#root \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const reviewPage = css.match(/\.review-page \{([\s\S]*?)\n\}/)?.[1] ?? "";
@@ -30,7 +32,7 @@ test("anchors the review route and source split to the viewport height", () => {
 
 test("sizes review media modals by content and keeps them inside the viewport", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "review.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "review.css"), "utf8"));
   const backdrop = css.match(/\.review-media-modal__backdrop \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const pdf = css.match(/\.review-media-modal__dialog--pdf \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const video = css.match(/\.review-media-modal__dialog--video \{([\s\S]*?)\n\}/)?.[1] ?? "";
@@ -45,8 +47,8 @@ test("sizes review media modals by content and keeps them inside the viewport", 
 
 test("keeps the review PDF on ScrollArea with thumb-side content inset", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const cardsCss = readFileSync(join(currentDir, "../cards/cards.css"), "utf8");
-  const sourceViewer = readFileSync(join(currentDir, "../cards/SourceViewer.tsx"), "utf8");
+  const cardsCss = normalizeNewlines(readFileSync(join(currentDir, "../cards/cards.css"), "utf8"));
+  const sourceViewer = normalizeNewlines(readFileSync(join(currentDir, "../cards/SourceViewer.tsx"), "utf8"));
   const container = cardsCss.match(/\.source-viewer__pdf-container \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const content = cardsCss.match(/\.source-viewer__pdf-content \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
@@ -58,7 +60,7 @@ test("keeps the review PDF on ScrollArea with thumb-side content inset", () => {
 
 test("removes nonessential review media motion for reduced-motion users", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "review.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "review.css"), "utf8"));
   const media = css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
   expect(media).toContain(".review-media-modal__backdrop");
@@ -68,7 +70,7 @@ test("removes nonessential review media motion for reduced-motion users", () => 
 
 test("uses compact review rating controls", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "review.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "review.css"), "utf8"));
   const ratings = css.match(/\.review-page__ratings \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const ratingButton = css.match(/\.review-page__rating-btn \{([\s\S]*?)\n\}/)?.[1] ?? "";
 

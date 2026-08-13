@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 
+const normalizeNewlines = (value: string) => value.replace(/\r\n?/g, "\n");
+
 test("opens the saved source page before showing search results from the whole document", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
 
   expect(viewer).toContain("eventBus.on(\"pagesloaded\"");
   expect(viewer).toContain('name: "XYZ"');
@@ -14,8 +16,8 @@ test("opens the saved source page before showing search results from the whole d
 
 test("marks highlights on the saved source page separately", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
-  const css = readFileSync(join(currentDir, "cards.css"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
+  const css = normalizeNewlines(readFileSync(join(currentDir, "cards.css"), "utf8"));
 
   expect(viewer).toContain("source-viewer__highlight--source");
   expect(css).toContain(".source-viewer__highlight--source,");
@@ -24,7 +26,7 @@ test("marks highlights on the saved source page separately", () => {
 
 test("anchors the viewer at the start of the saved page and uses saved selection rectangles", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
 
   expect(viewer).toContain("pdfViewer.scrollPageIntoView({");
   expect(viewer).toContain("source.rects.map((rect)");
@@ -37,7 +39,7 @@ test("anchors the viewer at the start of the saved page and uses saved selection
 
 test("keeps whole-page fit for the non-modal source viewer", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
 
   expect(viewer).toContain('presentation === "modal" ? "1.5" : "page-fit"');
   expect(viewer).toContain('presentation === "modal"');
@@ -46,7 +48,7 @@ test("keeps whole-page fit for the non-modal source viewer", () => {
 
 test("limits concurrent PDF text extraction while searching the full source", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
 
   expect(viewer).toContain("SOURCE_SEARCH_CONCURRENCY");
   expect(viewer).toContain("const workers = Array.from");
@@ -55,7 +57,7 @@ test("limits concurrent PDF text extraction while searching the full source", ()
 
 test("locks the initial viewport to the saved page top before searching the rest of the document", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8").replace(/\r\n?/g, "\n");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
 
   expect(viewer).toContain("container.scrollTop = pageDiv.offsetTop;");
   expect(viewer).toContain("const startDocumentSearch = () => {");
@@ -64,7 +66,7 @@ test("locks the initial viewport to the saved page top before searching the rest
 
 test("caches completed full-document searches for the same PDF and quote", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
 
   expect(viewer).toContain("const completedSearchCache = new Map<string, TextMatch[]>();");
   expect(viewer).toContain("const searchCacheKey = `${source.documentId}:${searchQuery}`;");
@@ -73,7 +75,7 @@ test("caches completed full-document searches for the same PDF and quote", () =>
 
 test("supports panel and modal presentation without duplicating modal chrome", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
 
   expect(viewer).toContain('presentation = "panel"');
   expect(viewer).toContain("source-viewer--${presentation}");
@@ -83,14 +85,14 @@ test("supports panel and modal presentation without duplicating modal chrome", (
 
 test("uses a fixed 1.5x PDF scale for modal presentation while the panel keeps whole-page fit", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
 
   expect(viewer).toContain('presentation === "modal" ? "1.5" : "page-fit"');
 });
 
 test("reapplies the presentation-aware scale when the source viewer is resized", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const viewer = readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8");
+  const viewer = normalizeNewlines(readFileSync(join(currentDir, "SourceViewer.tsx"), "utf8"));
   const resizeObserver = viewer.match(/const resizeObserver = new ResizeObserver\(\(\) => \{([\s\S]*?)\n        \}\);/)?.[1] ?? "";
 
   expect(resizeObserver).toContain("setSourceFitScale");

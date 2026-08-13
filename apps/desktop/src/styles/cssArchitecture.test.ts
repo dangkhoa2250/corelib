@@ -39,7 +39,7 @@ const expectedImports = [
 ] as const;
 
 function read(relativePath: string): string {
-  return readFileSync(join(currentDir, relativePath), "utf8");
+  return readFileSync(join(currentDir, relativePath), "utf8").replace(/\r\n?/g, "\n");
 }
 
 test("keeps desktop stylesheet ownership and import order explicit", () => {

@@ -3,9 +3,11 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 
+const normalizeNewlines = (value: string) => value.replace(/\r\n?/g, "\n");
+
 test("uses neutral palette-specific scrollbars and match highlights", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "search.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "search.css"), "utf8"));
   const paletteStart = css.indexOf(".command-palette__backdrop");
   const paletteEnd = css.indexOf("@media", paletteStart);
   const paletteCss = css.slice(paletteStart, paletteEnd);
