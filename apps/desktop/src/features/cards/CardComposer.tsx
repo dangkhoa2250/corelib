@@ -810,7 +810,7 @@ export function CardComposer({
         inset: 0,
         display: "grid",
         placeItems: "center",
-        padding: "20px",
+        padding: "12px",
         background: "var(--overlay)",
       }}
     >
@@ -822,11 +822,11 @@ export function CardComposer({
         role="dialog"
         style={{
           width: "min(780px, 100%)",
-           maxHeight: "calc(100vh - 40px)",
+           maxHeight: "calc(100vh - 24px)",
            display: "flex",
            flexDirection: "column",
            overflow: "hidden",
-          padding: "24px 20px",
+          padding: "24px 14px",
           border: "1px solid var(--border-subtle)",
           borderRadius: "18px",
           background: "var(--panel-bg)",
@@ -842,9 +842,9 @@ export function CardComposer({
             Your selected text is ready to edit on the front of the card.
           </p>
         </header>
-        <ScrollArea style={{ flex: "0 1 auto", minHeight: 0 }}>
+        <div style={{ flexShrink: 0, minWidth: 0 }}>
           <div style={{ paddingRight: "20px", paddingLeft: "20px" }}>{form}</div>
-        </ScrollArea>
+        </div>
         <div style={{ flexShrink: 0, marginTop: "16px", paddingLeft: "20px", paddingRight: "20px" }}>{footer}</div>
         {pickerOpen ? (
           <div style={{ flex: 1, minHeight: 0, marginTop: "16px", display: "flex", flexDirection: "column" }}>
