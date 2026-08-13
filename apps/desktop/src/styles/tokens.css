@@ -3636,7 +3636,7 @@ textarea::placeholder {
 .media-picker__results {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(auto-fill, minmax(min(140px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(120px, 100%), 1fr));
   gap: 10px;
 }
 
@@ -4299,6 +4299,26 @@ textarea::placeholder {
   color: var(--text-disabled);
   font-size: 13px;
   text-align: center;
+}
+
+/* Compact variant for inline language pickers */
+.combobox--compact .combobox__trigger {
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.combobox--compact .combobox__panel {
+  min-width: 160px;
+}
+
+.combobox--compact .combobox__search-input {
+  padding: 6px 8px;
+  font-size: 12px;
+}
+
+.combobox--compact .combobox__option-label {
+  font-size: 12px;
 }
 
 /* Global focus-visible ring — neutral, no blue */

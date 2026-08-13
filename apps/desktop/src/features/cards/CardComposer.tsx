@@ -788,6 +788,7 @@ export function CardComposer({
         <ScrollArea style={{ flex: "1 1 auto", minHeight: 0 }}>
           <div style={{ paddingRight: "20px", paddingLeft: "20px" }}>{form}</div>
         </ScrollArea>
+        <div style={{ flexShrink: 0, marginTop: "16px", paddingLeft: "20px", paddingRight: "20px" }}>{footer}</div>
         {pickerOpen ? (
           <div style={{ flex: "0 1 auto", maxHeight: "40%", minHeight: 0, marginTop: "16px", display: "flex", flexDirection: "column" }}>
             <ScrollArea style={{ flex: 1, minHeight: 0 }}>
@@ -797,7 +798,6 @@ export function CardComposer({
             </ScrollArea>
           </div>
         ) : null}
-        <div style={{ flexShrink: 0, marginTop: "16px", paddingLeft: "20px", paddingRight: "20px" }}>{footer}</div>
       </section>
     );
   }
@@ -821,12 +821,12 @@ export function CardComposer({
         ref={dialogRef}
         role="dialog"
         style={{
-          width: "min(680px, 100%)",
+          width: "min(780px, 100%)",
            maxHeight: "calc(100vh - 40px)",
            display: "flex",
            flexDirection: "column",
            overflow: "hidden",
-          padding: "24px",
+          padding: "24px 20px",
           border: "1px solid var(--border-subtle)",
           borderRadius: "18px",
           background: "var(--panel-bg)",
@@ -845,6 +845,7 @@ export function CardComposer({
         <ScrollArea style={{ flex: "0 1 auto", minHeight: 0 }}>
           <div style={{ paddingRight: "20px", paddingLeft: "20px" }}>{form}</div>
         </ScrollArea>
+        <div style={{ flexShrink: 0, marginTop: "16px", paddingLeft: "20px", paddingRight: "20px" }}>{footer}</div>
         {pickerOpen ? (
           <div style={{ flex: 1, minHeight: 0, marginTop: "16px", display: "flex", flexDirection: "column" }}>
             <ScrollArea style={{ flex: 1, minHeight: 0 }}>
@@ -854,7 +855,6 @@ export function CardComposer({
             </ScrollArea>
           </div>
         ) : null}
-        <div style={{ flexShrink: 0, marginTop: "16px", paddingLeft: "20px", paddingRight: "20px" }}>{footer}</div>
       </section>
     </div>
   );
