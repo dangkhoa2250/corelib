@@ -56,8 +56,7 @@
   cursor: not-allowed;
 }
 
-.card-rich-text-editor__toolbar-button:focus-visible,
-.card-rich-text-editor__color-control:focus-within {
+.card-rich-text-editor__toolbar-button:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
@@ -69,31 +68,66 @@
   background: var(--border-subtle);
 }
 
-.card-rich-text-editor__color-control {
+.card-rich-text-editor__color-control-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.card-rich-text-editor__color-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 21px;
   height: 23px;
-  padding: 2px;
-  border: 1px solid transparent;
+  padding: 0;
+  border: 0;
   border-radius: 8px;
+  background: transparent;
   cursor: pointer;
 }
 
-.card-rich-text-editor__color-control:hover {
+.card-rich-text-editor__color-trigger:hover:not(:disabled) {
   background: var(--interactive-hover);
 }
 
-.card-rich-text-editor__color-control input[type="color"] {
+.card-rich-text-editor__color-trigger:disabled {
+  cursor: not-allowed;
+}
+
+.card-rich-text-editor__color-native-input {
+  position: absolute;
+  /* Cover the trigger so WebKit anchors the native picker right below it. */
+  inset: 0;
   width: 100%;
   height: 100%;
-  min-width: 0;
-  min-height: 0;
   padding: 0;
   border: 0;
-  background: transparent;
-  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.card-rich-text-editor__color-trigger-swatch {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+.card-rich-text-editor__color-glyph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.card-rich-text-editor__color-glyph-bar {
+  width: 100%;
+  height: 2px;
+  border-radius: 1px;
 }
 
 .card-rich-text-editor__toolbar-menu-root {
@@ -116,12 +150,50 @@
   padding: 4px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
-  background: var(--surface-2);
+  background: var(--window-bg);
   box-shadow: var(--shadow-md);
 }
 
 .card-rich-text-editor__toolbar-menu--horizontal {
   grid-auto-flow: column;
+}
+
+.card-composer__form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.card-composer__face-row {
+  display: grid;
+  gap: 7px;
+}
+
+/* The create-flashcard modal stretches its faces to fill the dialog so the
+   rows expand instead of leaving large empty margins. */
+.card-composer--modal .card-composer__form {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-composer--modal .card-composer__form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.card-composer--modal .card-composer__face-row {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.card-composer--modal .card-composer__face-row > .card-rich-text-editor {
+  flex: 1 1 0;
 }
 
 .card-rich-text-editor__toolbar-menu-item {

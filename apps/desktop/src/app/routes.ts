@@ -1,7 +1,7 @@
 import type { LibraryDocument } from "../domain/document";
 import type { Deck, LearningCard, StudySession } from "../domain/learning";
 
-export type SettingsSection = "account" | "appearance" | "drive" | "model" | "memora" | "images";
+export type SettingsSection = "account" | "appearance" | "drive" | "model" | "memora";
 
 export type StatisticsRouteTarget =
   | { kind: "app"; appKey: string }

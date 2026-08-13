@@ -18,18 +18,15 @@ test("moves lowered review states down responsively", () => {
   expect(lowered).toContain("transform: translateY(clamp(32px, 6vh, 64px));");
 });
 
-test("uses a dark-theme-safe compact surface for the import trigger", () => {
+test("keeps the import trigger on the shared compact button system", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = readFileSync(join(currentDir, "tokens.css"), "utf8");
   const trigger = css.match(/\.library-import-menu__trigger \{([\s\S]*?)\n\}/)?.[1] ?? "";
 
-  expect(trigger).toContain("border: 1px solid var(--border-strong);");
-  expect(trigger).toContain("border-radius: 8px;");
-  expect(trigger).toContain("padding: 8px 10px;");
-  expect(trigger).toContain("color: var(--text-primary);");
-  expect(trigger).toContain("background: var(--surface-1);");
-  expect(trigger).not.toContain("--button-primary");
-  expect(css).toContain(".library-import-menu__trigger:hover:not(:disabled) {");
+  expect(trigger).toContain("min-width: 72px;");
+  expect(trigger).not.toContain("border-radius: 999px;");
+  expect(css).toContain(".ui-button {\n");
+  expect(css).toContain(".ui-button--primary {");
 });
 
 test("uses a semantic flat hover surface for shared comboboxes", () => {

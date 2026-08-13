@@ -4,6 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { IconArrowsExchange, IconPhoto } from "@tabler/icons-react";
 
 import { PronunciationButton } from "../../components/PronunciationButton";
+import { Button } from "../../components/Button";
 import { Combobox } from "../../components/Combobox";
 import { ScrollArea } from "../../components/ScrollArea";
 import type { CardSource, NewCardSource } from "../reader/readerSelection";
@@ -58,7 +59,13 @@ export interface CardSaveInput {
 }
 
 export interface CardComposerProps {
-  draft: CardSource;
+  /**
+   * The reader-selection this card is created from. Omit for the manual
+   * add/edit flows (`CardSidePanel`), which have no source document to track
+   * — the composer then skips the source-availability gate and auto-translate
+   * entirely.
+   */
+  draft?: CardSource;
   decks: CardComposerDeck[];
   /**
    * The host persists a card and, when necessary, creates its named deck in
@@ -83,6 +90,44 @@ export interface CardComposerProps {
   ) => Promise<{ id: string; attribution?: string }>;
   variant?: "modal" | "panel";
   externalError?: string | null;
+  /** Dialog title. Defaults to "Create flashcard"; the manual add/edit flow overrides it. */
+  heading?: string;
+  /** Modal-only subtitle under the heading. Pass null to hide it. */
+  subtitle?: string | null;
+  /** Pre-fills the front face (edit mode). Falls back to `draft.quote`, then empty. */
+  initialFrontDoc?: RichDocument;
+  /** Pre-fills the back face (edit mode). Defaults to empty. */
+  initialBackDoc?: RichDocument;
+  /** Pre-selects a deck (edit mode). Defaults to the first active deck. */
+  initialDeckId?: string;
+  /** Pre-fills the front language as a manual (not auto-detected) choice. */
+  initialFrontLanguage?: string | null;
+  /**
+   * Whether the deck picker offers "New deck…". Editing an existing card can
+   * only move it between decks that already exist, so hosts that update
+   * (rather than create) a card should pass `false`.
+   */
+  allowNewDeck?: boolean;
+  /**
+   * Pre-resolved display URLs for media already committed to the card (edit
+   * mode). Resolving these is async, so this may arrive (or be updated)
+   * after mount — Front/Back render immediately either way, and any image
+   * whose URL lands late redraws once it does.
+   */
+  initialMediaUrls?: Record<string, string>;
+  /**
+   * Reports whether Front/Back/Deck/language have changed since mount. Hosts
+   * that let the user navigate away mid-edit (the manual add/edit flow) use
+   * this to gate that with a confirmation; the reader-selection flow ignores
+   * it and behaves exactly as before.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
+  /**
+   * When true, closing (×, Cancel, Escape) while dirty asks the user to
+   * confirm discarding changes first. Off by default so the reader-selection
+   * flow's Cancel/Escape keep their current no-prompt behavior.
+   */
+  confirmDiscardOnClose?: boolean;
   /**
    * Media bridge overrides (all default to the typed Tauri wrappers). They are
    * injectable so tests can verify staging/discard wiring without the backend.
@@ -103,7 +148,7 @@ function hasRequiredDocumentId(source: CardSource): source is NewCardSource {
 }
 
 /** Builds a rich document from plain text, one paragraph per line. */
-function paragraphDocFromText(text: string): RichDocument {
+export function paragraphDocFromText(text: string): RichDocument {
   const content = text.split("\n").map((line) => ({
     type: "paragraph" as const,
     content: line.length > 0 ? [{ type: "text" as const, text: line }] : [],
@@ -146,17 +191,31 @@ export function CardComposer({
   onStageMedia,
   variant = "modal",
   externalError,
+  heading = "Create flashcard",
+  subtitle = "Your selected text is ready to edit on the front of the card.",
+  initialFrontDoc,
+  initialBackDoc,
+  initialDeckId,
+  initialFrontLanguage,
+  allowNewDeck = true,
+  initialMediaUrls,
+  onDirtyChange,
+  confirmDiscardOnClose = false,
   stageCardMedia: stageCardMediaBridge = stageCardMedia,
   discardMediaDraft: discardMediaDraftBridge = discardMediaDraft,
   searchMultiSourceImages: searchMultiSourceImagesBridge = searchMultiSourceImages,
   stageRemoteCardMedia: stageRemoteCardMediaBridge = stageRemoteCardMedia,
   resolveStagedMedia: resolveStagedMediaBridge = resolveStagedMedia,
 }: CardComposerProps) {
-  const activeDecks = decks.filter((deck) => !deck.archived);
+  // An edit target's deck may since have been archived; keep it selectable so
+  // editing never silently drops the card's current deck from the list.
+  const activeDecks = decks.filter((deck) => !deck.archived || deck.id === initialDeckId);
   const formId = useId();
-  const [frontDoc, setFrontDoc] = useState<RichDocument>(() => paragraphDocFromText(draft.quote));
-  const [backDoc, setBackDoc] = useState<RichDocument>(() => paragraphDocFromText(""));
-  const [deckValue, setDeckValue] = useState(() => activeDecks[0]?.id ?? NEW_DECK_VALUE);
+  const [frontDoc, setFrontDoc] = useState<RichDocument>(
+    () => initialFrontDoc ?? paragraphDocFromText(draft?.quote ?? ""),
+  );
+  const [backDoc, setBackDoc] = useState<RichDocument>(() => initialBackDoc ?? paragraphDocFromText(""));
+  const [deckValue, setDeckValue] = useState(() => initialDeckId ?? activeDecks[0]?.id ?? NEW_DECK_VALUE);
   const [newDeckName, setNewDeckName] = useState("");
   const [saving, setSaving] = useState(false);
   const [translating, setTranslating] = useState(false);
@@ -173,17 +232,35 @@ export function CardComposer({
   const frontText = derivePlainText(frontDoc);
   const backText = derivePlainText(backDoc);
 
-  const [frontLanguage, setFrontLanguage] = useState<string | null>(() => detectLanguage(draft.quote));
-  const [isManualLanguage, setIsManualLanguage] = useState(false);
+  const [frontLanguage, setFrontLanguage] = useState<string | null>(
+    () => initialFrontLanguage ?? detectLanguage(draft?.quote ?? ""),
+  );
+  const [isManualLanguage, setIsManualLanguage] = useState(() => initialFrontLanguage != null);
   const [backLanguage, setBackLanguage] = useState<string | null>(() => defaultBackLanguage ?? null);
   const [languagePopoverOpen, setLanguagePopoverOpen] = useState(false);
   const languagePopoverRef = useRef<HTMLDivElement | null>(null);
+  const languagePopoverDialogRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!isManualLanguage) {
-      setFrontLanguage(detectLanguage(draft.quote));
-    }
-  }, [draft.quote, isManualLanguage]);
+    if (isManualLanguage || !draft) return;
+    setFrontLanguage(detectLanguage(draft.quote));
+  }, [draft?.quote, isManualLanguage]);
+
+  // Mount-time snapshot for dirty-checking. A ref's initializer only runs
+  // once, so this captures the composer's starting values regardless of
+  // whether they came from `initial*` props (edit mode) or a reader draft.
+  const initialSnapshotRef = useRef({ frontDoc, backDoc, deckValue, frontLanguage });
+  const isDirty =
+    JSON.stringify(frontDoc) !== JSON.stringify(initialSnapshotRef.current.frontDoc) ||
+    JSON.stringify(backDoc) !== JSON.stringify(initialSnapshotRef.current.backDoc) ||
+    deckValue !== initialSnapshotRef.current.deckValue ||
+    frontLanguage !== initialSnapshotRef.current.frontLanguage;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+    return () => onDirtyChange?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDirty]);
 
   const languageOptions = useMemo(
     () =>
@@ -195,16 +272,26 @@ export function CardComposer({
   );
 
   // A new selection confirmed from the reader replaces the auto-filled front
-  // while the composer stays open.
+  // while the composer stays open. A changed quote also dismisses the image
+  // picker so its grid never shows results for the previous selection. Manual
+  // add/edit (no draft) never re-triggers this — its initial content is fixed.
   useEffect(() => {
+    if (!draft) return;
     setFrontDoc(paragraphDocFromText(draft.quote));
-  }, [draft.quote]);
+    setPickerOpen(false);
+  }, [draft?.quote]);
 
   // Auto-translate the selected quote into the back when the composer opens
   // or the selection changes. Best-effort: failures stay silent and the
-  // manual Translate button still surfaces them.
+  // manual Translate button still surfaces them. Manual add/edit (no draft)
+  // never auto-translates — it would otherwise clobber existing content on
+  // every mount.
   useEffect(() => {
-    if (!onTranslate || !draft.quote.trim()) return;
+    // Only auto-translate when the source language is known. Deleting the
+    // front text or selecting text whose language cannot be detected must not
+    // re-trigger translation with an unknown source language (or prompt the
+    // user to pick one).
+    if (!draft || !onTranslate || !draft.quote.trim() || !frontLanguage) return;
     let cancelled = false;
     setAutoTranslating(true);
     Promise.resolve()
@@ -224,7 +311,7 @@ export function CardComposer({
     return () => {
       cancelled = true;
     };
-  }, [backLanguage, draft.quote, frontLanguage, onTranslate]);
+  }, [backLanguage, draft?.quote, frontLanguage, onTranslate]);
 
   const handleFrontDocChange = (doc: RichDocument) => {
     setFrontDoc(doc);
@@ -245,12 +332,19 @@ export function CardComposer({
   useEffect(() => {
     if (!languagePopoverOpen) return;
     const handleMouseDown = (event: MouseEvent) => {
-      if (
-        languagePopoverRef.current &&
-        !languagePopoverRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node;
+      const wrapper = languagePopoverRef.current;
+      if (!wrapper) return;
+      if (!wrapper.contains(target)) {
         setLanguagePopoverOpen(false);
+        return;
       }
+      if (languagePopoverDialogRef.current?.contains(target)) return;
+      const translateButton = wrapper.querySelector<HTMLElement>(
+        '[aria-label="Translate languages"]',
+      );
+      if (translateButton?.contains(target)) return;
+      setLanguagePopoverOpen(false);
     };
     document.addEventListener("mousedown", handleMouseDown);
     return () => document.removeEventListener("mousedown", handleMouseDown);
@@ -268,7 +362,24 @@ export function CardComposer({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const deckSelectionTouchedRef = useRef(false);
 
-  const [stagedMediaUrls, setStagedMediaUrls] = useState<Record<string, string>>({});
+  const [stagedMediaUrls, setStagedMediaUrls] = useState<Record<string, string>>(
+    () => initialMediaUrls ?? {},
+  );
+
+  // Committed media (edit mode) resolves asynchronously and may update after
+  // mount; freshly staged URLs always win over a same-id committed one.
+  useEffect(() => {
+    if (!initialMediaUrls) return;
+    setStagedMediaUrls((prev) => ({ ...initialMediaUrls, ...prev }));
+  }, [initialMediaUrls]);
+
+  // Re-render existing image nodes once their URL resolves. Node views read
+  // `resolveMedia` only when created, so a later `stagedMediaUrls` update
+  // needs an explicit nudge to reach images already on the page.
+  useEffect(() => {
+    frontEditorRef.current?.refreshMedia();
+    backEditorRef.current?.refreshMedia();
+  }, [stagedMediaUrls]);
 
   const resolveMedia = (mediaId: string): string => stagedMediaUrls[mediaId] ?? "";
 
@@ -299,7 +410,8 @@ export function CardComposer({
     }
   };
 
-  const sourceIsAvailable = hasRequiredDocumentId(draft);
+  // Manual add/edit (no draft) has no source document to lose, so it's always available.
+  const sourceIsAvailable = !draft || hasRequiredDocumentId(draft);
   const usingNewDeck = deckValue === NEW_DECK_VALUE;
   const selectedDeck = activeDecks.find((deck) => deck.id === deckValue);
   const visibleError = externalError || (sourceIsAvailable ? error : SOURCE_UNAVAILABLE_MESSAGE);
@@ -348,11 +460,19 @@ export function CardComposer({
     onCancel();
   };
 
+  /** Close, but confirm first if the host opted in and there are unsaved edits. */
+  const requestClose = () => {
+    if (confirmDiscardOnClose && isDirty && !window.confirm("You have unsaved changes. Discard changes?")) {
+      return;
+    }
+    close();
+  };
+
   const handleDialogKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
       if (!saving) {
-        close();
+        requestClose();
       }
       return;
     }
@@ -497,12 +617,13 @@ export function CardComposer({
   const form = (
     <form
       id={formId}
+      className="card-composer__form"
       onSubmit={(event) => {
         event.preventDefault();
         void handleSave();
       }}
     >
-      <div style={{ display: "grid", gap: "16px" }}>
+      <div className="card-composer__form-grid">
         <label style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
           Deck
           <Combobox
@@ -516,7 +637,7 @@ export function CardComposer({
                 value: deck.id,
                 label: deck.name,
               })),
-              { value: NEW_DECK_VALUE, label: "New deck…" },
+              ...(allowNewDeck ? [{ value: NEW_DECK_VALUE, label: "New deck…" }] : []),
             ]}
             placeholder="Select a deck"
             disabled={saving}
@@ -550,6 +671,7 @@ export function CardComposer({
           />
           {onTranslate && languagePopoverOpen ? (
             <div
+              ref={languagePopoverDialogRef}
               role="dialog"
               aria-label="Translation languages"
               style={{
@@ -559,9 +681,9 @@ export function CardComposer({
                 zIndex: 10,
                 width: "min(300px, 100%)",
                 padding: "10px",
-                border: "1px solid var(--border-subtle)",
+                border: "1px solid var(--border-strong)",
                 borderRadius: "12px",
-                background: "var(--panel-bg)",
+                background: "var(--window-bg)",
                 boxShadow: "var(--shadow-xl)",
                 display: "grid",
                 gap: "6px",
@@ -602,7 +724,7 @@ export function CardComposer({
                 </button>
                 <Combobox
                   ariaLabel="Target language"
-                  className="combobox--compact"
+                  className="combobox--compact combobox--inset"
                   value={backLanguage}
                   onChange={(v) => setBackLanguage(v)}
                   options={languageOptions}
@@ -617,7 +739,7 @@ export function CardComposer({
             control inside it, so wrapping the editor together with the
             Translate/Pronunciation buttons steals focus from the
             contenteditable. The editors carry their own aria-labels. */}
-        <div style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+        <div className="card-composer__face-row" style={{ fontWeight: 600 }}>
           <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
             Front
             <PronunciationButton text={frontText} />
@@ -636,7 +758,7 @@ export function CardComposer({
           />
         </div>
 
-        <div style={{ display: "grid", gap: "7px", fontWeight: 600 }}>
+        <div className="card-composer__face-row" style={{ fontWeight: 600 }}>
           <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
             Back
             <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -709,40 +831,21 @@ export function CardComposer({
 
   const footer = (
     <footer style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
-      <button
+      <Button
         disabled={saving}
-        onClick={close}
-        type="button"
-        style={{
-          border: "1px solid var(--border-strong)",
-          borderRadius: "999px",
-          padding: "5px 10px",
-          color: "var(--button-secondary-text)",
-          background: "var(--button-secondary-bg)",
-          cursor: "pointer",
-          fontSize: "12px",
-          fontWeight: 600,
-        }}
+        onClick={requestClose}
+        variant="secondary"
       >
         Cancel
-      </button>
-      <button
+      </Button>
+      <Button
         disabled={saving || !sourceIsAvailable}
         type="submit"
         form={formId}
-        style={{
-          border: 0,
-          borderRadius: "999px",
-          padding: "5px 10px",
-          color: "var(--button-primary-text)",
-          background: "var(--button-primary-bg)",
-          cursor: "pointer",
-          fontSize: "12px",
-          fontWeight: 600,
-        }}
+        variant="primary"
       >
         {saving ? "Saving…" : "Save"}
-      </button>
+      </Button>
     </footer>
   );
 
@@ -758,19 +861,19 @@ export function CardComposer({
           height: "100%",
           display: "flex",
           flexDirection: "column",
-           overflow: "hidden",
-          padding: "20px",
+          overflow: "hidden",
+          padding: "20px 12px",
           borderLeft: "1px solid var(--border-subtle)",
           background: "var(--panel-bg)",
         }}
       >
         <header style={{ flexShrink: 0, marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <h2 id="card-composer-title" style={{ margin: 0, fontSize: "18px", letterSpacing: "-0.02em" }}>
-            Create flashcard
+            {heading}
           </h2>
           <button
             type="button"
-            onClick={close}
+            onClick={requestClose}
             aria-label="Close composer"
             style={{
               background: "transparent",
@@ -785,14 +888,12 @@ export function CardComposer({
             ×
           </button>
         </header>
-        <ScrollArea style={{ flex: "1 1 auto", minHeight: 0 }}>
-          <div style={{ paddingRight: "20px", paddingLeft: "20px" }}>{form}</div>
-        </ScrollArea>
-        <div style={{ flexShrink: 0, marginTop: "16px", paddingLeft: "20px", paddingRight: "20px" }}>{footer}</div>
+        <div style={{ flex: "0 0 auto", minHeight: 0 }}>{form}</div>
+        <div style={{ flexShrink: 0, marginTop: "16px" }}>{footer}</div>
         {pickerOpen ? (
-          <div style={{ flex: "0 1 auto", maxHeight: "40%", minHeight: 0, marginTop: "16px", display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: "1 1 auto", minHeight: 0, marginTop: "16px", display: "flex", flexDirection: "column" }}>
             <ScrollArea style={{ flex: 1, minHeight: 0 }}>
-              <div style={{ paddingRight: "20px", paddingLeft: "20px" }}>
+              <div style={{ paddingRight: "16px" }}>
                 <MediaPicker frontText={frontText} onClose={() => setPickerOpen(false)} onSearch={searchMultiSourceImagesBridge} onStage={handleStageRemote} />
               </div>
             </ScrollArea>
@@ -817,16 +918,18 @@ export function CardComposer({
       <section
         aria-labelledby="card-composer-title"
         aria-modal="true"
+        className="card-composer--modal"
         onKeyDown={handleDialogKeyDown}
         ref={dialogRef}
         role="dialog"
         style={{
-          width: "min(780px, 100%)",
-           maxHeight: "calc(100vh - 24px)",
-           display: "flex",
-           flexDirection: "column",
-           overflow: "hidden",
-          padding: "24px 14px",
+          width: "min(1080px, calc(100% - 32px))",
+          height: "min(760px, calc(100vh - 24px))",
+          maxHeight: "calc(100vh - 24px)",
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          padding: "24px 12px",
           border: "1px solid var(--border-subtle)",
           borderRadius: "18px",
           background: "var(--panel-bg)",
@@ -834,22 +937,24 @@ export function CardComposer({
           backdropFilter: "blur(24px)",
         }}
       >
-        <header style={{ flexShrink: 0, marginBottom: "20px" }}>
+        <header style={{ flexShrink: 0, marginBottom: "14px" }}>
           <h2 id="card-composer-title" style={{ margin: 0, fontSize: "24px", letterSpacing: "-0.02em" }}>
-            Create flashcard
+            {heading}
           </h2>
-          <p style={{ margin: "6px 0 0", color: "var(--text-secondary)", fontSize: "14px" }}>
-            Your selected text is ready to edit on the front of the card.
-          </p>
+          {subtitle ? (
+            <p style={{ margin: "6px 0 0", color: "var(--text-secondary)", fontSize: "14px" }}>
+              {subtitle}
+            </p>
+          ) : null}
         </header>
-        <div style={{ flexShrink: 0, minWidth: 0 }}>
-          <div style={{ paddingRight: "20px", paddingLeft: "20px" }}>{form}</div>
+        <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex", flexDirection: "column", padding: "0 8px" }}>
+          <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "0 4px" }}>{form}</div>
         </div>
-        <div style={{ flexShrink: 0, marginTop: "16px", paddingLeft: "20px", paddingRight: "20px" }}>{footer}</div>
+        <div style={{ flexShrink: 0, marginTop: "12px", paddingLeft: "12px", paddingRight: "12px" }}>{footer}</div>
         {pickerOpen ? (
-          <div style={{ flex: 1, minHeight: 0, marginTop: "16px", display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: "1 1 40%", minHeight: 0, marginTop: "12px", paddingLeft: "12px", paddingRight: "12px", display: "flex", flexDirection: "column" }}>
             <ScrollArea style={{ flex: 1, minHeight: 0 }}>
-              <div style={{ paddingRight: "20px", paddingLeft: "20px" }}>
+              <div style={{ paddingRight: "20px" }}>
                 <MediaPicker frontText={frontText} onClose={() => setPickerOpen(false)} onSearch={searchMultiSourceImagesBridge} onStage={handleStageRemote} />
               </div>
             </ScrollArea>

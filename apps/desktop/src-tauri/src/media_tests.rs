@@ -120,15 +120,15 @@ fn stage_from_bytes_writes_under_staging_for_each_source() {
     let clipboard = store
         .stage_from_bytes("draft-1", PNG_BYTES, "image/png", "clipboard", None)
         .expect("stage clipboard png");
-    let pixabay = store
+    let web = store
         .stage_from_bytes(
             "draft-1",
             JPEG_BYTES,
             "image/jpeg",
-            "pixabay",
-            Some("Pixabay user 'sample' / pixabay.com"),
+            "web",
+            Some("Artist · CC BY"),
         )
-        .expect("stage pixabay jpeg");
+        .expect("stage web jpeg");
 
     assert_eq!(clipboard.source_type, "clipboard");
     assert_eq!(clipboard.mime_type, "image/png");
@@ -136,22 +136,22 @@ fn stage_from_bytes_writes_under_staging_for_each_source() {
     assert_eq!(clipboard.draft_id.as_deref(), Some("draft-1"));
     assert!(clipboard.relative_path.starts_with("staging/draft-1/"));
     assert_eq!(clipboard.size_bytes, PNG_BYTES.len() as i64);
-    assert!(clipboard.pixabay_attribution.is_none());
+    assert!(clipboard.attribution.is_none());
 
-    assert_eq!(pixabay.source_type, "pixabay");
-    assert_eq!(pixabay.mime_type, "image/jpeg");
+    assert_eq!(web.source_type, "web");
+    assert_eq!(web.mime_type, "image/jpeg");
     assert_eq!(
-        pixabay.pixabay_attribution.as_deref(),
-        Some("Pixabay user 'sample' / pixabay.com")
+        web.attribution.as_deref(),
+        Some("Artist · CC BY")
     );
 
     // Files must physically live under card-media/staging/<draftId>/.
     let staging_dir = media_root_of(&store).join(STAGING_DIR_NAME).join("draft-1");
     let clipboard_file = media_root_of(&store).join(&clipboard.relative_path);
-    let pixabay_file = media_root_of(&store).join(&pixabay.relative_path);
+    let web_file = media_root_of(&store).join(&web.relative_path);
     assert!(staging_dir.is_dir(), "staging directory should exist");
     assert!(clipboard_file.is_file(), "clipboard file should exist");
-    assert!(pixabay_file.is_file(), "pixabay file should exist");
+    assert!(web_file.is_file(), "web file should exist");
     assert_eq!(fs::read(&clipboard_file).unwrap(), PNG_BYTES);
 }
 

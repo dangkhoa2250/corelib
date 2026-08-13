@@ -181,6 +181,9 @@ pub struct UpdateAndMoveCardPayload {
     pub tags: Vec<String>,
     pub destination_deck_id: Option<String>,
     pub front_language: Option<String>,
+    pub front_doc: Option<serde_json::Value>,
+    pub back_doc: Option<serde_json::Value>,
+    pub media_draft_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -234,6 +237,11 @@ pub struct CardBrowserRowPayload {
     pub deck_name: String,
     pub front: String,
     pub back: String,
+    #[serde(rename = "frontDoc")]
+    pub front_doc: Option<serde_json::Value>,
+    #[serde(rename = "backDoc")]
+    pub back_doc: Option<serde_json::Value>,
+    pub media: Vec<CardMediaPayload>,
     pub state: String,
     pub learning_step: Option<i64>,
     pub due_at: String,
@@ -268,29 +276,12 @@ pub struct CardMediaPayload {
     pub mime_type: String,
     pub relative_path: String,
     pub source_type: String,
-    pub pixabay_attribution: Option<String>,
+    pub attribution: Option<String>,
     pub width: Option<i64>,
     pub height: Option<i64>,
     pub size_bytes: i64,
     pub created_at: String,
     pub updated_at: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct PixabayImage {
-    pub id: i64,
-    pub page_url: String,
-    pub preview_url: String,
-    pub image_url: String,
-    pub preview_width: u32,
-    pub preview_height: u32,
-    pub width: u32,
-    pub height: u32,
-    pub tags: String,
-    pub user: String,
-    pub user_id: i64,
-    pub media_type: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -372,8 +363,8 @@ mod tests {
                 draft_id: None,
                 mime_type: "image/png".into(),
                 relative_path: "card-1/media-1.png".into(),
-                source_type: "pixabay".into(),
-                pixabay_attribution: Some("Pixabay user 'x'".into()),
+                source_type: "web".into(),
+                attribution: Some("Artist · CC BY".into()),
                 width: Some(640),
                 height: Some(480),
                 size_bytes: 2048,
@@ -436,8 +427,8 @@ mod tests {
                     "draftId": null,
                     "mimeType": "image/png",
                     "relativePath": "card-1/media-1.png",
-                    "sourceType": "pixabay",
-                    "pixabayAttribution": "Pixabay user 'x'",
+                    "sourceType": "web",
+                    "attribution": "Artist · CC BY",
                     "width": 640,
                     "height": 480,
                     "sizeBytes": 2048,
@@ -505,6 +496,12 @@ mod tests {
             deck_name: "Biology".into(),
             front: "What is ATP?".into(),
             back: "Energy storage".into(),
+            front_doc: Some(serde_json::json!({
+                "type": "doc",
+                "content": [],
+            })),
+            back_doc: None,
+            media: vec![],
             state: "review".into(),
             learning_step: None,
             due_at: "2026-07-10T09:00:00Z".into(),
@@ -541,6 +538,9 @@ mod tests {
         assert!(row_json.get("deletedAt").is_some());
         assert!(row_json.get("deletedFromDeckName").is_some());
         assert!(row_json.get("frontLanguage").is_some());
+        assert!(row_json.get("frontDoc").is_some());
+        assert!(row_json.get("backDoc").is_some());
+        assert!(row_json.get("media").is_some());
         assert!(page_json.get("nextCursor").is_some());
 
         let bulk_json = serde_json::to_value(bulk_result).expect("serialize bulk result");

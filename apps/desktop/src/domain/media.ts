@@ -1,36 +1,52 @@
 /**
- * Media and Pixabay command contracts for rich flashcards.
+ * Media command contracts for rich flashcards.
  *
  * These types mirror the Rust payloads in
  * `apps/desktop/src-tauri/src/commands.rs` (`StageCardMediaInput`) and
- * `apps/desktop/src-tauri/src/model.rs` (`PixabayImage`), serialized with
+ * `apps/desktop/src-tauri/src/multi_image_search.rs`, serialized with
  * camelCase keys.
  */
 
 /** Source of a staged media row, matching the Rust `sourceType` strings. */
-export type StageMediaSourceType = "file" | "clipboard" | "pixabay";
+export type StageMediaSourceType = "file" | "clipboard" | "web";
 
 /** Input to the `stage_card_media` command. */
 export interface StageMediaInput {
   draftId: string;
   sourceType: StageMediaSourceType;
-  pixabayAttribution?: string | null;
+  attribution?: string | null;
   filePath?: string | null;
   bytesBase64?: string | null;
 }
 
-/** A Pixabay search hit, mirroring the Rust `PixabayImage` model (12 fields). */
-export interface PixabayImage {
-  id: number;
-  pageUrl: string;
+export type ImageSource = "wikimedia" | "duckduckgo" | "openverse" | string;
+
+export interface ImageSearchResult {
+  id: string;
+  source: ImageSource;
+  title: string;
   previewUrl: string;
   imageUrl: string;
-  previewWidth: number;
-  previewHeight: number;
+  sourceUrl: string;
+  attribution: string;
+  license?: string | null;
+  licenseUrl?: string | null;
   width: number;
   height: number;
-  tags: string;
-  user: string;
-  userId: number;
-  mediaType: string;
+}
+
+export interface ProviderWarning {
+  provider: string;
+  message: string;
+}
+
+export interface MultiImageSearchPage {
+  results: ImageSearchResult[];
+  warnings: ProviderWarning[];
+  hasMore?: boolean;
+}
+
+export interface RemoteImagePreviewPayload {
+  mimeType: string;
+  dataBase64: string;
 }

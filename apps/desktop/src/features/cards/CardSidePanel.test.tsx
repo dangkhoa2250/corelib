@@ -125,7 +125,7 @@ describe("CardSidePanel rich documents", () => {
     await user.keyboard("What is ATP?");
     await user.click(editor("Back"));
     await user.keyboard("Adenosine triphosphate.");
-    await user.click(screen.getByRole("button", { name: "Add Card" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(createCard).toHaveBeenCalledTimes(1);
@@ -149,7 +149,7 @@ describe("CardSidePanel rich documents", () => {
     expect(editor("Front")).toHaveTextContent("ATP front");
     expect(editor("Back")).toHaveTextContent("ATP back");
 
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => {
       expect(updateAndMoveCard).toHaveBeenCalledTimes(1);
@@ -179,7 +179,7 @@ describe("CardSidePanel rich documents", () => {
     await user.keyboard("Question");
     await user.click(editor("Back"));
     await user.keyboard("Answer");
-    await user.click(screen.getByRole("button", { name: "Add Card" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(createCard).toHaveBeenCalledTimes(1));
     expect(vi.mocked(createCard).mock.calls[0][0].tags).toEqual([]);
@@ -190,7 +190,7 @@ describe("CardSidePanel rich documents", () => {
     const { user } = renderPanel(baseCard({ tags: ["energy", "biology"] }));
     expect(screen.queryByRole("textbox", { name: "Tags" })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Save Changes" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(updateAndMoveCard).toHaveBeenCalledTimes(1));
     expect(vi.mocked(updateAndMoveCard).mock.calls[0][0].tags).toEqual(["energy", "biology"]);

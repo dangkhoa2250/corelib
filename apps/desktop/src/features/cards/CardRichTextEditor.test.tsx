@@ -308,14 +308,14 @@ describe("CardRichTextEditor", () => {
     const editable = result.container.querySelector(".tiptap")!;
     await result.user.click(editable);
 
-    const color = screen.getByLabelText("Text color") as HTMLInputElement;
-    fireEvent.input(color, { target: { value: "#ff0000" } });
+    const color = screen.getByLabelText("Text color picker") as HTMLInputElement;
+    fireEvent.input(color, { target: { value: "#ff3b30" } });
     await result.user.keyboard("red");
     const colored = lastDoc(result.onChange);
     expect(hasMark(colored, "red", "textStyle")).toBe(true);
 
-    const highlight = screen.getByLabelText("Highlight color") as HTMLInputElement;
-    fireEvent.input(highlight, { target: { value: "#00ff00" } });
+    const highlight = screen.getByLabelText("Highlight color picker") as HTMLInputElement;
+    fireEvent.input(highlight, { target: { value: "#c1f0c1" } });
     await result.user.keyboard(" mark");
     const highlighted = lastDoc(result.onChange);
     expect(hasMark(highlighted, " mark", "highlight")).toBe(true);

@@ -15,9 +15,10 @@ import {
   type TranslationEngineId,
 } from "../../domain/translation";
 import { IconEye, IconEyeOff } from "../../app/icons";
-import { IconArrowLeft, IconMemora, IconSearch, IconAppearance, IconCloud } from "../../app/icons";
+import { IconArrowLeft, IconBrain, IconMemora, IconSearch, IconAppearance, IconCloud } from "../../app/icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { Combobox } from "../../components/Combobox";
+import { Button } from "../../components/Button";
 import { ModelBrandIcon } from "../../components/ModelBrandIcon";
 import { ProviderBrandIcon } from "../../components/ProviderBrandIcon";
 import { useContext } from "react";
@@ -25,12 +26,6 @@ import { AccountContext } from "../account/AccountGate";
 import { AccountSettingsSection } from "../account/AccountSettingsSection";
 import type { SettingsSection } from "../../app/routes";
 import { MemoraSettingsSection } from "./MemoraSettingsSection";
-import { PixabaySettingsSection } from "./PixabaySettingsSection";
-import {
-  checkPixabayKey,
-  deletePixabayKey,
-  savePixabayKey,
-} from "../../lib/media";
 import type { MemoraSettings } from "../../domain/learning";
 
 interface SettingsNavItem {
@@ -44,7 +39,6 @@ const SETTINGS_NAV_KEYWORDS: Record<SettingsSection, string[]> = {
   drive: ["drive", "google", "cloud"],
   model: ["model", "provider", "translate", "ai"],
   memora: ["memora", "learning", "fsrs", "cards", "retention"],
-  images: ["images", "media", "pixabay", "stock", "photo"],
 };
 
 function matchesSearch(item: SettingsNavItem, query: string): boolean {
@@ -87,10 +81,6 @@ export interface SettingsPageProps {
   saveDriveCredentials?: (clientId: string, clientSecret: string) => Promise<void>;
   loadDriveCredentials?: () => Promise<{ clientId: string; clientSecret: string } | null>;
   clearDriveCredentials?: () => Promise<void>;
-  /** Pixabay media key bridge; defaults to the typed Tauri wrappers. */
-  checkPixabayKey?: () => Promise<boolean>;
-  savePixabayKey?: (key: string) => Promise<void>;
-  clearPixabayKey?: () => Promise<void>;
   initialSection?: SettingsSection;
 }
 
@@ -109,7 +99,7 @@ export function readTranslationPreference(): { engineId: TranslationEngineId | n
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, checkPixabayKey: checkPixabayKeyBridge = checkPixabayKey, savePixabayKey: savePixabayKeyBridge = savePixabayKey, clearPixabayKey: clearPixabayKeyBridge = deletePixabayKey, initialSection = "model" }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleTranslationAvailable = defaultAppleTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, initialSection = "model" }: SettingsPageProps) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
@@ -165,7 +155,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
   const showDriveSettings = section === "drive";
   const showModelSettings = section === "model";
   const showMemoraSettings = section === "memora";
-  const showImagesSettings = section === "images";
 
   const accountContext = useContext(AccountContext);
 
@@ -438,7 +427,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
             onClick={() => setSection("model")}
             type="button"
           >
-            <span className="settings-page__nav-icon"><IconMemora /></span>
+            <span className="settings-page__nav-icon"><IconBrain /></span>
             Model
           </button>
         )}
@@ -453,20 +442,10 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
             Memora
           </button>
         )}
-        {isNavVisible("images") && (
-          <button
-            className={`settings-page__nav-item ${showImagesSettings ? "is-active" : ""}`}
-            onClick={() => setSection("images")}
-            type="button"
-          >
-            <span className="settings-page__nav-icon"><IconCloud /></span>
-            Media
-          </button>
-        )}
       </aside>
 
       <section className="settings-page__main">
-        {showMemoraSettings || showImagesSettings ? null : (
+        {showMemoraSettings ? null : (
           <header className="settings-page__header">
             <p className="settings-page__eyebrow">
               {showAccountSettings ? "Account" : showAppearanceSettings ? "General" : showDriveSettings ? "General" : "Models"}
@@ -488,12 +467,6 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
 
         {showMemoraSettings ? (
           <MemoraSettingsSection load={getMemoraSettings} save={updateMemoraSettings} />
-        ) : showImagesSettings ? (
-          <PixabaySettingsSection
-            check={checkPixabayKeyBridge}
-            save={savePixabayKeyBridge}
-            remove={clearPixabayKeyBridge}
-          />
         ) : showAccountSettings && accountContext ? (
           <AccountSettingsSection
             session={accountContext.session!}
@@ -591,22 +564,21 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
           </label>
 
           <div className="settings-page__actions">
-            <button
+            <Button
               disabled={loading || (!driveClientId.trim() && !driveClientSecret.trim())}
               onClick={() => void handleSaveDriveCredentials()}
-              type="button"
+              variant="primary"
             >
               {loading ? "Saving…" : "Save Credentials"}
-            </button>
+            </Button>
             {hasSavedDriveCredentials ? (
-              <button
-                className="settings-page__secondary-button"
+              <Button
                 disabled={loading}
                 onClick={() => void handleClearDriveCredentials()}
-                type="button"
+                variant="secondary"
               >
                 Clear Credentials
-              </button>
+              </Button>
             ) : null}
           </div>
           
@@ -621,7 +593,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
               <h2 id="providers-heading">Providers</h2>
               <p>Add multiple providers and manage their API keys.</p>
             </div>
-            <button className="settings-page__add-button" onClick={handleAddProvider} type="button">+ Add provider</button>
+            <Button onClick={handleAddProvider} variant="primary">+ Add provider</Button>
           </div>
 
           <div className="settings-page__provider-list" aria-label="Connected providers">
@@ -635,7 +607,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
                   </div>
                 </div>
                 <div className="settings-page__provider-row-actions">
-                  <button onClick={() => handleManageProvider(item.id)} type="button">Manage</button>
+                  <Button onClick={() => handleManageProvider(item.id)} variant="secondary">Manage</Button>
                 </div>
               </div>
             )) : <p className="settings-page__provider-empty">No providers connected yet.</p>}
@@ -692,10 +664,10 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
         </label>
 
         <div className="settings-page__actions">
-          <button disabled={loading || (!connected[provider] && !apiKey.trim())} onClick={() => void handleConnect()} type="button">
+          <Button disabled={loading || (!connected[provider] && !apiKey.trim())} onClick={() => void handleConnect()} variant="primary">
             {loading ? "Connecting…" : connected[provider] ? "Refresh models" : "Connect"}
-          </button>
-          {connected[provider] ? <button className="settings-page__secondary-button" disabled={loading} onClick={() => void handleClear()} type="button">Remove key</button> : null}
+          </Button>
+          {connected[provider] ? <Button disabled={loading} onClick={() => void handleClear()} variant="destructive">Remove key</Button> : null}
         </div>
           </div>
           </div>

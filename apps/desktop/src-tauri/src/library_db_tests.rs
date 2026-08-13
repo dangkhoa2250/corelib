@@ -1142,7 +1142,7 @@ fn card_media_table_has_the_mandated_columns() {
         ("mime_type", "TEXT", 0),
         ("relative_path", "TEXT", 1),
         ("source_type", "TEXT", 1),
-        ("pixabay_attribution", "TEXT", 0),
+        ("attribution", "TEXT", 0),
         ("width", "INTEGER", 0),
         ("height", "INTEGER", 0),
         ("size_bytes", "INTEGER", 1),
@@ -1177,6 +1177,110 @@ fn card_media_table_has_the_mandated_columns() {
 }
 
 #[test]
+fn opening_an_0014_database_rebuilds_card_media_for_generic_web_attribution() {
+    let directory = tempdir().expect("temporary directory");
+    let database_path = directory.path().join("library.sqlite3");
+    let connection = Connection::open(&database_path).expect("open legacy database");
+    connection
+        .execute_batch("PRAGMA foreign_keys = ON; CREATE TABLE schema_migrations (id TEXT PRIMARY KEY NOT NULL);")
+        .expect("create migration table");
+
+    let migrations = [
+        ("0001_library", include_str!("../migrations/0001_library.sql")),
+        ("0002_index_claims", include_str!("../migrations/0002_index_claims.sql")),
+        ("0003_drive_source", include_str!("../migrations/0003_drive_source.sql")),
+        ("0004_learning", include_str!("../migrations/0004_learning.sql")),
+        ("0005_learning_source_integrity", include_str!("../migrations/0005_learning_source_integrity.sql")),
+        ("0006_card_lifecycle", include_str!("../migrations/0006_card_lifecycle.sql")),
+        ("0007_youglish_clickable", include_str!("../migrations/0007_youglish_clickable.sql")),
+        ("0008_page_count", include_str!("../migrations/0008_page_count.sql")),
+        ("0009_page_tags", include_str!("../migrations/0009_page_tags.sql")),
+        ("0010_memora_study", include_str!("../migrations/0010_memora_study.sql")),
+        ("0011_statistics", include_str!("../migrations/0011_statistics.sql")),
+        ("0012_review_local_day", include_str!("../migrations/0012_review_local_day.sql")),
+        ("0013_statistics_time_buckets", include_str!("../migrations/0013_statistics_time_buckets.sql")),
+        ("0014_card_rich_content", include_str!("../migrations/0014_card_rich_content.sql")),
+    ];
+    for (id, sql) in migrations {
+        connection.execute_batch(sql).expect("apply legacy migration");
+        connection
+            .execute("INSERT INTO schema_migrations(id) VALUES(?1)", params![id])
+            .expect("record legacy migration");
+    }
+    connection
+        .execute(
+            "INSERT INTO decks(id,name,created_at,updated_at) VALUES('deck-1','Deck','now','now')",
+            [],
+        )
+        .expect("insert deck");
+    connection
+        .execute(
+            "INSERT INTO cards(id,deck_id,front,back,state,due_at,reps,lapses,created_at,updated_at)
+             VALUES('card-1','deck-1','front','back','new','now',0,0,'now','now')",
+            [],
+        )
+        .expect("insert card");
+    connection
+        .execute(
+            "INSERT INTO card_media(id,card_id,relative_path,source_type,pixabay_attribution,size_bytes,created_at,updated_at)
+             VALUES('media-1','card-1','card-1/image.jpg','pixabay','legacy credit',12,'now','now')",
+            [],
+        )
+        .expect("insert pixabay media");
+    drop(connection);
+
+    let database = LibraryDatabase::open(directory.path()).expect("upgrade database");
+    let media: (String, String) = database
+        .connection
+        .query_row(
+            "SELECT source_type, attribution FROM card_media WHERE id='media-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read migrated media");
+    assert_eq!(media, ("web".into(), "legacy credit".into()));
+    let foreign_keys: i64 = database
+        .connection
+        .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+        .expect("read foreign-key enforcement");
+    assert_eq!(foreign_keys, 1, "migration must leave foreign keys enabled");
+    let columns: Vec<String> = database
+        .connection
+        .prepare("PRAGMA table_info(card_media)")
+        .expect("prepare columns")
+        .query_map([], |row| row.get(1))
+        .expect("read columns")
+        .collect::<rusqlite::Result<_>>()
+        .expect("collect columns");
+    assert!(columns.contains(&"attribution".to_string()));
+    assert!(!columns.contains(&"pixabay_attribution".to_string()));
+    let indexes: Vec<String> = database
+        .connection
+        .prepare("PRAGMA index_list(card_media)")
+        .expect("prepare indexes")
+        .query_map([], |row| row.get(1))
+        .expect("read indexes")
+        .collect::<rusqlite::Result<_>>()
+        .expect("collect indexes");
+    for index in [
+        "card_media_card_id",
+        "card_media_draft_id",
+        "card_media_created_at",
+    ] {
+        assert!(indexes.iter().any(|name| name == index), "missing index {index}");
+    }
+    assert!(database
+        .connection
+        .execute("DELETE FROM cards WHERE id='card-1'", [])
+        .is_ok());
+    let remaining: i64 = database
+        .connection
+        .query_row("SELECT COUNT(*) FROM card_media", [], |row| row.get(0))
+        .expect("count media after cascade");
+    assert_eq!(remaining, 0);
+}
+
+#[test]
 fn card_media_source_type_check_accepts_known_sources_and_rejects_others() {
     let directory = tempdir().expect("create temporary directory");
     let database = LibraryDatabase::open(directory.path()).expect("open database");
@@ -1198,7 +1302,7 @@ fn card_media_source_type_check_accepts_known_sources_and_rejects_others() {
         )
         .expect("insert card");
 
-    for source_type in ["file", "clipboard", "pixabay"] {
+    for source_type in ["file", "clipboard", "web"] {
         database
             .connection
             .execute(

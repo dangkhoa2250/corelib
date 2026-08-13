@@ -17,6 +17,7 @@ export interface CardBrowserProps {
   onBack?: () => void;
   onDirtyStateChange?: (dirty: boolean) => void;
   onCardChange?: () => void;
+  onTranslate?: (text: string, sourceLanguage?: string | null, targetLanguage?: string | null) => Promise<string>;
   queryDeckCards?: typeof queryDeckCards;
   moveCards?: typeof moveCards;
   setCardsSuspended?: typeof setCardsSuspended;
@@ -45,6 +46,7 @@ export function CardBrowser({
   onBack,
   onDirtyStateChange,
   onCardChange,
+  onTranslate,
   queryDeckCards: customQuery = queryDeckCards,
   moveCards: customMove = moveCards,
   setCardsSuspended: customSuspend = setCardsSuspended,
@@ -354,6 +356,10 @@ export function CardBrowser({
 
   return (
     <div className="card-browser">
+      {/* Everything but the side panel lives in this column so the panel
+          (below) can be a row-sibling spanning the FULL height of the page —
+          not just the height of the table area under the header/toolbar. */}
+      <div className="card-browser__content">
       <div className="card-browser__header">
         <div className="card-browser__title-group">
           {onBack && (
@@ -610,21 +616,28 @@ export function CardBrowser({
           />
         ) : null}
       </div>
+      </div>
 
-      {/* Card Edit Side Panel */}
-      <CardSidePanel
-        card={editingCard}
-        decks={decks}
-        onClose={() => setEditingCard(null)}
-        onSaveSuccess={() => {
-          setEditingCard(null);
-          void loadData();
-          onCardChange?.();
-        }}
-        onDirtyStateChange={handleDirtyStateChange}
-        createCard={customCreate}
-        updateAndMoveCard={customUpdateAndMove}
-      />
+      {/* Card Edit Side Panel: a row-sibling of `.card-browser__content`
+          (everything above), not nested inside it — that's what lets the
+          panel span the full page height like "Create flashcard" instead of
+          being confined to just the table area under the header/toolbar. */}
+      {editingCard ? (
+        <CardSidePanel
+          card={editingCard}
+          decks={decks}
+          onClose={() => setEditingCard(null)}
+          onSaveSuccess={() => {
+            setEditingCard(null);
+            void loadData();
+            onCardChange?.();
+          }}
+          onDirtyStateChange={handleDirtyStateChange}
+          onTranslate={onTranslate}
+          createCard={customCreate}
+          updateAndMoveCard={customUpdateAndMove}
+        />
+      ) : null}
     </div>
   );
 }

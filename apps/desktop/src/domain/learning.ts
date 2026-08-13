@@ -32,7 +32,7 @@ export interface NewCardSource extends Omit<CardSource, "documentId"> {
  * `mediaId`; a media row belongs to the saved card that references it.
  * `cardId` is nullable while the media is staged under a draft.
  */
-export type CardMediaSourceType = "file" | "clipboard" | "pixabay";
+export type CardMediaSourceType = "file" | "clipboard" | "web";
 
 export interface CardMedia {
   id: string;
@@ -40,7 +40,7 @@ export interface CardMedia {
   mimeType: string;
   relativePath: string;
   sourceType: CardMediaSourceType;
-  pixabayAttribution: string | null;
+  attribution: string | null;
   createdAt: string;
   updatedAt: string;
 }

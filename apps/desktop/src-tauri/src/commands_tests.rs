@@ -1,5 +1,7 @@
 use std::{
     fs,
+    io::{Read, Write},
+    net::TcpListener,
     path::Path,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -17,12 +19,14 @@ use tempfile::tempdir;
 
 use crate::commands::{
     discard_media_draft, download_drive_file_async, download_drive_file_async_guarded,
-    get_document_file_url, import_local_documents_for_test, local_review_clock, resolve_card_media,
-    scope_from_payload, stage_card_media, validate_import_paths, validate_read_page, IndexTask,
-    IndexWorkerPool, LibraryStore, StageCardMediaInput, StudyRatingPayload, INDEX_QUEUE_CAPACITY,
+    fetch_remote_image_preview, get_document_file_url, import_local_documents_for_test,
+    local_review_clock, resolve_card_media, resolve_staged_media, scope_from_payload, stage_card_media,
+    stage_remote_card_media, validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool,
+    LibraryStore, StageCardMediaInput, StudyRatingPayload, INDEX_QUEUE_CAPACITY,
 };
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
+use crate::media::{CardMediaStore, MEDIA_DIR_NAME};
 use crate::model::StudyScopePayload;
 
 #[test]
@@ -190,8 +194,9 @@ fn import_returns_pending_before_its_background_index_task_runs() {
     fs::write(&source, b"%PDF-1.4\npending\n").expect("write valid PDF");
     let (app, tasks) = app_with_controlled_indexer(&library_root);
 
-    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
-        .expect("import document without waiting for extraction");
+    let imported =
+        import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
+            .expect("import document without waiting for extraction");
 
     assert_eq!(imported[0].status, "processing");
     assert!(!imported[0].indexed);
@@ -285,8 +290,9 @@ fn a_rejected_index_schedule_leaves_the_document_durably_pending() {
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("build test application");
 
-    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
-        .expect("import document");
+    let imported =
+        import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
+            .expect("import document");
     let mut database = LibraryDatabase::open(&library_root).expect("open database");
 
     assert_eq!(imported[0].status, "processing");
@@ -371,8 +377,9 @@ fn import_recovers_an_existing_managed_pdf_without_a_database_row_and_indexes_it
     fs::copy(&source, &managed_path).expect("seed managed PDF without database record");
     let (app, tasks) = app_with_controlled_indexer(&library_root);
 
-    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
-        .expect("recover managed document");
+    let imported =
+        import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
+            .expect("recover managed document");
 
     assert_eq!(imported.len(), 1);
     assert_eq!(imported[0].status, "processing");
@@ -484,7 +491,8 @@ fn batch_import_removes_new_managed_files_when_the_database_batch_fails() {
         .install_insert_failure_for_test()
         .expect("install insert failure");
 
-    let result = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state());
+    let result =
+        import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state());
 
     assert!(result.is_err());
     assert!(crate::commands::list_documents(app.state())
@@ -530,9 +538,11 @@ fn import_rejects_missing_and_directory_paths() {
     let app = app_with_library(&library_root);
 
     for path in [missing, directory_pdf] {
-        assert!(
-            import_local_documents_for_test(vec![path.to_string_lossy().into_owned()], app.state()).is_err()
-        );
+        assert!(import_local_documents_for_test(
+            vec![path.to_string_lossy().into_owned()],
+            app.state()
+        )
+        .is_err());
     }
 
     assert!(crate::commands::list_documents(app.state())
@@ -578,10 +588,11 @@ fn import_rejects_fifo_pdf_input() {
         .success());
     let app = app_with_library(&library_root);
 
-    assert!(
-        import_local_documents_for_test(vec![fifo_path.to_string_lossy().into_owned()], app.state())
-            .is_err()
-    );
+    assert!(import_local_documents_for_test(
+        vec![fifo_path.to_string_lossy().into_owned()],
+        app.state()
+    )
+    .is_err());
     assert!(crate::commands::list_documents(app.state())
         .expect("list documents")
         .is_empty());
@@ -673,8 +684,7 @@ fn rate_study_card_surfaces_stale_grant_message_without_writes() {
         kind: "deck".into(),
         deck_id: Some(card.deck_id.clone()),
     };
-    let session =
-        crate::commands::start_study_session(scope, app.state()).expect("start session");
+    let session = crate::commands::start_study_session(scope, app.state()).expect("start session");
     let grant = session.cards[0].clone();
 
     crate::commands::set_cards_suspended(vec![card.id.clone()], true, app.state())
@@ -724,8 +734,7 @@ fn rate_study_card_rejects_expired_session_without_writes() {
         kind: "deck".into(),
         deck_id: Some(card.deck_id.clone()),
     };
-    let session =
-        crate::commands::start_study_session(scope, app.state()).expect("start session");
+    let session = crate::commands::start_study_session(scope, app.state()).expect("start session");
     let grant = session.cards[0].clone();
 
     {
@@ -761,8 +770,8 @@ const MEDIA_PNG_BYTES: &[u8] = &[
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
     0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
     0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
-    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
-    0x42, 0x60, 0x82,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0x8B, 0x8F, 0xC4, 0x4E, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
 ];
 
 const MEDIA_JPEG_BYTES: &[u8] = &[
@@ -811,7 +820,7 @@ fn stage_card_media_command_stages_a_file_source_under_staging() {
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "file".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: Some(source.to_string_lossy().into_owned()),
             bytes_base64: None,
         },
@@ -835,7 +844,7 @@ fn stage_card_media_command_stages_a_file_source_under_staging() {
 }
 
 #[test]
-fn stage_card_media_command_stages_base64_for_clipboard_and_pixabay() {
+fn stage_card_media_command_stages_base64_for_clipboard_and_web() {
     let directory = tempdir().expect("temporary directory");
     let library_root = directory.path().join("library");
     let app = app_with_library(&library_root);
@@ -844,7 +853,7 @@ fn stage_card_media_command_stages_base64_for_clipboard_and_pixabay() {
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "clipboard".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
         },
@@ -852,27 +861,23 @@ fn stage_card_media_command_stages_base64_for_clipboard_and_pixabay() {
     )
     .expect("stage clipboard png");
 
-    let pixabay = stage_card_media(
+    let web = stage_card_media(
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
-            source_type: "pixabay".to_string(),
-            pixabay_attribution: Some("Pixabay user 'sample' / pixabay.com".to_string()),
+            source_type: "web".to_string(),
+            attribution: Some("Artist · CC BY".to_string()),
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_JPEG_BYTES)),
         },
         app.state(),
     )
-    .expect("stage pixabay jpeg");
+    .expect("stage web jpeg");
 
     assert_eq!(clipboard.source_type, "clipboard");
     assert_eq!(clipboard.mime_type, "image/png");
-    assert_eq!(pixabay.source_type, "pixabay");
-    assert_eq!(pixabay.mime_type, "image/jpeg");
-    assert_eq!(
-        pixabay.pixabay_attribution.as_deref(),
-        Some("Pixabay user 'sample' / pixabay.com")
-    );
-
+    assert_eq!(web.source_type, "web");
+    assert_eq!(web.mime_type, "image/jpeg");
+    assert_eq!(web.attribution.as_deref(), Some("Artist · CC BY"));
     let rows = media_rows(&library_root);
     assert_eq!(rows.len(), 2);
     for (_id, relative_path, card_id, draft_id) in rows {
@@ -880,6 +885,141 @@ fn stage_card_media_command_stages_base64_for_clipboard_and_pixabay() {
         assert_eq!(draft_id.as_deref(), Some("draft-1"));
         assert!(relative_path.starts_with("staging/draft-1/"));
     }
+}
+
+fn serve_preview_image() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind preview server");
+    let address = listener.local_addr().expect("preview server address");
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept preview request");
+        read_request_headers(&mut stream);
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\n\r\n",
+            MEDIA_PNG_BYTES.len()
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write preview headers");
+        stream
+            .write_all(MEDIA_PNG_BYTES)
+            .expect("write preview body");
+    });
+    format!("http://test.invalid:{}/preview", address.port())
+}
+
+fn read_request_headers(stream: &mut std::net::TcpStream) {
+    let mut request = Vec::new();
+    let mut byte = [0u8; 1];
+    while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+        stream.read_exact(&mut byte).expect("read preview request");
+        request.push(byte[0]);
+        assert!(
+            request.len() <= 64 * 1024,
+            "preview request headers too large"
+        );
+    }
+}
+
+#[test]
+fn fetch_remote_image_preview_command_returns_validated_payload() {
+    let payload = tauri::async_runtime::block_on(fetch_remote_image_preview(serve_preview_image()))
+        .expect("fetch preview");
+    assert_eq!(payload.mime_type, "image/png");
+    assert_eq!(base64_standard(MEDIA_PNG_BYTES), payload.data_base64);
+}
+
+#[test]
+fn library_store_open_cleans_stale_staged_media() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let database = Arc::new(Mutex::new(
+        LibraryDatabase::open(&library_root).expect("open database"),
+    ));
+    let media_store = CardMediaStore::new(Arc::clone(&database), library_root.join(MEDIA_DIR_NAME));
+    let staged = media_store
+        .stage_from_bytes("stale-draft", MEDIA_PNG_BYTES, "", "web", None)
+        .expect("stage media");
+    database
+        .lock()
+        .expect("database lock")
+        .connection
+        .execute(
+            "UPDATE card_media SET created_at = '2000-01-01T00:00:00.000Z' WHERE id = ?1",
+            rusqlite::params![staged.id],
+        )
+        .expect("age staged media");
+    drop(media_store);
+    drop(database);
+
+    let _store = LibraryStore::open(library_root.clone()).expect("reopen library");
+    assert!(media_rows(&library_root).is_empty());
+    assert!(!library_root
+        .join(MEDIA_DIR_NAME)
+        .join(staged.relative_path)
+        .exists());
+}
+
+#[test]
+fn stage_remote_card_media_command_stages_web_media_with_generic_attribution() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let staged = tauri::async_runtime::block_on(stage_remote_card_media(
+        "draft-web".to_string(),
+        serve_preview_image(),
+        Some("Openverse / CC0".to_string()),
+        app.state(),
+    ))
+    .expect("stage remote image");
+
+    assert_eq!(staged.source_type, "web");
+    assert_eq!(staged.attribution.as_deref(), Some("Openverse / CC0"));
+    assert_eq!(staged.mime_type, "image/png");
+    assert!(library_root
+        .join("card-media")
+        .join(&staged.relative_path)
+        .is_file());
+}
+
+#[test]
+fn stage_remote_card_media_command_validates_url_before_database_write() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let error = tauri::async_runtime::block_on(stage_remote_card_media(
+        "draft-web".to_string(),
+        "file:///tmp/image.png".to_string(),
+        Some("Openverse / CC0".to_string()),
+        app.state(),
+    ))
+    .expect_err("non-http source");
+    assert!(error.contains("http"));
+}
+
+#[test]
+fn resolve_staged_media_command_returns_an_absolute_owned_path() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let staged = tauri::async_runtime::block_on(stage_remote_card_media(
+        "draft-owned".to_string(),
+        serve_preview_image(),
+        None,
+        app.state(),
+    ))
+    .expect("stage media");
+
+    let resolved = resolve_staged_media(
+        "draft-owned".to_string(),
+        staged.id,
+        app.state(),
+    )
+    .expect("resolve staged media");
+
+    assert!(Path::new(&resolved).is_absolute());
+    assert!(Path::new(&resolved).is_file());
 }
 
 #[test]
@@ -893,7 +1033,7 @@ fn stage_card_media_command_rejects_invalid_combinations() {
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "file".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: None,
         },
@@ -906,7 +1046,7 @@ fn stage_card_media_command_rejects_invalid_combinations() {
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "clipboard".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: None,
         },
@@ -919,7 +1059,7 @@ fn stage_card_media_command_rejects_invalid_combinations() {
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "dropbox".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
         },
@@ -939,7 +1079,7 @@ fn discard_media_draft_command_removes_only_that_drafts_staging() {
             StageCardMediaInput {
                 draft_id: draft.to_string(),
                 source_type: "clipboard".to_string(),
-                pixabay_attribution: None,
+                attribution: None,
                 file_path: None,
                 bytes_base64: Some(base64_standard(bytes)),
             },
@@ -951,7 +1091,7 @@ fn discard_media_draft_command_removes_only_that_drafts_staging() {
         StageCardMediaInput {
             draft_id: "draft-2".to_string(),
             source_type: "clipboard".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
         },
@@ -969,7 +1109,7 @@ fn discard_media_draft_command_removes_only_that_drafts_staging() {
 }
 
 #[test]
-fn resolve_card_media_command_returns_owned_media_relative_path() {
+fn resolve_card_media_command_returns_owned_media_absolute_path() {
     let directory = tempdir().expect("temporary directory");
     let library_root = directory.path().join("library");
     let app = app_with_library(&library_root);
@@ -980,7 +1120,7 @@ fn resolve_card_media_command_returns_owned_media_relative_path() {
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "clipboard".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
         },
@@ -1016,13 +1156,13 @@ fn resolve_card_media_command_returns_owned_media_relative_path() {
             .expect("promote");
     }
 
-    let relative = resolve_card_media("card-1".to_string(), staged.id.clone(), app.state())
+    let absolute = resolve_card_media("card-1".to_string(), staged.id.clone(), app.state())
         .expect("resolve owned media");
     assert!(
-        relative.starts_with("card-1/"),
-        "committed media resolves to a path under card-1/, got {relative}"
+        absolute.ends_with(&format!("card-1/{}.png", staged.id)),
+        "committed media resolves to the absolute file path, got {absolute}"
     );
-    assert!(library_root.join("card-media").join(&relative).is_file());
+    assert!(std::path::Path::new(&absolute).is_file());
 
     let non_owned = resolve_card_media("card-other".to_string(), staged.id.clone(), app.state());
     assert!(
@@ -1132,7 +1272,7 @@ fn update_card_command_removes_unreferenced_media_only_after_successful_save() {
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "clipboard".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
         },
@@ -1143,7 +1283,7 @@ fn update_card_command_removes_unreferenced_media_only_after_successful_save() {
         StageCardMediaInput {
             draft_id: "draft-2".to_string(),
             source_type: "clipboard".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_JPEG_BYTES)),
         },
@@ -1192,7 +1332,10 @@ fn update_card_command_removes_unreferenced_media_only_after_successful_save() {
         .join("card-media")
         .join(&card.id)
         .join(format!("{}.jpg", second.id));
-    assert!(second_file.is_file(), "second blob committed under the card");
+    assert!(
+        second_file.is_file(),
+        "second blob committed under the card"
+    );
     assert!(
         !first_file.exists(),
         "no-longer-referenced first blob must be removed after a successful save"
@@ -1227,6 +1370,82 @@ fn update_card_command_removes_unreferenced_media_only_after_successful_save() {
     assert_eq!(rows[0].0, second.id);
 }
 
+#[test]
+fn update_and_move_card_command_persists_docs_and_promotes_staged_media() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-edit".to_string(),
+            source_type: "web".to_string(),
+            attribution: Some("Artist · CC BY".to_string()),
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage web image for the back face");
+
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "What is ATP?".into(),
+            back: "Energy storage.".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: None,
+            back_doc: None,
+            media_draft_id: None,
+        },
+        app.state(),
+    )
+    .expect("create card");
+
+    let back_doc = image_doc(&staged.id, "cell diagram");
+    let updated = crate::commands::update_and_move_card(
+        crate::model::UpdateAndMoveCardPayload {
+            card_id: card.id.clone(),
+            front: "What is ATP?".into(),
+            back: "Cell diagram".into(),
+            tags: Vec::new(),
+            destination_deck_id: None,
+            front_language: None,
+            front_doc: None,
+            back_doc: Some(back_doc.clone()),
+            media_draft_id: Some("draft-edit".into()),
+        },
+        app.state(),
+    )
+    .expect("update and move with an imported image");
+
+    assert_eq!(updated.back_doc, Some(back_doc));
+    assert_eq!(updated.media.len(), 1, "imported image must be committed");
+    assert_eq!(updated.media[0].id, staged.id);
+    assert_eq!(
+        updated.media[0].card_id.as_deref(),
+        Some(card.id.as_str()),
+        "media row must be owned by the edited card"
+    );
+
+    let committed_file = library_root
+        .join("card-media")
+        .join(&card.id)
+        .join(format!("{}.png", staged.id));
+    assert!(
+        committed_file.is_file(),
+        "imported image file must move into card-media/<cardId>"
+    );
+
+    let rows = media_rows(&library_root);
+    assert_eq!(rows.len(), 1, "no staged rows may remain after promotion");
+    assert_eq!(rows[0].0, staged.id);
+    assert_eq!(rows[0].2.as_deref(), Some(card.id.as_str()));
+    assert_eq!(rows[0].3, None);
+}
+
 /// Seeds a trashed card whose committed media file lives on disk, returning
 /// `(card_id, media_file, media_id)`.
 fn seed_trashed_card_with_media(
@@ -1237,7 +1456,7 @@ fn seed_trashed_card_with_media(
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "clipboard".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
         },
@@ -1265,10 +1484,12 @@ fn seed_trashed_card_with_media(
         .join("card-media")
         .join(&card.id)
         .join(format!("{}.png", staged.id));
-    assert!(media_file.is_file(), "committed media file must exist on disk");
+    assert!(
+        media_file.is_file(),
+        "committed media file must exist on disk"
+    );
 
-    crate::commands::trash_cards(vec![card.id.clone()], app.state())
-        .expect("trash the card");
+    crate::commands::trash_cards(vec![card.id.clone()], app.state()).expect("trash the card");
     assert!(
         media_file.is_file(),
         "trashing a card must keep its media files for restore"
@@ -1287,7 +1508,7 @@ fn delete_card_command_removes_committed_media_files() {
         StageCardMediaInput {
             draft_id: "draft-1".to_string(),
             source_type: "clipboard".to_string(),
-            pixabay_attribution: None,
+            attribution: None,
             file_path: None,
             bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
         },
@@ -1313,7 +1534,10 @@ fn delete_card_command_removes_committed_media_files() {
         .join("card-media")
         .join(&card.id)
         .join(format!("{}.png", staged.id));
-    assert!(media_file.is_file(), "committed media file must exist on disk");
+    assert!(
+        media_file.is_file(),
+        "committed media file must exist on disk"
+    );
 
     crate::commands::delete_card(card.id.clone(), app.state()).expect("delete card");
 
@@ -1333,8 +1557,7 @@ fn delete_cards_permanently_command_removes_committed_media_files() {
     let directory = tempdir().expect("temporary directory");
     let library_root = directory.path().join("library");
     let app = app_with_library(&library_root);
-    let (card_id, media_file, media_id) =
-        seed_trashed_card_with_media(&library_root, &app);
+    let (card_id, media_file, media_id) = seed_trashed_card_with_media(&library_root, &app);
 
     crate::commands::delete_cards_permanently(vec![card_id.clone()], app.state())
         .expect("permanently delete trashed card");
@@ -1355,8 +1578,7 @@ fn empty_trash_command_removes_committed_media_files() {
     let directory = tempdir().expect("temporary directory");
     let library_root = directory.path().join("library");
     let app = app_with_library(&library_root);
-    let (_card_id, media_file, media_id) =
-        seed_trashed_card_with_media(&library_root, &app);
+    let (_card_id, media_file, media_id) = seed_trashed_card_with_media(&library_root, &app);
 
     crate::commands::empty_trash(app.state()).expect("empty trash");
 

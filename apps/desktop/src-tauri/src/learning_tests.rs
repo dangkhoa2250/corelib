@@ -690,7 +690,10 @@ fn update_and_move_card_is_atomic() {
             tags: vec!["energy".into()],
             destination_deck_id: Some(deck_chem.id.clone()),
             front_language: None,
-        })
+            front_doc_json: None,
+            back_doc_json: None,
+            media_draft_id: None,
+        }, None)
         .expect("update_and_move");
 
     assert_eq!(moved.front, "ATP updated");
@@ -718,7 +721,10 @@ fn update_and_move_card_is_atomic() {
             tags: vec![],
             destination_deck_id: None,
             front_language: None,
-        })
+            front_doc_json: None,
+            back_doc_json: None,
+            media_draft_id: None,
+        }, None)
         .expect("update only");
     assert_eq!(updated.front, "ATP v2");
     let deck_id_unchanged: String = db
@@ -740,7 +746,10 @@ fn update_and_move_card_is_atomic() {
             tags: vec![],
             destination_deck_id: Some(deck_chem.id.clone()),
             front_language: None,
-        })
+            front_doc_json: None,
+            back_doc_json: None,
+            media_draft_id: None,
+        }, None)
         .expect("same deck");
 
     // Atomicity: move to a non-existent deck must roll back the content edit.
@@ -760,7 +769,10 @@ fn update_and_move_card_is_atomic() {
         tags: vec!["ghost".into()],
         destination_deck_id: Some("nonexistent-deck".into()),
         front_language: None,
-    });
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None);
     assert!(failed.is_err());
 
     let front_after: String = db
@@ -782,7 +794,10 @@ fn update_and_move_card_is_atomic() {
         tags: vec![],
         destination_deck_id: Some(deck_bio.id.clone()),
         front_language: None,
-    })
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None)
     .expect("move back");
 
     db.trash_cards(std::slice::from_ref(&c1.id))
@@ -795,7 +810,10 @@ fn update_and_move_card_is_atomic() {
         tags: vec![],
         destination_deck_id: None,
         front_language: None,
-    });
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None);
     assert!(trashed_edit.is_err());
 }
 
@@ -1075,7 +1093,10 @@ fn invalid_language_codes_are_rejected() {
         tags: vec![],
         destination_deck_id: None,
         front_language: Some("invalid_lang".to_string()),
-    });
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None);
     assert!(failed_update_move.is_err());
 }
 
@@ -1288,6 +1309,98 @@ fn create_card_with_media_draft_promotes_only_referenced_staged_media() {
     assert_eq!(created.media.len(), 1);
     assert_eq!(created.media[0].id, referenced);
     assert_eq!(created.media[0].card_id.as_deref(), Some(created.id.as_str()));
+}
+
+#[test]
+fn update_and_move_card_with_docs_persists_docs_and_promotes_referenced_media() {
+    use crate::learning::UpdateAndMoveCard;
+    use std::sync::{Arc, Mutex};
+
+    let dir = TempDir::new().expect("temp dir");
+    let database = Arc::new(Mutex::new(
+        LibraryDatabase::open(dir.path()).expect("open db"),
+    ));
+    let media_root = dir.path().join(MEDIA_DIR_NAME);
+    let store = CardMediaStore::new(Arc::clone(&database), media_root.clone());
+
+    let referenced = store
+        .stage_from_bytes("draft-1", PNG_BYTES, "", "clipboard", None)
+        .expect("stage referenced png")
+        .id;
+    let unreferenced = store
+        .stage_from_bytes("draft-1", JPEG_BYTES, "", "clipboard", None)
+        .expect("stage unreferenced jpeg")
+        .id;
+
+    let mut db = database.lock().expect("lock db");
+    let created = db
+        .create_card(
+            NewCard {
+                deck_name: "Biology".into(),
+                front: "old front".into(),
+                back: "old back".into(),
+                source: None,
+                tags: Vec::new(),
+                front_language: None,
+                front_doc_json: None,
+                back_doc_json: None,
+                media_draft_id: None,
+            },
+            None,
+        )
+        .expect("create plain card");
+
+    let back_doc = image_doc(&referenced, "imported image");
+    let updated = db
+        .update_and_move_card(
+            UpdateAndMoveCard {
+                card_id: created.id.clone(),
+                front: "ignored front".into(),
+                back: "ignored back".into(),
+                tags: Vec::new(),
+                destination_deck_id: None,
+                front_language: None,
+                front_doc_json: Some(text_doc("new front")),
+                back_doc_json: Some(back_doc.clone()),
+                media_draft_id: Some("draft-1".into()),
+            },
+            Some(&media_root),
+        )
+        .expect("update and move with rich back doc");
+
+    assert_eq!(updated.front, "new front");
+    assert_eq!(updated.back, "imported image");
+    assert_eq!(updated.back_doc, Some(back_doc));
+    assert_eq!(updated.media.len(), 1);
+    assert_eq!(updated.media[0].id, referenced);
+    assert_eq!(updated.media[0].card_id.as_deref(), Some(created.id.as_str()));
+
+    let committed_file = media_root
+        .join(&created.id)
+        .join(format!("{referenced}.png"));
+    assert!(
+        committed_file.is_file(),
+        "referenced media must be committed under card-media/<cardId>"
+    );
+    let staged_file = media_root
+        .join("staging")
+        .join("draft-1")
+        .join(format!("{unreferenced}.jpg"));
+    assert!(
+        staged_file.is_file(),
+        "unreferenced media must stay staged under staging/draft-1"
+    );
+
+    let (card_id, draft_id): (Option<String>, Option<String>) = db
+        .connection
+        .query_row(
+            "SELECT card_id, draft_id FROM card_media WHERE id = ?1",
+            params![referenced],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("referenced row");
+    assert_eq!(card_id.as_deref(), Some(created.id.as_str()));
+    assert_eq!(draft_id, None);
 }
 
 #[test]

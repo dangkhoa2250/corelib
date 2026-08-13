@@ -11,7 +11,7 @@ use crate::model::{DocumentSummary, PageTagSummary};
 use uuid::Uuid;
 
 const DATABASE_FILE: &str = "library.sqlite3";
-const MIGRATIONS: [(&str, &str); 14] = [
+const MIGRATIONS: [(&str, &str); 15] = [
     (
         "0001_library",
         include_str!("../migrations/0001_library.sql"),
@@ -67,6 +67,10 @@ const MIGRATIONS: [(&str, &str); 14] = [
     (
         "0014_card_rich_content",
         include_str!("../migrations/0014_card_rich_content.sql"),
+    ),
+    (
+        "0015_generic_web_media",
+        include_str!("../migrations/0015_generic_web_media.sql"),
     ),
 ];
 const SUMMARY_COLUMNS: &str =

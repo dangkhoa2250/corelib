@@ -27,7 +27,7 @@ pub const STAGING_DIR_NAME: &str = "staging";
 pub const SUPPORTED_IMAGE_MIME: &[&str] = &["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 const MEDIA_COLUMNS: &str = "id, card_id, draft_id, mime_type, relative_path, source_type, \
-     pixabay_attribution, width, height, size_bytes, created_at, updated_at";
+     attribution, width, height, size_bytes, created_at, updated_at";
 
 /// Owns the `card_media` lifecycle on top of the shared library database.
 ///
@@ -75,8 +75,8 @@ impl CardMediaStore {
         self.stage_from_bytes(draft_id, &bytes, "", source_type, None)
     }
 
-    /// Stages a media blob from in-memory bytes (sourceType = "clipboard" or
-    /// "pixabay"). MIME is authoritative-sniffed from the bytes; the provided
+    /// Stages a media blob from in-memory bytes (sourceType = "clipboard",
+    /// "web"). MIME is authoritative-sniffed from the bytes; the provided
     /// `mime` is accepted as a fallback hint only when sniffing is inconclusive.
     pub fn stage_from_bytes(
         &self,
@@ -84,7 +84,7 @@ impl CardMediaStore {
         bytes: &[u8],
         mime: &str,
         source_type: &str,
-        pixabay_attribution: Option<&str>,
+        attribution: Option<&str>,
     ) -> Result<StagedMedia, String> {
         validate_non_empty(draft_id, "draft_id")?;
         validate_source_type(source_type)?;
@@ -106,7 +106,7 @@ impl CardMediaStore {
         };
         let ext = extension_for(&mime_type)
             .ok_or_else(|| format!("unsupported mime type: {mime_type}"))?;
-        let attribution = pixabay_attribution.map(|value| value.to_string());
+        let attribution = attribution.map(|value| value.to_string());
 
         let media_id = Uuid::new_v4().to_string();
         let filename = format!("{media_id}.{ext}");
@@ -128,7 +128,7 @@ impl CardMediaStore {
         let insert = db.connection.execute(
             "INSERT INTO card_media \
              (id, card_id, draft_id, mime_type, relative_path, source_type, \
-              pixabay_attribution, width, height, size_bytes, created_at, updated_at) \
+               attribution, width, height, size_bytes, created_at, updated_at) \
              VALUES (?1, NULL, ?2, ?3, ?4, ?5, ?6, NULL, NULL, ?7, ?8, ?8)",
             params![
                 media_id,
@@ -153,7 +153,7 @@ impl CardMediaStore {
             mime_type,
             relative_path,
             source_type: source_type.to_string(),
-            pixabay_attribution: attribution,
+             attribution,
             width: None,
             height: None,
             size_bytes,
@@ -528,7 +528,7 @@ fn media_from_row(row: &Row) -> rusqlite::Result<CardMediaPayload> {
         mime_type: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
         relative_path: row.get(4)?,
         source_type: row.get(5)?,
-        pixabay_attribution: row.get(6)?,
+        attribution: row.get(6)?,
         width: row.get(7)?,
         height: row.get(8)?,
         size_bytes: row.get(9)?,
@@ -539,9 +539,9 @@ fn media_from_row(row: &Row) -> rusqlite::Result<CardMediaPayload> {
 
 fn validate_source_type(source_type: &str) -> Result<(), String> {
     match source_type {
-        "file" | "clipboard" | "pixabay" => Ok(()),
+        "file" | "clipboard" | "web" => Ok(()),
         other => Err(format!(
-            "source_type must be one of file|clipboard|pixabay, got '{other}'"
+            "source_type must be one of file|clipboard|web, got '{other}'"
         )),
     }
 }
@@ -574,7 +574,7 @@ fn validate_single_component(value: &str, label: &str) -> Result<(), String> {
 
 /// Returns the canonical MIME type sniffed from magic bytes, or `None` if the
 /// bytes do not match any supported image format.
-fn sniff_mime(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn sniff_mime(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
         return Some("image/jpeg");
     }

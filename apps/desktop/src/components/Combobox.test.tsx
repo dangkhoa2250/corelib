@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test, vi } from "vitest";
 import { Combobox, type ComboboxOption } from "./Combobox";
 
 const options: ComboboxOption<string>[] = [
@@ -37,10 +37,6 @@ function ComboboxTest({
     />
   );
 }
-
-afterEach(() => {
-  document.body.innerHTML = "";
-});
 
 test("renders trigger with placeholder", () => {
   render(<ComboboxTest ariaLabel="Fruit picker" />);

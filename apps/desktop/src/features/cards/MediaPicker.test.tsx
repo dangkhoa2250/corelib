@@ -126,22 +126,29 @@ test("ignores a search resolution after the picker unmounts", async () => {
   expect(document.body).not.toHaveTextContent("After unmount");
 });
 
-test("routes composer and panel scrolling through ScrollArea with a 20px content inset", () => {
+test("keeps Deck/Front/Back and actions unscrolled, routing only the image picker through ScrollArea", () => {
   const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "MediaPicker.tsx"), "utf8");
   const composer = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardComposer.tsx"), "utf8");
   const panel = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardSidePanel.tsx"), "utf8");
-  const styles = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles/tokens.css"), "utf8");
+
+  // MediaPicker itself never scrolls internally; its host wraps it in a
+  // ScrollArea instead.
   expect(source).not.toContain("ScrollArea");
   expect(source).not.toMatch(/overflow[A-Za-z]*\s*:\s*(auto|scroll)/);
   expect(source).not.toContain("::-webkit-scrollbar");
+
+  // Composer (both the reader-selection "Create flashcard" flow and, via
+  // panel variant, the manual Add/Edit Card flow) scrolls only its image
+  // picker, with a content inset that clears the ScrollArea's floating thumb.
   expect(composer).toContain("<ScrollArea");
   expect(composer).toMatch(/paddingRight:\s*["']20px["']/);
   expect(composer).not.toMatch(/overflowY:\s*["']auto["']/);
-  expect(panel).toContain("<ScrollArea");
-  expect(panel).toContain("card-side-panel__form");
-  expect(styles).toMatch(/\.card-side-panel__form\s*\{[\s\S]*?padding-right:\s*24px;/);
-  const panelFormStyles = styles.match(/\.card-side-panel__form\s*\{([^}]*)\}/)?.[1] ?? "";
-  expect(panelFormStyles).not.toContain("overflow-y");
-  expect(styles).toContain(".card-side-panel__scroll-area");
   expect(composer).not.toContain("::-webkit-scrollbar-track");
+
+  // Add/Edit Card is a thin wrapper around CardComposer (same fields, same
+  // layout, same scrolling) — it must not re-implement any scroll/layout
+  // structure of its own, or the two can drift out of sync again.
+  expect(panel).toContain("<CardComposer");
+  expect(panel).not.toContain("ScrollArea");
+  expect(panel).not.toMatch(/overflow[A-Za-z]*\s*:\s*(auto|scroll)/);
 });

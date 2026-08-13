@@ -32,6 +32,25 @@ test("opens from an icon trigger and closes after selection", async () => {
   expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 });
 
+test("icon-only items keep their accessible name but hide the text label", async () => {
+  const user = userEvent.setup();
+  render(
+    <CompactToolbarMenu
+      label="Alignment"
+      icon={<span>⇦</span>}
+      items={[
+        { ...item("Align left"), icon: <span>L</span>, iconOnly: true, role: "menuitemradio" },
+        { ...item("Align center"), icon: <span>C</span>, iconOnly: true, role: "menuitemradio" },
+      ]}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "Alignment" }));
+  const left = screen.getByRole("menuitemradio", { name: "Align left" });
+  expect(left).toHaveClass("card-rich-text-editor__toolbar-menu-item--icon-only");
+  expect(left.querySelector("span")?.textContent).toBe("L");
+  expect(left.textContent).toBe("L");
+});
+
 test("opening one menu closes another", async () => {
   const user = userEvent.setup();
   render(

@@ -70,7 +70,7 @@ export function ReviewSessionSurface({
   }, [card.id, refreshCounter]);
 
   // Resolve every image mediaId referenced by the card's rich documents into a
-  // Tauri asset URL (relative path from resolve_card_media + convertFileSrc).
+  // Tauri asset URL (absolute path from resolve_card_media + convertFileSrc).
   useEffect(() => {
     let cancelled = false;
     const mediaIds = new Set<string>();

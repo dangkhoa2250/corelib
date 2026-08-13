@@ -964,7 +964,7 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
 
   // Click Save/Add Card button in form
   const panel = screen.getByRole("dialog", { name: "Add Card" });
-  await user.click(within(panel).getByRole("button", { name: "Add Card" }));
+  await user.click(within(panel).getByRole("button", { name: "Save" }));
 
   const createInput = vi.mocked(createCard).mock.calls[0][0];
   expect(createInput).toMatchObject({

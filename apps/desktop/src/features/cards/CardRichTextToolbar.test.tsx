@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { useEditor, EditorContent } from "@tiptap/react";
@@ -139,11 +139,13 @@ test("insert image button invokes onInsertImage", async () => {
   expect(onInsertImage).toHaveBeenCalled();
 });
 
-test("preserves native color input mousedown while buttons prevent it", () => {
+test("color trigger opens the native color picker", async () => {
+  const user = userEvent.setup();
   render(<Harness onInsertImage={vi.fn()} />);
-  const colorInput = screen.getByLabelText("Text color");
-  const trigger = screen.getByRole("button", { name: "Text formatting" });
+  const picker = screen.getByLabelText("Text color picker") as HTMLInputElement;
+  const clickSpy = vi.spyOn(picker, "click").mockImplementation(() => {});
 
-  expect(fireEvent.mouseDown(colorInput)).toBe(true);
-  expect(fireEvent.mouseDown(trigger)).toBe(false);
+  await user.click(screen.getByRole("button", { name: "Text color" }));
+
+  expect(clickSpy).toHaveBeenCalled();
 });

@@ -1,3 +1,5 @@
+import memoraCardIcon from "../assets/memora/memora-card-icon.png";
+
 interface IconProps {
   size?: number;
 }
@@ -38,12 +40,28 @@ export function IconLibrary({ size = 16 }: IconProps) {
   );
 }
 
-export function IconMemora({ size = 16 }: IconProps) {
+export function IconMemora({ size = 18 }: IconProps) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "block",
+        height: size,
+        width: size,
+        backgroundColor: "currentColor",
+        filter: "brightness(1.25) contrast(1.12)",
+        mask: `url(${memoraCardIcon}) center / 104% no-repeat`,
+        WebkitMask: `url(${memoraCardIcon}) center / 104% no-repeat`,
+      }}
+    />
+  );
+}
+
+export function IconBrain({ size = 16 }: IconProps) {
   return (
     <svg {...baseProps} height={size} width={size}>
-      <polygon points="12 3 3 8 12 13 21 8 12 3" />
-      <polyline points="3 16 12 21 21 16" />
-      <polyline points="3 12 12 17 21 12" />
+      <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
+      <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
     </svg>
   );
 }

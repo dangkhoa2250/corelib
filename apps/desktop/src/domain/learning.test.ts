@@ -127,8 +127,8 @@ test("LearningCard accepts optional rich documents and media", () => {
     cardId: null,
     mimeType: "image/png",
     relativePath: "card-media/staging/draft-1/media-1.png",
-    sourceType: "pixabay",
-    pixabayAttribution: "Photo by author on Pixabay",
+    sourceType: "web",
+    attribution: "Photo by author · CC BY",
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",
   };
@@ -151,7 +151,7 @@ test("CardMedia supports all configured source types and nullable attribution", 
     mimeType: "image/jpeg",
     relativePath: "card-media/card-1/media-2.jpg",
     sourceType: "file",
-    pixabayAttribution: null,
+    attribution: null,
     createdAt: "2026-08-01T00:00:00Z",
     updatedAt: "2026-08-01T00:00:00Z",
   };
@@ -159,7 +159,7 @@ test("CardMedia supports all configured source types and nullable attribution", 
 
   expect(fileMedia.sourceType).toBe("file");
   expect(clipboardMedia.sourceType).toBe("clipboard");
-  expect(fileMedia.pixabayAttribution).toBeNull();
+  expect(fileMedia.attribution).toBeNull();
 });
 
 test("CreateCardInput accepts optional rich documents and media draft id", () => {

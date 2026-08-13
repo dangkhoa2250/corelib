@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/core";
 import {
@@ -8,13 +8,19 @@ import {
   IconAlignRight,
   IconArrowBackUp,
   IconArrowForwardUp,
+  IconBold,
+  IconLanguage,
+  IconItalic,
   IconList,
   IconListNumbers,
   IconPhoto,
   IconPilcrow,
+  IconStrikethrough,
   IconTypography,
+  IconUnderline,
 } from "@tabler/icons-react";
 import { CompactToolbarMenu } from "./CompactToolbarMenu";
+import { ToolbarColorControl } from "./ToolbarColorControl";
 
 interface ToolbarState {
   canUndo: boolean;
@@ -33,6 +39,8 @@ interface ToolbarState {
   alignCenter: boolean;
   alignRight: boolean;
   alignJustify: boolean;
+  textColor: string;
+  highlightColor: string;
 }
 
 const IDLE_TOOLBAR: ToolbarState = {
@@ -52,6 +60,8 @@ const IDLE_TOOLBAR: ToolbarState = {
   alignCenter: false,
   alignRight: false,
   alignJustify: false,
+  textColor: "var(--text-primary)",
+  highlightColor: "#ffff00",
 };
 
 function ToolbarButton({
@@ -66,7 +76,7 @@ function ToolbarButton({
   active?: boolean;
   disabled?: boolean;
   iconOnly?: boolean;
-  onClick: () => void;
+  onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   children: ReactNode;
 }) {
   const className = [
@@ -94,12 +104,14 @@ export interface CardRichTextToolbarProps {
   editor: Editor | null;
   disabled?: boolean;
   onInsertImage: () => void;
+  onTranslateLanguages?: () => void;
 }
 
 export function CardRichTextToolbar({
   editor,
   disabled = false,
   onInsertImage,
+  onTranslateLanguages,
 }: CardRichTextToolbarProps) {
   const toolbar =
     useEditorState({
@@ -123,6 +135,12 @@ export function CardRichTextToolbar({
           alignCenter: current.isActive({ textAlign: "center" }),
           alignRight: current.isActive({ textAlign: "right" }),
           alignJustify: current.isActive({ textAlign: "justify" }),
+          textColor: typeof current.getAttributes("textStyle").color === "string"
+            ? current.getAttributes("textStyle").color
+            : "var(--text-primary)",
+          highlightColor: typeof current.getAttributes("highlight").color === "string"
+            ? current.getAttributes("highlight").color
+            : "#ffff00",
         };
       },
     }) ?? IDLE_TOOLBAR;
@@ -165,10 +183,10 @@ export function CardRichTextToolbar({
         disabled={isDisabled}
         icon={<IconTypography size={14} stroke={1.5} />}
         items={[
-          { label: "Bold", active: toolbar.bold, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleBold().run() },
-          { label: "Italic", active: toolbar.italic, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleItalic().run() },
-          { label: "Underline", active: toolbar.underline, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleUnderline().run() },
-          { label: "Strikethrough", active: toolbar.strike, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleStrike().run() },
+          { label: "Bold", icon: <IconBold size={13} stroke={1.5} />, iconOnly: true, active: toolbar.bold, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleBold().run() },
+          { label: "Italic", icon: <IconItalic size={13} stroke={1.5} />, iconOnly: true, active: toolbar.italic, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleItalic().run() },
+          { label: "Underline", icon: <IconUnderline size={13} stroke={1.5} />, iconOnly: true, active: toolbar.underline, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleUnderline().run() },
+          { label: "Strikethrough", icon: <IconStrikethrough size={13} stroke={1.5} />, iconOnly: true, active: toolbar.strike, role: "menuitemcheckbox", onSelect: () => editor?.chain().focus().toggleStrike().run() },
         ]}
         label="Text formatting"
       />
@@ -199,10 +217,10 @@ export function CardRichTextToolbar({
         disabled={isDisabled}
         icon={<IconAlignLeft size={14} stroke={1.5} />}
         items={[
-          { label: "Align left", active: toolbar.alignLeft, icon: <IconAlignLeft size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("left") },
-          { label: "Align center", active: toolbar.alignCenter, icon: <IconAlignCenter size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("center") },
-          { label: "Align right", active: toolbar.alignRight, icon: <IconAlignRight size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("right") },
-          { label: "Align justify", active: toolbar.alignJustify, icon: <IconAlignJustified size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("justify") },
+          { label: "Align left", iconOnly: true, active: toolbar.alignLeft, icon: <IconAlignLeft size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("left") },
+          { label: "Align center", iconOnly: true, active: toolbar.alignCenter, icon: <IconAlignCenter size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("center") },
+          { label: "Align right", iconOnly: true, active: toolbar.alignRight, icon: <IconAlignRight size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("right") },
+          { label: "Align justify", iconOnly: true, active: toolbar.alignJustify, icon: <IconAlignJustified size={13} stroke={1.5} />, role: "menuitemradio", onSelect: () => setAlign("justify") },
         ]}
         label="Alignment"
         layout="horizontal"
@@ -210,30 +228,20 @@ export function CardRichTextToolbar({
 
       <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
 
-      <label className="card-rich-text-editor__color-control">
-        <span className="card-rich-text-editor__sr-only">Text color</span>
-        <input
-          aria-label="Text color"
-          disabled={isDisabled}
-          onChange={(event) => {
-            editor?.chain().focus().setColor(event.target.value).run();
-          }}
-          type="color"
-          value="#000000"
-        />
-      </label>
-      <label className="card-rich-text-editor__color-control">
-        <span className="card-rich-text-editor__sr-only">Highlight color</span>
-        <input
-          aria-label="Highlight color"
-          disabled={isDisabled}
-          onChange={(event) => {
-            editor?.chain().focus().setHighlight({ color: event.target.value }).run();
-          }}
-          type="color"
-          value="#ffff00"
-        />
-      </label>
+      <ToolbarColorControl
+        label="Text color"
+        variant="text"
+        value={toolbar.textColor}
+        disabled={isDisabled}
+        onChange={(color) => editor?.chain().focus().setColor(color).run()}
+      />
+      <ToolbarColorControl
+        label="Highlight color"
+        variant="highlight"
+        value={toolbar.highlightColor}
+        disabled={isDisabled}
+        onChange={(color) => editor?.chain().focus().setHighlight({ color }).run()}
+      />
 
       <span className="card-rich-text-editor__toolbar-separator" aria-hidden="true" />
 
@@ -245,6 +253,16 @@ export function CardRichTextToolbar({
       >
         <IconPhoto size={14} stroke={1.5} />
       </ToolbarButton>
+      {onTranslateLanguages ? (
+        <ToolbarButton
+          disabled={isDisabled}
+          iconOnly
+          label="Translate languages"
+          onClick={() => onTranslateLanguages()}
+        >
+          <IconLanguage size={14} stroke={1.5} />
+        </ToolbarButton>
+      ) : null}
       <ToolbarButton
         disabled={isDisabled}
         label="Clear formatting"

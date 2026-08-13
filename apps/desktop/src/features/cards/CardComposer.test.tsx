@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 
@@ -211,7 +211,7 @@ test("auto-translates the selected text into the back when the composer opens", 
 
   // The translate call receives the plain text derived from the front document and detected source language.
   await waitFor(() => {
-    expect(onTranslate).toHaveBeenCalledWith(draft.quote, expect.anything());
+    expect(onTranslate).toHaveBeenCalledWith(draft.quote, expect.anything(), null);
   });
   const back = await waitFor(() => {
     const element = editor("Back");
@@ -220,6 +220,81 @@ test("auto-translates the selected text into the back when the composer opens", 
   });
   // An empty back is replaced by a single new paragraph.
   expect(back.querySelectorAll("p")).toHaveLength(1);
+});
+
+test("deleting the front text does not re-trigger auto-translate with an unknown language", async () => {
+  const onTranslate = vi.fn().mockResolvedValue("Bản dịch");
+  const { user } = renderComposer({ onTranslate });
+
+  await waitFor(() => {
+    expect(onTranslate).toHaveBeenCalledTimes(1);
+  });
+  const front = editor("Front");
+  await user.click(front);
+  await user.keyboard("{Control>}a{/Control}");
+  await user.keyboard("{Backspace}");
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  expect(onTranslate).toHaveBeenCalledTimes(1);
+  expect(onTranslate).not.toHaveBeenCalledWith(draft.quote, null, expect.anything());
+});
+
+test("does not auto-translate text whose language cannot be detected", async () => {
+  const onTranslate = vi.fn().mockResolvedValue("X");
+  renderComposer({
+    draft: { ...draft, quote: "●●●●●●" },
+    onTranslate,
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  expect(onTranslate).not.toHaveBeenCalled();
+});
+
+test("replaces the front language field with a translate languages picker", async () => {
+  const { user } = renderComposer({ onTranslate: vi.fn().mockResolvedValue("X") });
+
+  expect(screen.queryByText("Front Language")).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Translate languages" }));
+  const dialog = await screen.findByRole("dialog", { name: "Translation languages" });
+  expect(within(dialog).getByRole("combobox", { name: "Source language" })).toBeInTheDocument();
+  expect(within(dialog).getByRole("combobox", { name: "Target language" })).toBeInTheDocument();
+
+  await user.click(within(dialog).getByRole("button", { name: "Swap languages" }));
+  expect(within(dialog).getByRole("combobox", { name: "Target language" })).toHaveTextContent("English");
+});
+
+test("choosing a target language re-translates the back", async () => {
+  const onTranslate = vi.fn()
+    .mockResolvedValueOnce("Bản dịch mặc định")
+    .mockResolvedValueOnce("日本語の翻訳");
+  const { user } = renderComposer({ onTranslate });
+  await waitFor(() => {
+    expect(editor("Back")).toHaveTextContent("Bản dịch mặc định");
+  });
+
+  await user.click(screen.getByRole("button", { name: "Translate languages" }));
+  const dialog = await screen.findByRole("dialog", { name: "Translation languages" });
+  await user.click(within(dialog).getByRole("combobox", { name: "Target language" }));
+  await user.click(await screen.findByRole("option", { name: "Japanese" }));
+
+  await waitFor(() => {
+    expect(onTranslate).toHaveBeenLastCalledWith(draft.quote, expect.anything(), "ja");
+  });
+  await waitFor(() => {
+    expect(editor("Back")).toHaveTextContent("日本語の翻訳");
+  });
+});
+
+test("closes the language picker when another toolbar control is used", async () => {
+  const { user } = renderComposer({ onTranslate: vi.fn().mockResolvedValue("X") });
+
+  await user.click(screen.getByRole("button", { name: "Translate languages" }));
+  expect(await screen.findByRole("dialog", { name: "Translation languages" })).toBeInTheDocument();
+
+  await user.click(screen.getByRole("button", { name: "Clear formatting" }));
+
+  expect(screen.queryByRole("dialog", { name: "Translation languages" })).not.toBeInTheDocument();
 });
 
 test("inserts the translation at the current back selection without losing existing content", async () => {
@@ -240,7 +315,7 @@ test("inserts the translation at the current back selection without losing exist
 
   await user.click(screen.getByRole("button", { name: "Translate" }));
 
-  expect(onTranslate).toHaveBeenCalledWith(draft.quote, expect.anything());
+  expect(onTranslate).toHaveBeenCalledWith(draft.quote, expect.anything(), null);
   await waitFor(() => {
     expect(back).toHaveTextContent("XHello world");
   });
@@ -262,7 +337,7 @@ test("re-translates the back when a new selection replaces the front while open"
   view.rerender(<CardComposer {...props} draft={updatedDraft} />);
 
   await waitFor(() => {
-    expect(onTranslate).toHaveBeenLastCalledWith("A basis spans the space.", expect.anything());
+    expect(onTranslate).toHaveBeenLastCalledWith("A basis spans the space.", expect.anything(), null);
   });
   await waitFor(() => {
     expect(editor("Front")).toHaveTextContent("A basis spans the space.");
@@ -291,7 +366,7 @@ test("keeps user edits to the back when a newer selection triggers auto-translat
   view.rerender(<CardComposer {...props} draft={updatedDraft} />);
 
   await waitFor(() => {
-    expect(onTranslate).toHaveBeenLastCalledWith("A basis spans the space.", expect.anything());
+    expect(onTranslate).toHaveBeenLastCalledWith("A basis spans the space.", expect.anything(), null);
   });
   expect(editor("Back")).toHaveTextContent("Ghi chú của tôi");
 });
@@ -671,6 +746,26 @@ test("opens the keyless Images picker and auto-searches the front text", async (
   await user.click(screen.getByRole("button", { name: "Images" }));
   await waitFor(() => expect(searchMultiSourceImages).toHaveBeenCalledWith(draft.quote, 1));
   expect(await screen.findByRole("button", { name: "Vector" })).toBeInTheDocument();
+});
+
+test("closes the image picker when a new selection replaces the front", async () => {
+  const searchMultiSourceImages = vi.fn().mockResolvedValue({
+    results: [{ id: "wiki-1", source: "wikimedia", title: "Vector", previewUrl: "preview", imageUrl: "full", sourceUrl: "source", attribution: "Ada", license: "CC BY", width: 10, height: 10 }],
+    warnings: [],
+    hasMore: false,
+  });
+  const { props, view, user } = renderComposer({ searchMultiSourceImages });
+
+  await user.click(screen.getByRole("button", { name: "Images" }));
+  expect(await screen.findByRole("button", { name: "Vector" })).toBeInTheDocument();
+
+  const updatedDraft: NewCardSource = { ...draft, quote: "A basis spans the space." };
+  view.rerender(<CardComposer {...props} draft={updatedDraft} />);
+
+  await waitFor(() => {
+    expect(screen.queryByRole("button", { name: "Vector" })).not.toBeInTheDocument();
+  });
+  expect(screen.getByRole("button", { name: "Images" })).toBeInTheDocument();
 });
 
 test("stages a remote result and inserts it into the back face", async () => {

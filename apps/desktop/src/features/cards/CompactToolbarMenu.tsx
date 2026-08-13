@@ -4,6 +4,8 @@ import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 export interface CompactToolbarMenuItem {
   label: string;
   icon?: ReactNode;
+  /** Renders the icon alone; the label stays available as the accessible name. */
+  iconOnly?: boolean;
   active: boolean;
   disabled?: boolean;
   role?: "menuitemcheckbox" | "menuitemradio";
@@ -189,9 +191,11 @@ export function CompactToolbarMenu({
                 aria-checked={role === "menuitem" ? undefined : item.active}
                 aria-label={item.label}
                 className={
-                  item.active
-                    ? "card-rich-text-editor__toolbar-menu-item is-active"
-                    : "card-rich-text-editor__toolbar-menu-item"
+                  [
+                    "card-rich-text-editor__toolbar-menu-item",
+                    item.iconOnly ? "card-rich-text-editor__toolbar-menu-item--icon-only" : "",
+                    item.active ? "is-active" : "",
+                  ].filter(Boolean).join(" ")
                 }
                 disabled={item.disabled}
                 key={item.label}
@@ -205,7 +209,7 @@ export function CompactToolbarMenu({
                 type="button"
               >
                 {item.icon ?? null}
-                <span>{item.label}</span>
+                {item.iconOnly ? null : <span>{item.label}</span>}
               </button>
             );
           })}

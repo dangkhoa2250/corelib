@@ -949,7 +949,7 @@ fn card_media_in_tx(
 ) -> rusqlite::Result<Vec<CardMediaPayload>> {
     let mut stmt = tx.prepare(
         "SELECT id, card_id, draft_id, mime_type, relative_path, source_type, \
-         pixabay_attribution, width, height, size_bytes, created_at, updated_at \
+         attribution, width, height, size_bytes, created_at, updated_at \
          FROM card_media WHERE card_id = ?1 ORDER BY created_at, id",
     )?;
     let rows = stmt.query_map(params![card_id], |r| {
@@ -960,7 +960,7 @@ fn card_media_in_tx(
             mime_type: r.get(3)?,
             relative_path: r.get(4)?,
             source_type: r.get(5)?,
-            pixabay_attribution: r.get(6)?,
+            attribution: r.get(6)?,
             width: r.get(7)?,
             height: r.get(8)?,
             size_bytes: r.get(9)?,

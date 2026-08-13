@@ -216,7 +216,7 @@ describe("CardBrowser component", () => {
     expect(screen.getByRole("dialog", { name: "Edit Card" })).toBeInTheDocument();
     expect(editor("Front")).toHaveTextContent("ATP front");
 
-    fireEvent.click(screen.getByText("✕"));
+    fireEvent.click(screen.getByRole("button", { name: "Close composer" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
