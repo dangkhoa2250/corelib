@@ -608,7 +608,10 @@ fn extension_for(mime: &str) -> Option<&'static str> {
 /// traversal, drive prefix, or root components, returning the normalized path.
 fn validate_relative_path(relative_path: &str) -> Result<PathBuf, String> {
     let path = Path::new(relative_path);
-    if path.is_absolute() {
+    // A rooted path (including prefixless Unix-style roots like `/etc/passwd`,
+    // which Windows does not report as `is_absolute`) must be rejected here so
+    // it cannot be joined onto the media root or folded into the traversal case.
+    if path.is_absolute() || path.has_root() {
         return Err(format!(
             "relative_path must not be absolute: '{relative_path}'"
         ));

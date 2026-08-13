@@ -1159,7 +1159,7 @@ fn resolve_card_media_command_returns_owned_media_absolute_path() {
     let absolute = resolve_card_media("card-1".to_string(), staged.id.clone(), app.state())
         .expect("resolve owned media");
     assert!(
-        absolute.ends_with(&format!("card-1/{}.png", staged.id)),
+        Path::new(&absolute).ends_with(Path::new("card-1").join(format!("{}.png", staged.id))),
         "committed media resolves to the absolute file path, got {absolute}"
     );
     assert!(std::path::Path::new(&absolute).is_file());
