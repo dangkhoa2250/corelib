@@ -1,0 +1,327 @@
+.card-rich-text-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+
+.card-rich-text-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+}
+
+.card-rich-text-editor__toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 21px;
+  height: 23px;
+  padding: 0 3px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.card-rich-text-editor__toolbar-button--icon {
+  width: 21px;
+  padding: 0;
+}
+
+.card-rich-text-editor__toolbar-button:hover:not(:disabled) {
+  background: var(--interactive-hover);
+  color: var(--text-primary);
+}
+
+.card-rich-text-editor__toolbar-button.is-active {
+  color: var(--link);
+}
+
+.card-rich-text-editor__toolbar-button:disabled,
+.card-rich-text-editor__toolbar-button:disabled:hover {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+.card-rich-text-editor__toolbar-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.card-rich-text-editor__toolbar-separator {
+  width: 1px;
+  height: 14px;
+  margin: 0 1px;
+  background: var(--border-subtle);
+}
+
+.card-rich-text-editor__color-control-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.card-rich-text-editor__color-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 21px;
+  height: 23px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.card-rich-text-editor__color-trigger:hover:not(:disabled) {
+  background: var(--interactive-hover);
+}
+
+.card-rich-text-editor__color-trigger:disabled {
+  cursor: not-allowed;
+}
+
+.card-rich-text-editor__color-native-input {
+  position: absolute;
+  /* Cover the trigger so WebKit anchors the native picker right below it. */
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.card-rich-text-editor__color-trigger-swatch {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+}
+
+.card-rich-text-editor__color-glyph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.card-rich-text-editor__color-glyph-bar {
+  width: 100%;
+  height: 2px;
+  border-radius: 1px;
+}
+
+.card-rich-text-editor__toolbar-menu-root {
+  position: relative;
+  display: inline-flex;
+}
+
+.card-rich-text-editor__toolbar-menu-root .card-rich-text-editor__toolbar-button {
+  width: 21px;
+  padding: 0;
+}
+
+.card-rich-text-editor__toolbar-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 3px);
+  left: 0;
+  display: grid;
+  min-width: max-content;
+  padding: 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--window-bg);
+  box-shadow: var(--shadow-md);
+}
+
+.card-rich-text-editor__toolbar-menu--horizontal {
+  grid-auto-flow: column;
+}
+
+.card-composer__form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.card-composer__face-row {
+  display: grid;
+  gap: 7px;
+}
+
+/* The create-flashcard modal stretches its faces to fill the dialog so the
+   rows expand instead of leaving large empty margins. */
+.card-composer--modal .card-composer__form {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-composer--modal .card-composer__form-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.card-composer--modal .card-composer__face-row {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.card-composer--modal .card-composer__face-row > .card-rich-text-editor {
+  flex: 1 1 0;
+}
+
+.card-rich-text-editor__toolbar-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 23px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--text-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.card-rich-text-editor__toolbar-menu-item--icon-only {
+  justify-content: center;
+  min-width: 26px;
+  padding: 0 8px;
+}
+
+.card-rich-text-editor__toolbar-menu-item:hover:not(:disabled),
+.card-rich-text-editor__toolbar-menu-item:focus-visible {
+  background: var(--interactive-hover);
+}
+
+.card-rich-text-editor__toolbar-menu-item.is-active {
+  background: var(--interactive-selected);
+}
+
+.card-rich-text-editor__toolbar-menu-item:disabled {
+  color: var(--text-disabled);
+  cursor: not-allowed;
+}
+
+/* ScrollArea's overlay thumb needs a clear right-side gutter in WKWebView. */
+.card-rich-text-editor__scroll-area {
+  flex: 1;
+  min-height: 140px;
+}
+
+.card-rich-text-editor__scroll-content {
+  box-sizing: border-box;
+  min-height: 100%;
+  padding-top: 10px;
+  padding-left: 12px;
+  padding-bottom: 26px;
+}
+
+.card-rich-text-editor .tiptap {
+  min-height: 120px;
+  outline: none;
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.card-rich-text-editor .tiptap p {
+  margin: 0 0 8px;
+}
+
+.card-rich-text-editor .tiptap h1,
+.card-rich-text-editor .tiptap h2,
+.card-rich-text-editor .tiptap h3 {
+  margin: 0 0 8px;
+  line-height: 1.25;
+}
+
+.card-rich-text-editor .tiptap ul,
+.card-rich-text-editor .tiptap ol {
+  margin: 0 0 8px;
+  padding-left: 22px;
+}
+
+.card-rich-text-editor__image {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  margin: 4px 0;
+  vertical-align: top;
+}
+
+.card-rich-text-editor__image.is-selected {
+  outline: 2px solid var(--link);
+  border-radius: 4px;
+}
+
+.card-rich-text-editor__image img {
+  display: block;
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+.card-rich-text-editor__resize-handle {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border: 2px solid var(--panel-bg);
+  border-radius: 50%;
+  background: var(--link);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.card-rich-text-editor__error {
+  flex-shrink: 0;
+  margin: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: var(--color-danger-text-strong);
+  background: var(--color-danger-bg-soft);
+  font-size: 13px;
+}
+
+.card-rich-text-editor__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

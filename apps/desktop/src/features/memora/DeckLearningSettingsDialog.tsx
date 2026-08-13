@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 
+import { Button } from "../../components/Button";
 import type { DeckLearningSettings } from "../../domain/learning";
 
 interface DeckLearningSettingsDialogProps {
@@ -92,17 +93,16 @@ export function DeckLearningSettingsDialog({ deckName, settings, onSave, onCance
         </label>
 
         <div className="deck-learning-dialog__actions">
-          <button disabled={!canSave} onClick={() => void handleSave()} type="button">
+          <Button disabled={!canSave} onClick={() => void handleSave()} variant="primary">
             {saving ? "Saving…" : "Save"}
-          </button>
-          <button
-            className="deck-learning-dialog__secondary"
+          </Button>
+          <Button
             disabled={saving}
             onClick={onCancel}
-            type="button"
+            variant="secondary"
           >
             Cancel
-          </button>
+          </Button>
         </div>
 
         {error ? (

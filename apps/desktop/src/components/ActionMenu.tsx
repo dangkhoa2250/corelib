@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Button } from "./Button";
 
 export interface ActionMenuItem {
   label: string;
@@ -30,7 +31,7 @@ export function ActionMenu({ label, items, triggerLabel, disabled = false, class
 
   return (
     <div className={["action-menu", className].filter(Boolean).join(" ")} ref={menuRef}>
-      <button
+      <Button
         aria-expanded={open}
         aria-haspopup="menu"
         aria-label={label}
@@ -40,10 +41,10 @@ export function ActionMenu({ label, items, triggerLabel, disabled = false, class
           event.stopPropagation();
           setOpen((current) => !current);
         }}
-        type="button"
+        variant="secondary"
       >
         {triggerLabel ?? label}
-      </button>
+      </Button>
       {open ? (
         <div className="action-menu__popover" role="menu">
           {items.map((item) => (

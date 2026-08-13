@@ -197,7 +197,12 @@ interface AiApi {
   clearApiKey: (provider: AiProviderId) => Promise<void>;
   listModels: (provider: AiProviderId) => Promise<AiModel[]>;
   appleTranslationAvailable: () => Promise<boolean>;
-  translate: (engineId: TranslationEngineId, text: string, targetLanguage: string) => Promise<{ translation: string }>;
+  translate: (
+    engineId: TranslationEngineId,
+    text: string,
+    targetLanguage: string,
+    sourceLanguage?: string | null,
+  ) => Promise<{ translation: string }>;
 }
 
 const nativeAiApi: AiApi = {
@@ -470,14 +475,15 @@ export function App({
     setComposerSource(null);
   }, []);
 
-  const handleTranslate = useCallback(async (text: string) => {
+  const handleTranslate = useCallback(async (text: string, sourceLanguage?: string | null, targetLanguage?: string | null) => {
     if (!translationPreference.engineId) {
       throw new Error("Choose a translation engine in Settings first.");
     }
     const result = await aiApi.translate(
       translationPreference.engineId,
       text,
-      translationPreference.targetLanguage,
+      targetLanguage || translationPreference.targetLanguage,
+      sourceLanguage,
     );
     return result.translation;
   }, [aiApi, translationPreference]);
@@ -715,6 +721,7 @@ export function App({
           composerError={composerError}
           onSaveCard={handleSaveCard}
           onTranslate={handleTranslate}
+          composerDefaultBackLanguage={translationPreference.targetLanguage}
           onCloseComposer={handleCloseComposer}
           sourceHighlight={sourceHighlight}
           listPageTags={async (id) => {
@@ -840,6 +847,7 @@ export function App({
             onPracticeAll={handlePracticeAll}
             onViewStatistics={(id) => setRoute({ name: "statistics", target: { kind: "deck", deckId: id }, origin: "memora" })}
             onDirtyStateChange={setIsBrowserDirty}
+            onTranslate={handleTranslate}
             getDocumentFileUrl={libraryApi.getDocumentFileUrl ?? nativeGetDocumentFileUrl}
             getDeckStatistics={learning.getDeckStatistics}
             queryDeckCards={learning.queryDeckCards}
@@ -866,6 +874,7 @@ export function App({
               setRoute({ name: "memora" });
             }}
             onDirtyStateChange={setIsBrowserDirty}
+            onTranslate={handleTranslate}
             queryDeckCards={learning.queryDeckCards}
             trashCards={learning.trashCards}
             listActiveTags={learning.listActiveTags}

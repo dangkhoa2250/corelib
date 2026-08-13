@@ -4,6 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 
 import { documentStatusLabel, type LibraryDocument } from "../../domain/document";
+import { Button } from "../../components/Button";
 import { saveCover as saveCoverApi } from "../../lib/desktop";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
@@ -284,10 +285,10 @@ export function DocumentCard({
                     autoFocus
                   />
                   <div className="document-card__rename-actions">
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setIsRenameOpen(false); }}>
+                    <Button variant="secondary" onClick={(e) => { e.stopPropagation(); setIsRenameOpen(false); }}>
                       Cancel
-                    </button>
-                    <button type="submit" aria-label="Save title">Save</button>
+                    </Button>
+                    <Button type="submit" aria-label="Save title" variant="primary">Save</Button>
                   </div>
                 </form>
               )}

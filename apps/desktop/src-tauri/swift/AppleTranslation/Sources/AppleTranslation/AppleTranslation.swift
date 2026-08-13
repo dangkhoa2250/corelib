@@ -16,6 +16,7 @@ private struct TranslationHost: View {
     let requestID: UInt64
     let text: String
     let target: String
+    let sourceLang: String?
     let callback: TranslationCallback
 
     @State private var configuration: TranslationSession.Configuration?
@@ -24,8 +25,9 @@ private struct TranslationHost: View {
         Color.clear
             .frame(width: 1, height: 1)
             .onAppear {
+                let sourceLocale = sourceLang.map { Locale.Language(identifier: $0) }
                 configuration = TranslationSession.Configuration(
-                    source: nil,
+                    source: sourceLocale,
                     target: Locale.Language(identifier: target)
                 )
             }
@@ -70,6 +72,7 @@ private func startTranslation(
     requestID: UInt64,
     text: String,
     target: String,
+    sourceLang: String?,
     callback: @escaping TranslationCallback
 ) {
     guard #available(macOS 15.0, *) else {
@@ -87,6 +90,7 @@ private func startTranslation(
         requestID: requestID,
         text: text,
         target: target,
+        sourceLang: sourceLang,
         callback: callback
     ))
     host.frame = NSRect(x: 0, y: 0, width: 1, height: 1)
@@ -107,15 +111,18 @@ public func appleTranslate(
     _ requestID: UInt64,
     _ source: UnsafePointer<CChar>,
     _ target: UnsafePointer<CChar>,
+    _ sourceLang: UnsafePointer<CChar>?,
     _ callback: @escaping TranslationCallback
 ) {
     let text = String(cString: source)
     let targetCode = String(cString: target)
+    let sourceCode = sourceLang != nil ? String(cString: sourceLang!) : nil
     Task { @MainActor in
         startTranslation(
             requestID: requestID,
             text: text,
             target: targetCode,
+            sourceLang: sourceCode,
             callback: callback
         )
     }

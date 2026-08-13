@@ -16,6 +16,7 @@ export interface DeckDetailPageProps {
   onPracticeAll: (deckId: string) => void;
   onViewStatistics?: (deckId: string) => void;
   onDirtyStateChange?: (dirty: boolean) => void;
+  onTranslate?: CardBrowserProps["onTranslate"];
   getDocumentFileUrl?: (id: string) => Promise<string>;
   getDeckStatistics: (deckId: string) => Promise<DeckStatistics>;
   queryDeckCards: NonNullable<CardBrowserProps["queryDeckCards"]>;
@@ -42,6 +43,7 @@ export function DeckDetailPage({
   onPracticeAll,
   onViewStatistics,
   onDirtyStateChange,
+  onTranslate,
   getDocumentFileUrl,
   getDeckStatistics,
   queryDeckCards,
@@ -90,6 +92,7 @@ export function DeckDetailPage({
               onBack={onBack}
               onCardChange={handleCardChange}
               onDirtyStateChange={onDirtyStateChange}
+              onTranslate={onTranslate}
               getDocumentFileUrl={getDocumentFileUrl}
               sourceView={sourceView}
               onSourceViewChange={setSourceView}

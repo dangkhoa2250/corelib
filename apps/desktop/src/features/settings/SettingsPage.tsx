@@ -15,9 +15,10 @@ import {
   type TranslationEngineId,
 } from "../../domain/translation";
 import { IconEye, IconEyeOff } from "../../app/icons";
-import { IconArrowLeft, IconMemora, IconSearch, IconAppearance, IconCloud } from "../../app/icons";
+import { IconArrowLeft, IconBrain, IconMemora, IconSearch, IconAppearance, IconCloud } from "../../app/icons";
 import { useTheme } from "../../contexts/ThemeContext";
 import { Combobox } from "../../components/Combobox";
+import { Button } from "../../components/Button";
 import { ModelBrandIcon } from "../../components/ModelBrandIcon";
 import { ProviderBrandIcon } from "../../components/ProviderBrandIcon";
 import { useContext } from "react";
@@ -426,7 +427,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
             onClick={() => setSection("model")}
             type="button"
           >
-            <span className="settings-page__nav-icon"><IconMemora /></span>
+            <span className="settings-page__nav-icon"><IconBrain /></span>
             Model
           </button>
         )}
@@ -563,22 +564,21 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
           </label>
 
           <div className="settings-page__actions">
-            <button
+            <Button
               disabled={loading || (!driveClientId.trim() && !driveClientSecret.trim())}
               onClick={() => void handleSaveDriveCredentials()}
-              type="button"
+              variant="primary"
             >
               {loading ? "Saving…" : "Save Credentials"}
-            </button>
+            </Button>
             {hasSavedDriveCredentials ? (
-              <button
-                className="settings-page__secondary-button"
+              <Button
                 disabled={loading}
                 onClick={() => void handleClearDriveCredentials()}
-                type="button"
+                variant="secondary"
               >
                 Clear Credentials
-              </button>
+              </Button>
             ) : null}
           </div>
           
@@ -593,7 +593,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
               <h2 id="providers-heading">Providers</h2>
               <p>Add multiple providers and manage their API keys.</p>
             </div>
-            <button className="settings-page__add-button" onClick={handleAddProvider} type="button">+ Add provider</button>
+            <Button onClick={handleAddProvider} variant="primary">+ Add provider</Button>
           </div>
 
           <div className="settings-page__provider-list" aria-label="Connected providers">
@@ -607,7 +607,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
                   </div>
                 </div>
                 <div className="settings-page__provider-row-actions">
-                  <button onClick={() => handleManageProvider(item.id)} type="button">Manage</button>
+                  <Button onClick={() => handleManageProvider(item.id)} variant="secondary">Manage</Button>
                 </div>
               </div>
             )) : <p className="settings-page__provider-empty">No providers connected yet.</p>}
@@ -664,10 +664,10 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
         </label>
 
         <div className="settings-page__actions">
-          <button disabled={loading || (!connected[provider] && !apiKey.trim())} onClick={() => void handleConnect()} type="button">
+          <Button disabled={loading || (!connected[provider] && !apiKey.trim())} onClick={() => void handleConnect()} variant="primary">
             {loading ? "Connecting…" : connected[provider] ? "Refresh models" : "Connect"}
-          </button>
-          {connected[provider] ? <button className="settings-page__secondary-button" disabled={loading} onClick={() => void handleClear()} type="button">Remove key</button> : null}
+          </Button>
+          {connected[provider] ? <Button disabled={loading} onClick={() => void handleClear()} variant="destructive">Remove key</Button> : null}
         </div>
           </div>
           </div>

@@ -1,9 +1,17 @@
-import { useState, useEffect } from "react";
-import type { Deck, CardBrowserRow } from "../../domain/learning";
+import { useEffect, useState } from "react";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import type { Deck, CardBrowserRow, CardMedia } from "../../domain/learning";
 import { createCard, updateAndMoveCard } from "../../lib/learning";
-import { detectLanguage } from "../../lib/languageDetector";
-import { LanguagePicker } from "./LanguagePicker";
-import { Combobox } from "../../components/Combobox";
+import {
+  discardMediaDraft,
+  resolveCardMedia,
+  resolveStagedMedia,
+  searchMultiSourceImages,
+  stageCardMedia,
+  stageRemoteCardMedia,
+} from "../../lib/media";
+import type { MultiImageSearchPage } from "../../domain/media";
+import { CardComposer, paragraphDocFromText, type CardSaveInput } from "./CardComposer";
 
 export interface CardSidePanelProps {
   card: CardBrowserRow | null;
@@ -11,237 +19,130 @@ export interface CardSidePanelProps {
   onClose: () => void;
   onSaveSuccess: () => void;
   onDirtyStateChange?: (dirty: boolean) => void;
+  onTranslate?: (text: string, sourceLanguage?: string | null, targetLanguage?: string | null) => Promise<string>;
   createCard?: typeof createCard;
   updateAndMoveCard?: typeof updateAndMoveCard;
+  stageCardMedia?: typeof stageCardMedia;
+  searchMultiSourceImages?: (query: string, page: number) => Promise<MultiImageSearchPage>;
+  stageRemoteCardMedia?: (draftId: string, sourceUrl: string, attribution?: string | null) => Promise<CardMedia>;
+  resolveStagedMedia?: (draftId: string, mediaId: string) => Promise<string>;
+  resolveCardMedia?: (cardId: string, mediaId: string) => Promise<string>;
+  discardMediaDraft?: (draftId: string) => Promise<void>;
 }
 
+/**
+ * Add/Edit Card is `CardComposer` under a right-hand sidebar shell: same
+ * fields, same layout, same scrolling — only the heading and the persistence
+ * call underneath (create vs. update-and-move) differ from the
+ * reader-selection "Create flashcard" flow.
+ */
 export function CardSidePanel({
   card,
   decks,
   onClose,
   onSaveSuccess,
   onDirtyStateChange,
+  onTranslate,
   createCard: customCreate = createCard,
   updateAndMoveCard: customUpdateAndMove = updateAndMoveCard,
+  stageCardMedia: customStageCardMedia = stageCardMedia,
+  searchMultiSourceImages: searchImages = searchMultiSourceImages,
+  stageRemoteCardMedia: stageRemoteImage = stageRemoteCardMedia,
+  resolveStagedMedia: resolveStagedMediaBridge = resolveStagedMedia,
+  resolveCardMedia: resolveCardMediaBridge = resolveCardMedia,
+  discardMediaDraft: discardDraftBridge = discardMediaDraft,
 }: CardSidePanelProps) {
-  const [front, setFront] = useState("");
-  const [back, setBack] = useState("");
-  const [tags, setTags] = useState("");
-  const [deckId, setDeckId] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [frontLanguage, setFrontLanguage] = useState<string | null>(null);
-  const [isManualLanguage, setIsManualLanguage] = useState(false);
-  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
+  const [committedMediaUrls, setCommittedMediaUrls] = useState<Record<string, string>>({});
 
+  // Resolve media already committed to the card so the editors can render
+  // existing images while editing, not just freshly staged ones. This may
+  // land after CardComposer has already mounted; it picks up the update.
   useEffect(() => {
-    if (card) {
-      setFront(card.front);
-      setBack(card.back);
-      setTags(card.tags.join(", "));
-      setDeckId(card.deckId ?? decks[0]?.id ?? "");
-      setError(null);
-      setFrontLanguage(card.frontLanguage ?? null);
-      setIsManualLanguage(!!card.frontLanguage);
-      setDetectedLanguage(detectLanguage(card.front));
-    }
-  }, [card, decks]);
-
-  const handleFrontChange = (text: string) => {
-    setFront(text);
-    if (!isManualLanguage) {
-      const lang = detectLanguage(text);
-      setDetectedLanguage(lang);
-      setFrontLanguage(lang);
-    }
-  };
-
-  const handleLanguageChange = (lang: string | null) => {
-    setFrontLanguage(lang);
-    setIsManualLanguage(true);
-  };
-
-  const isDirty =
-    !card
-      ? false
-      : front !== (card.front ?? "") ||
-        back !== (card.back ?? "") ||
-        tags !== (card.tags.join(", ") ?? "") ||
-        deckId !== (card.deckId ?? decks[0]?.id ?? "") ||
-        frontLanguage !== (card.frontLanguage ?? null);
-
-  // Notify parent of dirty changes
-  useEffect(() => {
-    onDirtyStateChange?.(isDirty);
+    let cancelled = false;
+    setCommittedMediaUrls({});
+    const media = card?.media ?? [];
+    if (!card?.id || media.length === 0) return;
+    void Promise.all(
+      media.map(async (item) => {
+        try {
+          const absolutePath = await resolveCardMediaBridge(card.id, item.id);
+          return [item.id, convertFileSrc(absolutePath)] as const;
+        } catch {
+          return [item.id, ""] as const;
+        }
+      }),
+    ).then((entries) => {
+      if (cancelled) return;
+      setCommittedMediaUrls(Object.fromEntries(entries));
+    });
     return () => {
-      onDirtyStateChange?.(false);
+      cancelled = true;
     };
-  }, [isDirty, onDirtyStateChange]);
-
-  const handleClose = () => {
-    if (isDirty) {
-      if (!window.confirm("You have unsaved changes. Discard changes?")) {
-        return;
-      }
-    }
-    onClose();
-  };
+  }, [card, resolveCardMediaBridge]);
 
   if (!card) return null;
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!front.trim()) {
-      setError("Front is required");
-      return;
-    }
-    if (!back.trim()) {
-      setError("Back is required");
-      return;
-    }
-    if (!deckId) {
-      setError("Deck is required");
-      return;
-    }
+  const isNewCard = !card.id;
+  // Tag editing is hidden; new cards start untagged while edited cards keep
+  // whatever tags they already had.
+  const tagsForSave = isNewCard ? [] : [...card.tags];
 
-    setSaving(true);
-    setError(null);
-    try {
-      const tagList = tags
-        .split(",")
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
-
-      if (card.id) {
-        // Edit mode: update content + optional deck move in one atomic operation.
-        await customUpdateAndMove({
-          cardId: card.id,
-          front,
-          back,
-          tags: tagList,
-          destinationDeckId: deckId !== card.deckId ? deckId : null,
-          frontLanguage,
-        });
-      } else {
-        // Create mode
-        const deck = decks.find(d => d.id === deckId);
-        const deckName = deck ? deck.name : "";
-        await customCreate({
-          deckName,
-          front,
-          back,
-          tags: tagList,
-          frontLanguage,
-        });
-      }
-      onSaveSuccess();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
+  const handleSave = async (input: CardSaveInput) => {
+    if (isNewCard) {
+      await customCreate({
+        deckName: input.deckName,
+        front: input.front,
+        back: input.back,
+        frontDoc: input.frontDoc,
+        backDoc: input.backDoc,
+        mediaDraftId: input.mediaDraftId,
+        tags: tagsForSave,
+        frontLanguage: input.frontLanguage,
+      });
+    } else {
+      // The deck picker only offers decks that already exist for an edit
+      // (see `allowNewDeck={false}` below), so the saved name always matches
+      // one of `decks` — resolve it back to an id for the move.
+      const destinationDeckId = decks.find((deck) => deck.name === input.deckName)?.id ?? null;
+      await customUpdateAndMove({
+        cardId: card.id,
+        front: input.front,
+        back: input.back,
+        frontDoc: input.frontDoc,
+        backDoc: input.backDoc,
+        mediaDraftId: input.mediaDraftId,
+        tags: tagsForSave,
+        destinationDeckId: destinationDeckId !== card.deckId ? destinationDeckId : null,
+        frontLanguage: input.frontLanguage ?? null,
+      });
     }
+    onSaveSuccess();
   };
 
-  const isNewCard = !card.id;
-
   return (
-    <div className="card-side-panel" role="dialog" aria-label={isNewCard ? "Add Card" : "Edit Card"}>
-      <div className="card-side-panel__backdrop" onClick={handleClose} />
-      <div className="card-side-panel__content">
-        <div className="card-side-panel__header">
-          <h2 className="card-side-panel__title">{isNewCard ? "Add Card" : "Edit Card"}</h2>
-          <button className="card-side-panel__close-btn" type="button" onClick={handleClose}>
-            ✕
-          </button>
-        </div>
-
-        <form className="card-side-panel__form" onSubmit={handleSave}>
-          {error && (
-            <div className="card-side-panel__error" role="alert">
-              {error}
-            </div>
-          )}
-
-          <div className="card-side-panel__field">
-            <label className="card-side-panel__label">Deck</label>
-            <Combobox
-              value={deckId}
-              onChange={(v) => setDeckId(v)}
-              options={decks.map((d) => ({
-                value: d.id,
-                label: d.name,
-              }))}
-              disabled={saving}
-              ariaLabel="Deck"
-            />
-          </div>
-
-          <div className="card-side-panel__field">
-            <label className="card-side-panel__label">Front</label>
-            <textarea
-              className="card-side-panel__textarea"
-              rows={4}
-              value={front}
-              onChange={e => handleFrontChange(e.target.value)}
-              placeholder="Card front content"
-              aria-label="Front"
-            />
-          </div>
-
-          <div className="card-side-panel__field">
-            <label className="card-side-panel__label">Front Language</label>
-            <LanguagePicker
-              value={frontLanguage}
-              onChange={handleLanguageChange}
-              disabled={saving}
-              detectedLanguage={detectedLanguage}
-              isManual={isManualLanguage}
-            />
-          </div>
-
-          <div className="card-side-panel__field">
-            <label className="card-side-panel__label">Back</label>
-            <textarea
-              className="card-side-panel__textarea"
-              rows={4}
-              value={back}
-              onChange={e => setBack(e.target.value)}
-              placeholder="Card back content"
-              aria-label="Back"
-            />
-          </div>
-
-          <div className="card-side-panel__field">
-            <label className="card-side-panel__label">Tags (comma-separated)</label>
-            <input
-              className="card-side-panel__input"
-              type="text"
-              value={tags}
-              onChange={e => setTags(e.target.value)}
-              placeholder="e.g. biology, exam1"
-              aria-label="Tags"
-            />
-          </div>
-
-          <div className="card-side-panel__actions">
-            <button
-              className="card-side-panel__btn-cancel"
-              type="button"
-              onClick={handleClose}
-              disabled={saving}
-            >
-              Cancel
-            </button>
-            <button
-              className="card-side-panel__btn-save"
-              type="submit"
-              disabled={saving}
-            >
-              {saving ? "Saving..." : isNewCard ? "Add Card" : "Save Changes"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+    <CardComposer
+      // Remount on card switch: each edit target gets its own fresh media
+      // draft id and dirty-tracking snapshot instead of reusing stale state.
+      key={card.id || "new"}
+      variant="panel"
+      heading={isNewCard ? "Add Card" : "Edit Card"}
+      decks={decks}
+      allowNewDeck={isNewCard}
+      initialFrontDoc={card.frontDoc ?? paragraphDocFromText(card.front)}
+      initialBackDoc={card.backDoc ?? paragraphDocFromText(card.back)}
+      initialDeckId={card.deckId ?? decks[0]?.id}
+      initialFrontLanguage={card.frontLanguage}
+      initialMediaUrls={committedMediaUrls}
+      onTranslate={onTranslate}
+      onDirtyChange={onDirtyStateChange}
+      confirmDiscardOnClose
+      onCancel={onClose}
+      onSave={handleSave}
+      stageCardMedia={customStageCardMedia}
+      discardMediaDraft={discardDraftBridge}
+      searchMultiSourceImages={searchImages}
+      stageRemoteCardMedia={stageRemoteImage}
+      resolveStagedMedia={resolveStagedMediaBridge}
+    />
   );
 }

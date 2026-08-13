@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { Button } from "../../components/Button";
 import type { MemoraSettings } from "../../domain/learning";
 
 interface MemoraSettingsSectionProps {
@@ -131,9 +132,9 @@ export function MemoraSettingsSection({ load, save }: MemoraSettingsSectionProps
       ) : null}
 
       <div className="settings-page__actions">
-        <button disabled={!canSave} onClick={() => void handleSave()} type="button">
+        <Button disabled={!canSave} onClick={() => void handleSave()} variant="primary">
           {saving ? "Saving…" : "Save Memora settings"}
-        </button>
+        </Button>
       </div>
 
       {error ? (

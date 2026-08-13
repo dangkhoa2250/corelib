@@ -35,7 +35,11 @@ pub mod indexer;
 pub mod learning;
 pub mod library_db;
 pub mod library_store;
+pub mod media;
 pub mod model;
+pub mod multi_image_search;
+pub mod remote_image;
+pub mod rich_document;
 pub mod scheduler;
 pub mod study_queue;
 pub mod statistics;
@@ -64,6 +68,10 @@ mod library_store_tests;
 mod learning_tests;
 
 #[cfg(test)]
+mod media_tests;
+
+
+#[cfg(test)]
 mod scheduler_tests;
 
 #[cfg(test)]
@@ -71,6 +79,9 @@ mod study_queue_tests;
 
 #[cfg(test)]
 mod statistics_tests;
+
+#[cfg(test)]
+mod rich_document_tests;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -140,6 +151,12 @@ pub fn run() {
             commands::delete_card,
             commands::get_card,
             commands::get_card_source,
+            commands::stage_card_media,
+            commands::fetch_remote_image_preview,
+            commands::stage_remote_card_media,
+            commands::discard_media_draft,
+            commands::resolve_card_media,
+            commands::resolve_staged_media,
             commands::search_everything,
             commands::get_document,
             commands::rename_document,
@@ -170,6 +187,7 @@ pub fn run() {
             ai::translate_with_ai,
             translation::translate_text,
             translation::apple_translation_available,
+            multi_image_search::search_multi_source_images,
             commands::get_statistics_overview,
             commands::get_reading_statistics,
             commands::get_document_statistics,

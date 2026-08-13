@@ -7,6 +7,7 @@ use std::{
         Arc, Mutex,
     },
     thread,
+    time::Duration,
 };
 
 use chrono::{DateTime, Timelike, Utc};
@@ -20,12 +21,14 @@ use crate::{
     learning::{DeckStatistics, NewCard, NewCardSource},
     library_db::{LibraryDatabase, NewLocalDocument},
     library_store::{content_hash, import_pdf_with_status, validate_pdf_input},
+    media::{CardMediaStore, MEDIA_DIR_NAME},
     model::DocumentSummary,
     model::{
-        CardSourcePayload, DeckLearningSettingsPayload, DeckSummary, LearningCardSummary,
-        MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload, StudyCountsPayload,
-        StudyGrantPayload, StudyReadyCountsPayload, StudyScopePayload, StudySessionPayload,
-        SearchResultPayload, SelectionRect, UpdateDeckLearningSettingsPayload,
+        CardMediaPayload, CardSourcePayload, DeckLearningSettingsPayload, DeckSummary,
+        LearningCardSummary, MemoraSettingsPayload, ReviewIntervalPayload, ReviewPreviewPayload,
+        SearchResultPayload, SelectionRect, StudyCountsPayload, StudyGrantPayload,
+        StudyReadyCountsPayload, StudyScopePayload, StudySessionPayload,
+        UpdateDeckLearningSettingsPayload,
     },
     scheduler::{Rating, ScheduledState},
     study_queue::{
@@ -33,6 +36,7 @@ use crate::{
         StudyGrant, StudyRating, StudyRatingResult, StudyScope, StudySession,
     },
 };
+use base64::{engine::general_purpose::STANDARD, Engine};
 
 pub type IndexTask = Box<dyn FnOnce() + Send + 'static>;
 type IndexScheduler = Arc<dyn Fn(IndexTask) -> bool + Send + Sync>;
@@ -184,6 +188,11 @@ impl LibraryStore {
             cache_generation: Arc::new(AtomicU64::new(0)),
             cache_lock: Arc::new(Mutex::new(())),
         };
+        CardMediaStore::new(
+            Arc::clone(&store.database),
+            store.library_root.join(MEDIA_DIR_NAME),
+        )
+        .cleanup_staging_older_than(Duration::from_secs(24 * 60 * 60))?;
         store.requeue_pending_indexes()?;
         Ok(store)
     }
@@ -439,7 +448,10 @@ pub fn save_google_drive_credentials(
     client_secret: String,
 ) -> Result<(), String> {
     let path = state.library_root.join(".google_drive_credentials.json");
-    let creds = FileCredentials { client_id, client_secret };
+    let creds = FileCredentials {
+        client_id,
+        client_secret,
+    };
     let json = serde_json::to_string(&creds).map_err(|e| e.to_string())?;
     std::fs::write(path, json).map_err(|e| e.to_string())?;
     Ok(())
@@ -455,7 +467,7 @@ pub fn load_google_drive_credentials(
     }
     let json = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let creds: FileCredentials = serde_json::from_str(&json).map_err(|e| e.to_string())?;
-    
+
     let mut map = std::collections::HashMap::new();
     map.insert("clientId".to_owned(), creds.client_id);
     map.insert("clientSecret".to_owned(), creds.client_secret);
@@ -488,7 +500,8 @@ pub fn drive_import(
 ) -> Result<Vec<DocumentSummary>, String> {
     let store_path = state.library_root.join(".google_drive_token.txt");
     let store = crate::drive_auth::FileTokenStore::new(store_path);
-    let imported = crate::drive_api::drive_import(&store, &state.library_root, &state.database, ids)?;
+    let imported =
+        crate::drive_api::drive_import(&store, &state.library_root, &state.database, ids)?;
     Ok(imported)
 }
 
@@ -647,8 +660,7 @@ pub fn save_cover(
     std::fs::create_dir_all(&covers_dir)
         .map_err(|e| format!("failed to create covers directory: {e}"))?;
     let cover_path = covers_dir.join(format!("{id}.png"));
-    std::fs::write(&cover_path, &data)
-        .map_err(|e| format!("failed to write cover: {e}"))?;
+    std::fs::write(&cover_path, &data).map_err(|e| format!("failed to write cover: {e}"))?;
 
     let cover_str = cover_path.to_string_lossy().into_owned();
     state
@@ -711,6 +723,9 @@ pub struct CreateCardInput {
     #[serde(default)]
     pub tags: Vec<String>,
     pub front_language: Option<String>,
+    pub front_doc: Option<serde_json::Value>,
+    pub back_doc: Option<serde_json::Value>,
+    pub media_draft_id: Option<String>,
 }
 
 fn learning_lock(
@@ -720,6 +735,20 @@ fn learning_lock(
         .database
         .lock()
         .map_err(|_| "library database is unavailable".to_owned())
+}
+
+/// Validates a rich document at the command boundary so the frontend receives
+/// a structured error (including the failing node path) before any write.
+fn validate_face_doc_command(
+    raw: Option<serde_json::Value>,
+    label: &str,
+) -> Result<Option<serde_json::Value>, String> {
+    match raw {
+        Some(doc) => crate::rich_document::validate_document(&doc)
+            .map(Some)
+            .map_err(|e| format!("{label} document: {e}")),
+        None => Ok(None),
+    }
 }
 
 #[tauri::command]
@@ -744,15 +773,24 @@ pub fn create_card(
             })
         })
         .transpose()?;
+    let front_doc_json = validate_face_doc_command(input.front_doc, "front")?;
+    let back_doc_json = validate_face_doc_command(input.back_doc, "back")?;
+    let media_root = media_store(&state).media_root().to_path_buf();
     learning_lock(&state)?
-        .create_card(NewCard {
-            deck_name: input.deck_name,
-            front: input.front,
-            back: input.back,
-            source,
-            tags: input.tags,
-            front_language: input.front_language,
-        })
+        .create_card(
+            NewCard {
+                deck_name: input.deck_name,
+                front: input.front,
+                back: input.back,
+                source,
+                tags: input.tags,
+                front_language: input.front_language,
+                front_doc_json,
+                back_doc_json,
+                media_draft_id: input.media_draft_id,
+            },
+            Some(&media_root),
+        )
         .map_err(|e| e.to_string())
 }
 
@@ -827,7 +865,149 @@ pub fn list_deck_cards(
 pub fn delete_card(id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
     learning_lock(&state)?
         .delete_card(&id)
+        .map_err(|e| e.to_string())?;
+    // Remove the committed media directory so a hard-deleted card never
+    // orphans image files on disk (the rows are already gone via CASCADE).
+    media_store(&state)
+        .delete_card_media_files(&id)
         .map_err(|e| e.to_string())
+}
+
+/// Input for `stage_card_media`. `sourceType` is one of `file` (uses
+/// `filePath`, a local path the app already has read permission for),
+/// `clipboard`, or `web` (both use `bytesBase64`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StageCardMediaInput {
+    pub draft_id: String,
+    pub source_type: String,
+    pub attribution: Option<String>,
+    pub file_path: Option<String>,
+    pub bytes_base64: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteImagePreviewPayload {
+    pub mime_type: String,
+    pub data_base64: String,
+}
+
+#[tauri::command]
+pub async fn fetch_remote_image_preview(url: String) -> Result<RemoteImagePreviewPayload, String> {
+    let image = tauri::async_runtime::spawn_blocking(move || fetch_remote_image(&url))
+        .await
+        .map_err(|error| format!("remote image task failed: {error}"))??;
+    Ok(RemoteImagePreviewPayload {
+        mime_type: image.mime_type,
+        data_base64: STANDARD.encode(image.bytes),
+    })
+}
+
+#[tauri::command]
+pub async fn stage_remote_card_media(
+    draft_id: String,
+    source_url: String,
+    attribution: Option<String>,
+    state: State<'_, LibraryStore>,
+) -> Result<CardMediaPayload, String> {
+    let image = tauri::async_runtime::spawn_blocking(move || fetch_remote_image(&source_url))
+        .await
+        .map_err(|error| format!("remote image task failed: {error}"))??;
+    media_store(&state).stage_from_bytes(
+        &draft_id,
+        &image.bytes,
+        &image.mime_type,
+        "web",
+        attribution.as_deref(),
+    )
+}
+
+#[cfg(test)]
+fn fetch_remote_image(url: &str) -> Result<crate::remote_image::RemoteImage, String> {
+    crate::remote_image::fetch_for_command_tests(url)
+}
+
+#[cfg(not(test))]
+fn fetch_remote_image(url: &str) -> Result<crate::remote_image::RemoteImage, String> {
+    crate::remote_image::fetch(url)
+}
+
+fn media_store(state: &LibraryStore) -> CardMediaStore {
+    CardMediaStore::new(
+        Arc::clone(&state.database),
+        state.library_root.join(MEDIA_DIR_NAME),
+    )
+}
+
+#[tauri::command]
+pub fn stage_card_media(
+    input: StageCardMediaInput,
+    state: State<'_, LibraryStore>,
+) -> Result<CardMediaPayload, String> {
+    let store = media_store(&state);
+    match input.source_type.as_str() {
+        "file" => {
+            let path = input
+                .file_path
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| "filePath is required for sourceType 'file'".to_owned())?;
+            store.stage_from_file(&input.draft_id, Path::new(&path), &input.source_type)
+        }
+        "clipboard" | "web" => {
+            let encoded = input
+                .bytes_base64
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| {
+                    format!(
+                        "bytesBase64 is required for sourceType '{}'",
+                        input.source_type
+                    )
+                })?;
+            let bytes = STANDARD
+                .decode(encoded.trim())
+                .map_err(|e| format!("invalid base64 payload: {e}"))?;
+            store.stage_from_bytes(
+                &input.draft_id,
+                &bytes,
+                "",
+                &input.source_type,
+                input.attribution.as_deref(),
+            )
+        }
+        other => Err(format!(
+            "sourceType must be one of file|clipboard|web, got '{other}'"
+        )),
+    }
+}
+
+#[tauri::command]
+pub fn discard_media_draft(draft_id: String, state: State<'_, LibraryStore>) -> Result<(), String> {
+    media_store(&state).discard_draft(&draft_id)
+}
+
+#[tauri::command]
+pub fn resolve_card_media(
+    card_id: String,
+    media_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<String, String> {
+    // Return the absolute path so the frontend can build a loadable
+    // `asset://localhost/...` URL via convertFileSrc (the asset scope is
+    // `$APPDATA/**/*`, which relative paths never match).
+    media_store(&state)
+        .resolve_media_path(Some(&card_id), None, &media_id)
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn resolve_staged_media(
+    draft_id: String,
+    media_id: String,
+    state: State<'_, LibraryStore>,
+) -> Result<String, String> {
+    let path = media_store(&state).resolve_media_path(None, Some(&draft_id), &media_id)?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 #[cfg(test)]
@@ -943,15 +1123,34 @@ pub fn update_card(
     state: State<'_, LibraryStore>,
 ) -> Result<LearningCardSummary, String> {
     use crate::learning::UpdateCard;
+    let front_doc_json = validate_face_doc_command(payload.front_doc, "front")?;
+    let back_doc_json = validate_face_doc_command(payload.back_doc, "back")?;
+    let referenced = crate::learning::referenced_media_ids(&front_doc_json, &back_doc_json);
+    let has_docs = front_doc_json.is_some() || back_doc_json.is_some();
+    let media_root = media_store(&state).media_root().to_path_buf();
+    let card_id = payload.card_id;
     learning_lock(&state)?
-        .update_card(UpdateCard {
-            card_id: payload.card_id,
-            front: payload.front,
-            back: payload.back,
-            tags: payload.tags,
-            front_language: payload.front_language,
-        })
-        .map_err(|e| e.to_string())
+        .update_card(
+            UpdateCard {
+                card_id: card_id.clone(),
+                front: payload.front,
+                back: payload.back,
+                tags: payload.tags,
+                front_language: payload.front_language,
+                front_doc_json,
+                back_doc_json,
+                media_draft_id: payload.media_draft_id,
+            },
+            Some(&media_root),
+        )
+        .map_err(|e| e.to_string())?;
+    if has_docs {
+        media_store(&state).remove_unreferenced_media(&card_id, &referenced)?;
+    }
+    learning_lock(&state)?
+        .card_by_id(&card_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "card not found after update".to_owned())
 }
 
 #[tauri::command]
@@ -960,16 +1159,32 @@ pub fn update_and_move_card(
     state: State<'_, LibraryStore>,
 ) -> Result<LearningCardSummary, String> {
     use crate::learning::UpdateAndMoveCard;
+    let front_doc_json = validate_face_doc_command(payload.front_doc, "front")?;
+    let back_doc_json = validate_face_doc_command(payload.back_doc, "back")?;
+    let referenced = crate::learning::referenced_media_ids(&front_doc_json, &back_doc_json);
+    let has_docs = front_doc_json.is_some() || back_doc_json.is_some();
+    let media_root = media_store(&state).media_root().to_path_buf();
+    let card_id = payload.card_id;
     learning_lock(&state)?
         .update_and_move_card(UpdateAndMoveCard {
-            card_id: payload.card_id,
+            card_id: card_id.clone(),
             front: payload.front,
             back: payload.back,
             tags: payload.tags,
             destination_deck_id: payload.destination_deck_id,
             front_language: payload.front_language,
-        })
-        .map_err(|e| e.to_string())
+            front_doc_json,
+            back_doc_json,
+            media_draft_id: payload.media_draft_id,
+        }, Some(&media_root))
+        .map_err(|e| e.to_string())?;
+    if has_docs {
+        media_store(&state).remove_unreferenced_media(&card_id, &referenced)?;
+    }
+    learning_lock(&state)?
+        .card_by_id(&card_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "card not found after update".to_owned())
 }
 
 #[tauri::command]
@@ -1059,6 +1274,10 @@ pub fn delete_cards_permanently(
     let res = learning_lock(&state)?
         .delete_cards_permanently(&card_ids)
         .map_err(|e| e.to_string())?;
+    let store = media_store(&state);
+    for id in &res.affected_ids {
+        store.delete_card_media_files(id)?;
+    }
     Ok(crate::model::BulkResultPayload {
         affected_ids: res.affected_ids,
         affected_count: res.affected_count,
@@ -1072,6 +1291,10 @@ pub fn empty_trash(
     let res = learning_lock(&state)?
         .empty_trash()
         .map_err(|e| e.to_string())?;
+    let store = media_store(&state);
+    for id in &res.affected_ids {
+        store.delete_card_media_files(id)?;
+    }
     Ok(crate::model::BulkResultPayload {
         affected_ids: res.affected_ids,
         affected_count: res.affected_count,
@@ -1295,13 +1518,16 @@ pub fn get_study_ready_counts(
 }
 
 pub struct AccountServiceState {
-    pub api: crate::account::PocketBaseAccountApi<crate::account::KeyringSessionStore, crate::account::ReqwestHttpClient>,
+    pub api: crate::account::PocketBaseAccountApi<
+        crate::account::KeyringSessionStore,
+        crate::account::ReqwestHttpClient,
+    >,
 }
 
 use crate::account::{
-    AccountApi, AccountGroup, AccountProfile, AccountStatus, AccountStatusResponse,
-    DailyStatisticsSnapshot, FeatureAssignment, FeatureAssignmentInput, FeatureDefinition,
-    SessionSnapshot, AdminMetrics, AdminStatistics, AnalyticsEventInput,
+    AccountApi, AccountGroup, AccountProfile, AccountStatus, AccountStatusResponse, AdminMetrics,
+    AdminStatistics, AnalyticsEventInput, DailyStatisticsSnapshot, FeatureAssignment,
+    FeatureAssignmentInput, FeatureDefinition, SessionSnapshot,
 };
 
 #[tauri::command]
@@ -1311,7 +1537,10 @@ pub fn account_register(
     password: String,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<AccountStatusResponse, String> {
-    state.api.register(&display_name, &email, &password).map_err(|e| e.to_string())
+    state
+        .api
+        .register(&display_name, &email, &password)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1321,7 +1550,10 @@ pub fn account_sign_in(
     remember: bool,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<AccountStatusResponse, String> {
-    state.api.sign_in(&email, &password, remember).map_err(|e| e.to_string())
+    state
+        .api
+        .sign_in(&email, &password, remember)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1332,9 +1564,7 @@ pub fn account_session(
 }
 
 #[tauri::command]
-pub fn account_sign_out(
-    state: tauri::State<'_, AccountServiceState>,
-) -> Result<(), String> {
+pub fn account_sign_out(state: tauri::State<'_, AccountServiceState>) -> Result<(), String> {
     state.api.sign_out().map_err(|e| e.to_string())
 }
 
@@ -1343,7 +1573,10 @@ pub fn account_set_analytics_enabled(
     enabled: bool,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<AccountProfile, String> {
-    state.api.set_analytics_enabled(enabled).map_err(|e| e.to_string())
+    state
+        .api
+        .set_analytics_enabled(enabled)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1355,13 +1588,16 @@ pub fn account_track_event(
     payload: serde_json::Value,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<(), String> {
-    state.api.send_analytics(AnalyticsEventInput {
-        installation_id,
-        name,
-        app_version,
-        occurred_at,
-        payload,
-    }).map_err(|e| e.to_string())
+    state
+        .api
+        .send_analytics(AnalyticsEventInput {
+            installation_id,
+            name,
+            app_version,
+            occurred_at,
+            payload,
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1369,7 +1605,10 @@ pub fn admin_list_users(
     status: Option<AccountStatus>,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<Vec<AccountProfile>, String> {
-    state.api.admin_list_users(status).map_err(|e| e.to_string())
+    state
+        .api
+        .admin_list_users(status)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1378,7 +1617,10 @@ pub fn admin_set_user_status(
     status: AccountStatus,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<AccountProfile, String> {
-    state.api.admin_set_status(&user_id, status).map_err(|e| e.to_string())
+    state
+        .api
+        .admin_set_status(&user_id, status)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1387,7 +1629,10 @@ pub fn admin_set_user_groups(
     group_ids: Vec<String>,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<(), String> {
-    state.api.admin_set_groups(&user_id, group_ids).map_err(|e| e.to_string())
+    state
+        .api
+        .admin_set_groups(&user_id, group_ids)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1403,7 +1648,10 @@ pub fn admin_create_group(
     description: String,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<AccountGroup, String> {
-    state.api.admin_create_group(&name, &description).map_err(|e| e.to_string())
+    state
+        .api
+        .admin_create_group(&name, &description)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1419,7 +1667,10 @@ pub fn admin_create_feature(
     description: String,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<FeatureDefinition, String> {
-    state.api.admin_create_feature(&key, &description).map_err(|e| e.to_string())
+    state
+        .api
+        .admin_create_feature(&key, &description)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1430,12 +1681,15 @@ pub fn admin_set_feature_assignment(
     enabled: bool,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<FeatureAssignment, String> {
-    state.api.admin_set_feature_assignment(FeatureAssignmentInput {
-        feature_key,
-        subject_type,
-        subject_id,
-        enabled,
-    }).map_err(|e| e.to_string())
+    state
+        .api
+        .admin_set_feature_assignment(FeatureAssignmentInput {
+            feature_key,
+            subject_type,
+            subject_id,
+            enabled,
+        })
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1450,7 +1704,10 @@ pub fn admin_delete_user(
     user_id: String,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<(), String> {
-    state.api.admin_delete_user(&user_id).map_err(|e| e.to_string())
+    state
+        .api
+        .admin_delete_user(&user_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1459,7 +1716,8 @@ pub fn account_upsert_daily_statistics(
     input: DailyStatisticsSnapshot,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<(), String> {
-    state.api
+    state
+        .api
         .upsert_daily_statistics(&expected_account_id, input)
         .map_err(|e| e.to_string())
 }
@@ -1470,7 +1728,10 @@ pub fn admin_get_statistics(
     app_key: String,
     state: tauri::State<'_, AccountServiceState>,
 ) -> Result<AdminStatistics, String> {
-    state.api.admin_statistics(&range, &app_key).map_err(|e| e.to_string())
+    state
+        .api
+        .admin_statistics(&range, &app_key)
+        .map_err(|e| e.to_string())
 }
 
 // ---------------------------------------------------------------------------

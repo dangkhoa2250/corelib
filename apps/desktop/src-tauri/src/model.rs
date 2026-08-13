@@ -72,6 +72,11 @@ pub struct LearningCardSummary {
     pub tags: Vec<String>,
     #[serde(rename = "frontLanguage")]
     pub front_language: Option<String>,
+    #[serde(rename = "frontDoc")]
+    pub front_doc: Option<serde_json::Value>,
+    #[serde(rename = "backDoc")]
+    pub back_doc: Option<serde_json::Value>,
+    pub media: Vec<CardMediaPayload>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -162,6 +167,9 @@ pub struct UpdateCardPayload {
     pub back: String,
     pub tags: Vec<String>,
     pub front_language: Option<String>,
+    pub front_doc: Option<serde_json::Value>,
+    pub back_doc: Option<serde_json::Value>,
+    pub media_draft_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -173,6 +181,9 @@ pub struct UpdateAndMoveCardPayload {
     pub tags: Vec<String>,
     pub destination_deck_id: Option<String>,
     pub front_language: Option<String>,
+    pub front_doc: Option<serde_json::Value>,
+    pub back_doc: Option<serde_json::Value>,
+    pub media_draft_id: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -226,6 +237,11 @@ pub struct CardBrowserRowPayload {
     pub deck_name: String,
     pub front: String,
     pub back: String,
+    #[serde(rename = "frontDoc")]
+    pub front_doc: Option<serde_json::Value>,
+    #[serde(rename = "backDoc")]
+    pub back_doc: Option<serde_json::Value>,
+    pub media: Vec<CardMediaPayload>,
     pub state: String,
     pub learning_step: Option<i64>,
     pub due_at: String,
@@ -249,6 +265,23 @@ pub struct CardPagePayload {
     pub rows: Vec<CardBrowserRowPayload>,
     pub total: usize,
     pub next_cursor: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CardMediaPayload {
+    pub id: String,
+    pub card_id: Option<String>,
+    pub draft_id: Option<String>,
+    pub mime_type: String,
+    pub relative_path: String,
+    pub source_type: String,
+    pub attribution: Option<String>,
+    pub width: Option<i64>,
+    pub height: Option<i64>,
+    pub size_bytes: i64,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -279,9 +312,9 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        BulkResultPayload, CardBrowserRowPayload, CardPagePayload, CardSourcePayload, DeckSummary,
-        LearningCardSummary, ReviewIntervalPayload, ReviewPreviewPayload, SearchResultPayload,
-        SelectionRect,
+        BulkResultPayload, CardBrowserRowPayload, CardMediaPayload, CardPagePayload,
+        CardSourcePayload, DeckSummary, LearningCardSummary, ReviewIntervalPayload,
+        ReviewPreviewPayload, SearchResultPayload, SelectionRect,
     };
 
     #[test]
@@ -319,6 +352,25 @@ mod tests {
             }),
             tags: vec!["biology".into()],
             front_language: Some("en".into()),
+            front_doc: Some(serde_json::json!({
+                "type": "doc",
+                "content": [],
+            })),
+            back_doc: None,
+            media: vec![CardMediaPayload {
+                id: "media-1".into(),
+                card_id: Some("card-1".into()),
+                draft_id: None,
+                mime_type: "image/png".into(),
+                relative_path: "card-1/media-1.png".into(),
+                source_type: "web".into(),
+                attribution: Some("Artist · CC BY".into()),
+                width: Some(640),
+                height: Some(480),
+                size_bytes: 2048,
+                created_at: "2026-07-09T09:00:00Z".into(),
+                updated_at: "2026-07-09T09:00:00Z".into(),
+            }],
         };
         let interval = ReviewIntervalPayload {
             due_at: "2026-07-11T09:00:00Z".into(),
@@ -364,6 +416,25 @@ mod tests {
                 },
                 "tags": ["biology"],
                 "frontLanguage": "en",
+                "frontDoc": {
+                    "type": "doc",
+                    "content": [],
+                },
+                "backDoc": null,
+                "media": [{
+                    "id": "media-1",
+                    "cardId": "card-1",
+                    "draftId": null,
+                    "mimeType": "image/png",
+                    "relativePath": "card-1/media-1.png",
+                    "sourceType": "web",
+                    "attribution": "Artist · CC BY",
+                    "width": 640,
+                    "height": 480,
+                    "sizeBytes": 2048,
+                    "createdAt": "2026-07-09T09:00:00Z",
+                    "updatedAt": "2026-07-09T09:00:00Z",
+                }],
             })
         );
         assert_eq!(
@@ -425,6 +496,12 @@ mod tests {
             deck_name: "Biology".into(),
             front: "What is ATP?".into(),
             back: "Energy storage".into(),
+            front_doc: Some(serde_json::json!({
+                "type": "doc",
+                "content": [],
+            })),
+            back_doc: None,
+            media: vec![],
             state: "review".into(),
             learning_step: None,
             due_at: "2026-07-10T09:00:00Z".into(),
@@ -461,6 +538,9 @@ mod tests {
         assert!(row_json.get("deletedAt").is_some());
         assert!(row_json.get("deletedFromDeckName").is_some());
         assert!(row_json.get("frontLanguage").is_some());
+        assert!(row_json.get("frontDoc").is_some());
+        assert!(row_json.get("backDoc").is_some());
+        assert!(row_json.get("media").is_some());
         assert!(page_json.get("nextCursor").is_some());
 
         let bulk_json = serde_json::to_value(bulk_result).expect("serialize bulk result");

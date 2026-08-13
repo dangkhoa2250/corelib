@@ -54,6 +54,35 @@ vi.mock("pdfjs-dist", () => {
 import { beforeAll, beforeEach } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 
+// ---------------------------------------------------------------------------
+// jsdom shims. ProseMirror (and user-event) need APIs jsdom does not provide:
+// Text/Range geometry queries and document.elementFromPoint.
+// ---------------------------------------------------------------------------
+function rectListPolyfill() {
+  return { length: 0, item: () => null, [Symbol.iterator]: [][Symbol.iterator] };
+}
+function zeroRect() {
+  return new DOMRect(0, 0, 0, 0);
+}
+if (typeof Text !== "undefined" && !(Text.prototype as any).getClientRects) {
+  (Text.prototype as any).getClientRects = rectListPolyfill;
+}
+if (typeof Text !== "undefined" && !(Text.prototype as any).getBoundingClientRect) {
+  (Text.prototype as any).getBoundingClientRect = zeroRect;
+}
+if (typeof Range !== "undefined" && !(Range.prototype as any).getClientRects) {
+  (Range.prototype as any).getClientRects = rectListPolyfill;
+}
+if (typeof Range !== "undefined" && !(Range.prototype as any).getBoundingClientRect) {
+  (Range.prototype as any).getBoundingClientRect = zeroRect;
+}
+if (
+  typeof globalThis.document !== "undefined" &&
+  typeof globalThis.document.elementFromPoint !== "function"
+) {
+  (globalThis.document as any).elementFromPoint = () => globalThis.document.body;
+}
+
 beforeEach(() => {
   vi.mocked(invoke).mockImplementation(async (cmd, _args) => {
     if (cmd === "account_session") {
@@ -283,6 +312,35 @@ async function selectTextOnPage() {
   selection?.removeAllRanges();
   selection?.addRange(range);
   fireEvent.mouseUp(layer);
+}
+
+async function selectNewTextOnPage(text: string) {
+  const layer = await waitFor(() => {
+    const candidate = globalThis.document.querySelector<HTMLElement>("#pdf-page-1 .textLayer");
+    if (!candidate) throw new Error("PDF text layer did not render");
+    return candidate;
+  });
+  const span = globalThis.document.createElement("span");
+  span.textContent = text;
+  layer.append(span);
+  const range = globalThis.document.createRange();
+  range.selectNodeContents(span);
+  Object.defineProperty(range, "getClientRects", {
+    value: () => [new DOMRect(0, 0, 100, 16)],
+  });
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  fireEvent.mouseUp(layer);
+}
+
+/** The Tiptap contenteditable backing a labeled editor face. */
+function editor(name: string): HTMLElement {
+  const found = screen
+    .getAllByLabelText(name)
+    .find((el) => el.hasAttribute("contenteditable"));
+  if (!found) throw new Error(`No rich editor contenteditable found for label "${name}"`);
+  return found;
 }
 
 test("renders the Library heading", () => {
@@ -618,12 +676,29 @@ test("opens the card composer with the live source document and editable front/b
   await user.click(screen.getByRole("button", { name: "Create flashcard" }));
 
   expect(await screen.findByRole("dialog", { name: "Create flashcard" })).toBeInTheDocument();
-  expect(screen.getByRole("textbox", { name: "Front" })).toHaveValue("selected source text");
-  expect(screen.getByRole("textbox", { name: "Back" })).toHaveValue("");
+  expect(editor("Front")).toHaveTextContent("selected source text");
+  expect(editor("Back")).toHaveTextContent("");
   expect(listDecks).toHaveBeenCalledTimes(1);
 });
 
-test("uses Apple Translation by default for a new installation", async () => {
+test("replaces the front when creating a card from a newer selection while the composer is open", async () => {
+  const user = userEvent.setup();
+  const listDecks = vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]);
+  const createCard = vi.fn().mockResolvedValue({});
+  await openReaderAndSelectText(user, undefined, { listDecks, createCard });
+
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+  expect(await screen.findByRole("dialog", { name: "Create flashcard" })).toBeInTheDocument();
+  expect(editor("Front")).toHaveTextContent("selected source text");
+
+  await selectNewTextOnPage("A basis spans the space.");
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+
+  expect(await screen.findByRole("dialog", { name: "Create flashcard" })).toBeInTheDocument();
+  expect(editor("Front")).toHaveTextContent("A basis spans the space.");
+});
+
+test("auto-translates again when a newer selection replaces the front", async () => {
   const user = userEvent.setup();
   const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
   await openReaderAndSelectText(
@@ -644,14 +719,52 @@ test("uses Apple Translation by default for a new installation", async () => {
   );
 
   await user.click(screen.getByRole("button", { name: "Create flashcard" }));
-  await user.click(await screen.findByRole("button", { name: "Translate" }));
+  await waitFor(() => {
+    expect(translate).toHaveBeenCalledTimes(1);
+  });
 
-  expect(translate).toHaveBeenCalledWith(
-    "apple-translation",
-    "selected source text",
-    "Vietnamese",
+  await selectNewTextOnPage("A basis spans the space.");
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+
+  await waitFor(() => {
+    expect(translate).toHaveBeenLastCalledWith("apple-translation", "A basis spans the space.", "Vietnamese", "en");
+  });
+  await waitFor(() => {
+    expect(editor("Front")).toHaveTextContent("A basis spans the space.");
+  });
+  await waitFor(() => {
+    expect(editor("Back")).toHaveTextContent("Văn bản nguồn đã chọn");
+  });
+});
+
+test("auto-translates a new card into the configured language", async () => {
+  const user = userEvent.setup();
+  const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
+  await openReaderAndSelectText(
+    user,
+    undefined,
+    {
+      listDecks: vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]),
+      createCard: vi.fn(),
+    },
+    {
+      hasApiKey: vi.fn().mockResolvedValue(false),
+      saveApiKey: vi.fn().mockResolvedValue(undefined),
+      clearApiKey: vi.fn().mockResolvedValue(undefined),
+      listModels: vi.fn().mockResolvedValue([]),
+      appleTranslationAvailable: vi.fn().mockResolvedValue(true),
+      translate,
+    },
   );
-  expect(screen.getByRole("textbox", { name: "Back" })).toHaveValue("Văn bản nguồn đã chọn");
+
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+
+  await waitFor(() => {
+    expect(translate).toHaveBeenCalledWith("apple-translation", "selected source text", "Vietnamese", "en");
+  });
+  await waitFor(() => {
+    expect(editor("Back")).toHaveTextContent("Văn bản nguồn đã chọn");
+  });
 });
 
 test("keeps the composer visible and reports deck loading errors", async () => {
@@ -673,13 +786,13 @@ test("keeps the composer visible and reports card save errors", async () => {
     createCard,
   });
   await user.click(screen.getByRole("button", { name: "Create flashcard" }));
-  await user.type(screen.getByRole("textbox", { name: "Back" }), "definition");
+  await user.click(editor("Back"));
+  await user.keyboard("definition");
   await user.click(screen.getByRole("combobox", { name: "Deck" }));
   await user.click(screen.getByRole("option", { name: "English" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
 
-  expect(await screen.findByRole("alert")).toHaveTextContent("Card save failed");
-  expect(screen.getByRole("dialog", { name: "Create flashcard" })).toBeInTheDocument();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Card save failed");  expect(screen.getByRole("dialog", { name: "Create flashcard" })).toBeInTheDocument();
   expect(createCard).toHaveBeenCalledWith(expect.objectContaining({
     front: "selected source text",
     back: "definition",
@@ -695,7 +808,8 @@ test("returns to the source page after saving or cancelling a card", async () =>
     createCard,
   });
   await user.click(screen.getByRole("button", { name: "Create flashcard" }));
-  await user.type(screen.getByRole("textbox", { name: "Back" }), "definition");
+  await user.click(editor("Back"));
+  await user.keyboard("definition");
   await user.click(screen.getByRole("combobox", { name: "Deck" }));
   await user.click(screen.getByRole("option", { name: "English" }));
   await user.click(screen.getByRole("button", { name: "Save" }));
@@ -835,10 +949,11 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
   await user.click(screen.getByRole("button", { name: "Add Card" }));
 
   // Inside side panel, enter details
-  const frontInput = await screen.findByRole("textbox", { name: "Front" });
-  await user.type(frontInput, "What is a mitochondrion?");
-  await user.type(screen.getByRole("textbox", { name: "Back" }), "The powerhouse of the cell");
-  await user.type(screen.getByRole("textbox", { name: "Tags" }), "biology");
+  const frontInput = await waitFor(() => editor("Front"));
+  await user.click(frontInput);
+  await user.keyboard("What is a mitochondrion?");
+  await user.click(editor("Back"));
+  await user.keyboard("The powerhouse of the cell");
 
   // Mock returning the new card on next query
   queryDeckCards.mockResolvedValue({
@@ -849,14 +964,18 @@ test("opens a deck's cards from Memora and adds one manually", async () => {
 
   // Click Save/Add Card button in form
   const panel = screen.getByRole("dialog", { name: "Add Card" });
-  await user.click(within(panel).getByRole("button", { name: "Add Card" }));
+  await user.click(within(panel).getByRole("button", { name: "Save" }));
 
-  expect(createCard).toHaveBeenCalledWith({
+  const createInput = vi.mocked(createCard).mock.calls[0][0];
+  expect(createInput).toMatchObject({
     deckName: "Biology",
     front: "What is a mitochondrion?",
     back: "The powerhouse of the cell",
-    tags: ["biology"],
+    tags: [],
     frontLanguage: "en",
+    frontDoc: expect.any(Object),
+    backDoc: expect.any(Object),
+    mediaDraftId: expect.any(String),
   });
 
   // Verify it is listed in Card Browser table

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { IconCloud, IconUpload } from "../../app/icons";
+import { Button } from "../../components/Button";
 import googleDriveMark from "../../assets/import-sources/google-drive.png";
 import oneDriveMark from "../../assets/import-sources/onedrive.svg";
 
@@ -86,16 +87,16 @@ export function ImportMenu({ onUpload, onGoogleDrive }: ImportMenuProps) {
 
   return (
     <div className="library-import-menu">
-      <button
+      <Button
         ref={triggerRef}
-        type="button"
         className="library-import-menu__trigger"
+        variant="primary"
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((current) => !current)}
       >
         Import
-      </button>
+      </Button>
       {open ? (
         <div ref={menuRef} className="library-import-menu__items" role="menu">
           <button type="button" role="menuitem" className="library-import-menu__item" onClick={() => select(onUpload)}>

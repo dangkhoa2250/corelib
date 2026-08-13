@@ -97,6 +97,20 @@ test("registers Memora settings as an Apps destination in Quick Open", async () 
   expect(openRoute).toHaveBeenCalledWith({ name: "settings", section: "memora" });
 });
 
+test("does not register a deleted Media settings destination or image action", async () => {
+  const openRoute = vi.fn();
+  const registry = createCommandRegistry(createContext({ openRoute }));
+
+  for (const query of ["pixabay", "images", "media"]) {
+    expect(await registry.search("quick-open", query)).not.toContainEqual(
+      expect.objectContaining({ id: "route.settings.images" }),
+    );
+  }
+
+  await expect(registry.search("command-palette", "pixabay")).resolves.toEqual([]);
+  expect(openRoute).not.toHaveBeenCalled();
+});
+
 test("keeps card and trash provenance in Quick Open breadcrumbs", async () => {
   const registry = createCommandRegistry(createContext({
     searchCards: vi.fn().mockResolvedValue([{ kind: "card", id: "card-1", title: "Eigenvectors", subtitle: "Linear Algebra" }]),

@@ -101,12 +101,12 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
             }}
             value={nameValue}
           />
-          <button disabled={saving || !nameValue.trim()} type="submit">
+          <Button disabled={saving || !nameValue.trim()} type="submit" variant="primary">
             Save
-          </button>
-          <button onClick={() => { setNameValue(deck.name); setMode("idle"); }} type="button">
+          </Button>
+          <Button onClick={() => { setNameValue(deck.name); setMode("idle"); }} variant="secondary">
             Cancel
-          </button>
+          </Button>
         </form>
       </li>
     );
@@ -122,8 +122,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
       <li className="memora-deck-list__item memora-deck-list__item--confirm">
         <span>{warning}</span>
         <div className="memora-deck-list__confirm-actions">
-          <button
-            className="memora-deck-list__delete-confirm"
+          <Button
             disabled={saving}
             onClick={() => {
               setSaving(true);
@@ -132,13 +131,13 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
                 setMode("idle");
               });
             }}
-            type="button"
+            variant="destructive"
           >
             Delete
-          </button>
-          <button disabled={saving} onClick={() => setMode("idle")} type="button">
+          </Button>
+          <Button disabled={saving} onClick={() => setMode("idle")} variant="secondary">
             Cancel
-          </button>
+          </Button>
         </div>
       </li>
     );
@@ -341,24 +340,25 @@ export function MemoraPage({ listDecks, getStudyReadyCounts, onReviewToday, crea
                 placeholder="Deck name"
                 value={newDeckName}
               />
-              <button disabled={saving || !newDeckName.trim()} type="submit">
+              <Button disabled={saving || !newDeckName.trim()} type="submit" variant="primary">
                 Create
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => {
                   setCreatingDeck(false);
                   setNewDeckName("");
                 }}
-                type="button"
+                variant="secondary"
               >
                 Cancel
-              </button>
+              </Button>
             </form>
           ) : (
-            <Button onClick={() => setCreatingDeck(true)}>New Deck</Button>
+            <Button onClick={() => setCreatingDeck(true)} variant="primary">New Deck</Button>
           )}
           <Button
             onClick={onReviewToday}
+            variant="secondary"
           >
             {dueCount ? `Review ${dueCount} Ready` : "Review"}
           </Button>

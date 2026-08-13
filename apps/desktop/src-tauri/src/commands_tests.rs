@@ -1,5 +1,7 @@
 use std::{
     fs,
+    io::{Read, Write},
+    net::TcpListener,
     path::Path,
     sync::{
         atomic::{AtomicUsize, Ordering},
@@ -16,13 +18,15 @@ use tauri::Manager;
 use tempfile::tempdir;
 
 use crate::commands::{
-    download_drive_file_async, download_drive_file_async_guarded, get_document_file_url,
-    import_local_documents_for_test, local_review_clock, scope_from_payload,
-    validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool, LibraryStore,
-    StudyRatingPayload, INDEX_QUEUE_CAPACITY,
+    discard_media_draft, download_drive_file_async, download_drive_file_async_guarded,
+    fetch_remote_image_preview, get_document_file_url, import_local_documents_for_test,
+    local_review_clock, resolve_card_media, resolve_staged_media, scope_from_payload, stage_card_media,
+    stage_remote_card_media, validate_import_paths, validate_read_page, IndexTask, IndexWorkerPool,
+    LibraryStore, StageCardMediaInput, StudyRatingPayload, INDEX_QUEUE_CAPACITY,
 };
 use crate::library_db::{LibraryDatabase, NewLocalDocument};
 use crate::library_store::content_hash;
+use crate::media::{CardMediaStore, MEDIA_DIR_NAME};
 use crate::model::StudyScopePayload;
 
 #[test]
@@ -190,8 +194,9 @@ fn import_returns_pending_before_its_background_index_task_runs() {
     fs::write(&source, b"%PDF-1.4\npending\n").expect("write valid PDF");
     let (app, tasks) = app_with_controlled_indexer(&library_root);
 
-    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
-        .expect("import document without waiting for extraction");
+    let imported =
+        import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
+            .expect("import document without waiting for extraction");
 
     assert_eq!(imported[0].status, "processing");
     assert!(!imported[0].indexed);
@@ -285,8 +290,9 @@ fn a_rejected_index_schedule_leaves_the_document_durably_pending() {
         .build(tauri::test::mock_context(tauri::test::noop_assets()))
         .expect("build test application");
 
-    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
-        .expect("import document");
+    let imported =
+        import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
+            .expect("import document");
     let mut database = LibraryDatabase::open(&library_root).expect("open database");
 
     assert_eq!(imported[0].status, "processing");
@@ -371,8 +377,9 @@ fn import_recovers_an_existing_managed_pdf_without_a_database_row_and_indexes_it
     fs::copy(&source, &managed_path).expect("seed managed PDF without database record");
     let (app, tasks) = app_with_controlled_indexer(&library_root);
 
-    let imported = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
-        .expect("recover managed document");
+    let imported =
+        import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state())
+            .expect("recover managed document");
 
     assert_eq!(imported.len(), 1);
     assert_eq!(imported[0].status, "processing");
@@ -484,7 +491,8 @@ fn batch_import_removes_new_managed_files_when_the_database_batch_fails() {
         .install_insert_failure_for_test()
         .expect("install insert failure");
 
-    let result = import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state());
+    let result =
+        import_local_documents_for_test(vec![source.to_string_lossy().into_owned()], app.state());
 
     assert!(result.is_err());
     assert!(crate::commands::list_documents(app.state())
@@ -530,9 +538,11 @@ fn import_rejects_missing_and_directory_paths() {
     let app = app_with_library(&library_root);
 
     for path in [missing, directory_pdf] {
-        assert!(
-            import_local_documents_for_test(vec![path.to_string_lossy().into_owned()], app.state()).is_err()
-        );
+        assert!(import_local_documents_for_test(
+            vec![path.to_string_lossy().into_owned()],
+            app.state()
+        )
+        .is_err());
     }
 
     assert!(crate::commands::list_documents(app.state())
@@ -578,10 +588,11 @@ fn import_rejects_fifo_pdf_input() {
         .success());
     let app = app_with_library(&library_root);
 
-    assert!(
-        import_local_documents_for_test(vec![fifo_path.to_string_lossy().into_owned()], app.state())
-            .is_err()
-    );
+    assert!(import_local_documents_for_test(
+        vec![fifo_path.to_string_lossy().into_owned()],
+        app.state()
+    )
+    .is_err());
     assert!(crate::commands::list_documents(app.state())
         .expect("list documents")
         .is_empty());
@@ -661,6 +672,9 @@ fn rate_study_card_surfaces_stale_grant_message_without_writes() {
             source: None,
             tags: Vec::new(),
             front_language: None,
+            front_doc: None,
+            back_doc: None,
+            media_draft_id: None,
         },
         app.state(),
     )
@@ -670,8 +684,7 @@ fn rate_study_card_surfaces_stale_grant_message_without_writes() {
         kind: "deck".into(),
         deck_id: Some(card.deck_id.clone()),
     };
-    let session =
-        crate::commands::start_study_session(scope, app.state()).expect("start session");
+    let session = crate::commands::start_study_session(scope, app.state()).expect("start session");
     let grant = session.cards[0].clone();
 
     crate::commands::set_cards_suspended(vec![card.id.clone()], true, app.state())
@@ -709,6 +722,9 @@ fn rate_study_card_rejects_expired_session_without_writes() {
             source: None,
             tags: Vec::new(),
             front_language: None,
+            front_doc: None,
+            back_doc: None,
+            media_draft_id: None,
         },
         app.state(),
     )
@@ -718,8 +734,7 @@ fn rate_study_card_rejects_expired_session_without_writes() {
         kind: "deck".into(),
         deck_id: Some(card.deck_id.clone()),
     };
-    let session =
-        crate::commands::start_study_session(scope, app.state()).expect("start session");
+    let session = crate::commands::start_study_session(scope, app.state()).expect("start session");
     let grant = session.cards[0].clone();
 
     {
@@ -748,4 +763,832 @@ fn rate_study_card_rejects_expired_session_without_writes() {
     .expect_err("expired session rejected");
     assert_eq!(error, "study session expired");
     assert_eq!(study_review_log_count(&library_root, &card.id), 0);
+}
+
+/// Minimal valid 1x1 PNG (same signature used by the media store tests).
+const MEDIA_PNG_BYTES: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0x8B, 0x8F, 0xC4, 0x4E, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
+    0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+];
+
+const MEDIA_JPEG_BYTES: &[u8] = &[
+    0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, b'J', b'F', b'I', b'F', 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+    0x00, 0x01, 0x00, 0x00, 0xFF, 0xD9,
+];
+
+fn base64_standard(bytes: &[u8]) -> String {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine;
+    STANDARD.encode(bytes)
+}
+
+fn media_rows(library_root: &Path) -> Vec<(String, String, Option<String>, Option<String>)> {
+    let database = LibraryDatabase::open(library_root).expect("reopen database");
+    let mut statement = database
+        .connection
+        .prepare(
+            "SELECT id, relative_path, card_id, draft_id FROM card_media \
+             ORDER BY created_at, id",
+        )
+        .expect("prepare media query");
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        })
+        .expect("query media rows");
+    rows.collect::<rusqlite::Result<Vec<_>>>()
+        .expect("collect media rows")
+}
+
+#[test]
+fn stage_card_media_command_stages_a_file_source_under_staging() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let source = directory.path().join("photo.png");
+    fs::write(&source, MEDIA_PNG_BYTES).expect("write source png");
+
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "file".to_string(),
+            attribution: None,
+            file_path: Some(source.to_string_lossy().into_owned()),
+            bytes_base64: None,
+        },
+        app.state(),
+    )
+    .expect("stage from file");
+
+    assert_eq!(staged.source_type, "file");
+    assert_eq!(staged.mime_type, "image/png");
+    assert_eq!(staged.card_id, None);
+    assert_eq!(staged.draft_id.as_deref(), Some("draft-1"));
+    assert!(
+        staged.relative_path.starts_with("staging/draft-1/"),
+        "staged file must live under staging/draft-1/, got {}",
+        staged.relative_path
+    );
+    assert!(library_root
+        .join("card-media")
+        .join(&staged.relative_path)
+        .is_file());
+}
+
+#[test]
+fn stage_card_media_command_stages_base64_for_clipboard_and_web() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let clipboard = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage clipboard png");
+
+    let web = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "web".to_string(),
+            attribution: Some("Artist · CC BY".to_string()),
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_JPEG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage web jpeg");
+
+    assert_eq!(clipboard.source_type, "clipboard");
+    assert_eq!(clipboard.mime_type, "image/png");
+    assert_eq!(web.source_type, "web");
+    assert_eq!(web.mime_type, "image/jpeg");
+    assert_eq!(web.attribution.as_deref(), Some("Artist · CC BY"));
+    let rows = media_rows(&library_root);
+    assert_eq!(rows.len(), 2);
+    for (_id, relative_path, card_id, draft_id) in rows {
+        assert_eq!(card_id, None, "staged rows must not be committed");
+        assert_eq!(draft_id.as_deref(), Some("draft-1"));
+        assert!(relative_path.starts_with("staging/draft-1/"));
+    }
+}
+
+fn serve_preview_image() -> String {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind preview server");
+    let address = listener.local_addr().expect("preview server address");
+    std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().expect("accept preview request");
+        read_request_headers(&mut stream);
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nContent-Type: application/octet-stream\r\n\r\n",
+            MEDIA_PNG_BYTES.len()
+        );
+        stream
+            .write_all(response.as_bytes())
+            .expect("write preview headers");
+        stream
+            .write_all(MEDIA_PNG_BYTES)
+            .expect("write preview body");
+    });
+    format!("http://test.invalid:{}/preview", address.port())
+}
+
+fn read_request_headers(stream: &mut std::net::TcpStream) {
+    let mut request = Vec::new();
+    let mut byte = [0u8; 1];
+    while !request.windows(4).any(|window| window == b"\r\n\r\n") {
+        stream.read_exact(&mut byte).expect("read preview request");
+        request.push(byte[0]);
+        assert!(
+            request.len() <= 64 * 1024,
+            "preview request headers too large"
+        );
+    }
+}
+
+#[test]
+fn fetch_remote_image_preview_command_returns_validated_payload() {
+    let payload = tauri::async_runtime::block_on(fetch_remote_image_preview(serve_preview_image()))
+        .expect("fetch preview");
+    assert_eq!(payload.mime_type, "image/png");
+    assert_eq!(base64_standard(MEDIA_PNG_BYTES), payload.data_base64);
+}
+
+#[test]
+fn library_store_open_cleans_stale_staged_media() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let database = Arc::new(Mutex::new(
+        LibraryDatabase::open(&library_root).expect("open database"),
+    ));
+    let media_store = CardMediaStore::new(Arc::clone(&database), library_root.join(MEDIA_DIR_NAME));
+    let staged = media_store
+        .stage_from_bytes("stale-draft", MEDIA_PNG_BYTES, "", "web", None)
+        .expect("stage media");
+    database
+        .lock()
+        .expect("database lock")
+        .connection
+        .execute(
+            "UPDATE card_media SET created_at = '2000-01-01T00:00:00.000Z' WHERE id = ?1",
+            rusqlite::params![staged.id],
+        )
+        .expect("age staged media");
+    drop(media_store);
+    drop(database);
+
+    let _store = LibraryStore::open(library_root.clone()).expect("reopen library");
+    assert!(media_rows(&library_root).is_empty());
+    assert!(!library_root
+        .join(MEDIA_DIR_NAME)
+        .join(staged.relative_path)
+        .exists());
+}
+
+#[test]
+fn stage_remote_card_media_command_stages_web_media_with_generic_attribution() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let staged = tauri::async_runtime::block_on(stage_remote_card_media(
+        "draft-web".to_string(),
+        serve_preview_image(),
+        Some("Openverse / CC0".to_string()),
+        app.state(),
+    ))
+    .expect("stage remote image");
+
+    assert_eq!(staged.source_type, "web");
+    assert_eq!(staged.attribution.as_deref(), Some("Openverse / CC0"));
+    assert_eq!(staged.mime_type, "image/png");
+    assert!(library_root
+        .join("card-media")
+        .join(&staged.relative_path)
+        .is_file());
+}
+
+#[test]
+fn stage_remote_card_media_command_validates_url_before_database_write() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let error = tauri::async_runtime::block_on(stage_remote_card_media(
+        "draft-web".to_string(),
+        "file:///tmp/image.png".to_string(),
+        Some("Openverse / CC0".to_string()),
+        app.state(),
+    ))
+    .expect_err("non-http source");
+    assert!(error.contains("http"));
+}
+
+#[test]
+fn resolve_staged_media_command_returns_an_absolute_owned_path() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let staged = tauri::async_runtime::block_on(stage_remote_card_media(
+        "draft-owned".to_string(),
+        serve_preview_image(),
+        None,
+        app.state(),
+    ))
+    .expect("stage media");
+
+    let resolved = resolve_staged_media(
+        "draft-owned".to_string(),
+        staged.id,
+        app.state(),
+    )
+    .expect("resolve staged media");
+
+    assert!(Path::new(&resolved).is_absolute());
+    assert!(Path::new(&resolved).is_file());
+}
+
+#[test]
+fn stage_card_media_command_rejects_invalid_combinations() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    // File source without a file path.
+    let missing_path = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "file".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: None,
+        },
+        app.state(),
+    );
+    assert!(missing_path.is_err(), "file source needs a file path");
+
+    // Clipboard source with neither bytes nor a path.
+    let empty_bytes = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: None,
+        },
+        app.state(),
+    );
+    assert!(empty_bytes.is_err(), "clipboard source needs bytes");
+
+    // Invalid source type.
+    let bad_type = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "dropbox".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    );
+    assert!(bad_type.is_err(), "unknown source type rejected");
+}
+
+#[test]
+fn discard_media_draft_command_removes_only_that_drafts_staging() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    for (draft, bytes) in [("draft-1", MEDIA_PNG_BYTES), ("draft-1", MEDIA_JPEG_BYTES)] {
+        stage_card_media(
+            StageCardMediaInput {
+                draft_id: draft.to_string(),
+                source_type: "clipboard".to_string(),
+                attribution: None,
+                file_path: None,
+                bytes_base64: Some(base64_standard(bytes)),
+            },
+            app.state(),
+        )
+        .expect("stage");
+    }
+    stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-2".to_string(),
+            source_type: "clipboard".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage draft-2");
+
+    discard_media_draft("draft-1".to_string(), app.state()).expect("discard draft-1");
+
+    let rows = media_rows(&library_root);
+    assert_eq!(rows.len(), 1, "only draft-2 rows remain");
+    assert_eq!(rows[0].3.as_deref(), Some("draft-2"));
+    // The staging directory for the discarded draft is gone.
+    assert!(!library_root.join("card-media/staging/draft-1").exists());
+}
+
+#[test]
+fn resolve_card_media_command_returns_owned_media_absolute_path() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    // Seed a committed media row: reopen the database to insert a card, promote
+    // a staged blob through the store, then resolve via the command.
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage");
+
+    {
+        let database = LibraryDatabase::open(&library_root).expect("reopen database");
+        database
+            .connection
+            .execute(
+                "INSERT INTO decks(id,name,created_at,updated_at) \
+                 VALUES('deck-1','deck-1','2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')",
+                [],
+            )
+            .expect("insert deck");
+        database
+            .connection
+            .execute(
+                "INSERT INTO cards(id,deck_id,front,back,state,due_at,reps,lapses,created_at,updated_at) \
+                 VALUES('card-1','deck-1','card-1','card-1','new','2026-01-01T00:00:00.000Z',0,0,\
+                 '2026-01-01T00:00:00.000Z','2026-01-01T00:00:00.000Z')",
+                [],
+            )
+            .expect("insert card");
+        let media_store = crate::media::CardMediaStore::new(
+            Arc::new(Mutex::new(database)),
+            library_root.join(crate::media::MEDIA_DIR_NAME),
+        );
+        media_store
+            .promote_referenced("card-1", "draft-1", std::slice::from_ref(&staged.id))
+            .expect("promote");
+    }
+
+    let absolute = resolve_card_media("card-1".to_string(), staged.id.clone(), app.state())
+        .expect("resolve owned media");
+    assert!(
+        absolute.ends_with(&format!("card-1/{}.png", staged.id)),
+        "committed media resolves to the absolute file path, got {absolute}"
+    );
+    assert!(std::path::Path::new(&absolute).is_file());
+
+    let non_owned = resolve_card_media("card-other".to_string(), staged.id.clone(), app.state());
+    assert!(
+        non_owned.is_err(),
+        "must reject media not owned by the card"
+    );
+    let missing = resolve_card_media("card-1".to_string(), "nope".to_string(), app.state());
+    assert!(missing.is_err(), "must reject unknown media id");
+}
+
+fn text_doc(text: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "doc",
+        "content": [{
+            "type": "paragraph",
+            "content": [{"type": "text", "text": text}],
+        }],
+    })
+}
+
+fn image_doc(media_id: &str, alt: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "doc",
+        "content": [{
+            "type": "image",
+            "attrs": { "mediaId": media_id, "alt": alt, "widthPercent": 50 },
+        }],
+    })
+}
+
+#[test]
+fn create_card_command_with_docs_derives_plain_text_and_persists_docs() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let front_doc = text_doc("rich front");
+    let back_doc = text_doc("rich back");
+
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "ignored".into(),
+            back: "ignored".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(front_doc.clone()),
+            back_doc: Some(back_doc.clone()),
+            media_draft_id: None,
+        },
+        app.state(),
+    )
+    .expect("create rich card");
+
+    assert_eq!(card.front, "rich front");
+    assert_eq!(card.back, "rich back");
+    assert_eq!(card.front_doc, Some(front_doc));
+    assert_eq!(card.back_doc, Some(back_doc));
+    assert!(card.media.is_empty());
+}
+
+#[test]
+fn create_card_command_rejects_invalid_doc_naming_the_node_path() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let error = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "front".into(),
+            back: "back".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(serde_json::json!({
+                "type": "doc",
+                "content": [{ "type": "bogus" }],
+            })),
+            back_doc: None,
+            media_draft_id: None,
+        },
+        app.state(),
+    )
+    .expect_err("invalid doc must be rejected");
+
+    assert!(
+        error.contains("doc.content[0]"),
+        "error must name the offending node path, got: {error}"
+    );
+
+    let count: i64 = LibraryDatabase::open(&library_root)
+        .expect("reopen database")
+        .connection
+        .query_row("SELECT COUNT(*) FROM cards", [], |row| row.get(0))
+        .expect("count cards");
+    assert_eq!(count, 0, "no card may be written for an invalid doc");
+}
+
+#[test]
+fn update_card_command_removes_unreferenced_media_only_after_successful_save() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let first = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage first blob");
+    let second = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-2".to_string(),
+            source_type: "clipboard".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_JPEG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage second blob");
+
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "front".into(),
+            back: "back".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(image_doc(&first.id, "first")),
+            back_doc: None,
+            media_draft_id: Some("draft-1".into()),
+        },
+        app.state(),
+    )
+    .expect("create card referencing first blob");
+
+    let first_file = library_root
+        .join("card-media")
+        .join(&card.id)
+        .join(format!("{}.png", first.id));
+    assert!(first_file.is_file(), "first blob committed under the card");
+
+    let updated = crate::commands::update_card(
+        crate::model::UpdateCardPayload {
+            card_id: card.id.clone(),
+            front: "front".into(),
+            back: "back".into(),
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(image_doc(&second.id, "second")),
+            back_doc: None,
+            media_draft_id: Some("draft-2".into()),
+        },
+        app.state(),
+    )
+    .expect("update card to reference second blob");
+
+    let second_file = library_root
+        .join("card-media")
+        .join(&card.id)
+        .join(format!("{}.jpg", second.id));
+    assert!(
+        second_file.is_file(),
+        "second blob committed under the card"
+    );
+    assert!(
+        !first_file.exists(),
+        "no-longer-referenced first blob must be removed after a successful save"
+    );
+    assert_eq!(updated.media.len(), 1);
+    assert_eq!(updated.media[0].id, second.id);
+
+    // A failed save must leave the current media untouched.
+    let failed = crate::commands::update_card(
+        crate::model::UpdateCardPayload {
+            card_id: card.id.clone(),
+            front: "front".into(),
+            back: "back".into(),
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(serde_json::json!({
+                "type": "doc",
+                "content": [{ "type": "bogus" }],
+            })),
+            back_doc: None,
+            media_draft_id: None,
+        },
+        app.state(),
+    );
+    assert!(failed.is_err(), "invalid doc update must fail");
+    assert!(
+        second_file.is_file(),
+        "failed save must leave prior media files intact"
+    );
+    let rows = media_rows(&library_root);
+    assert_eq!(rows.len(), 1, "only the still-referenced media row remains");
+    assert_eq!(rows[0].0, second.id);
+}
+
+#[test]
+fn update_and_move_card_command_persists_docs_and_promotes_staged_media() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-edit".to_string(),
+            source_type: "web".to_string(),
+            attribution: Some("Artist · CC BY".to_string()),
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage web image for the back face");
+
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "What is ATP?".into(),
+            back: "Energy storage.".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: None,
+            back_doc: None,
+            media_draft_id: None,
+        },
+        app.state(),
+    )
+    .expect("create card");
+
+    let back_doc = image_doc(&staged.id, "cell diagram");
+    let updated = crate::commands::update_and_move_card(
+        crate::model::UpdateAndMoveCardPayload {
+            card_id: card.id.clone(),
+            front: "What is ATP?".into(),
+            back: "Cell diagram".into(),
+            tags: Vec::new(),
+            destination_deck_id: None,
+            front_language: None,
+            front_doc: None,
+            back_doc: Some(back_doc.clone()),
+            media_draft_id: Some("draft-edit".into()),
+        },
+        app.state(),
+    )
+    .expect("update and move with an imported image");
+
+    assert_eq!(updated.back_doc, Some(back_doc));
+    assert_eq!(updated.media.len(), 1, "imported image must be committed");
+    assert_eq!(updated.media[0].id, staged.id);
+    assert_eq!(
+        updated.media[0].card_id.as_deref(),
+        Some(card.id.as_str()),
+        "media row must be owned by the edited card"
+    );
+
+    let committed_file = library_root
+        .join("card-media")
+        .join(&card.id)
+        .join(format!("{}.png", staged.id));
+    assert!(
+        committed_file.is_file(),
+        "imported image file must move into card-media/<cardId>"
+    );
+
+    let rows = media_rows(&library_root);
+    assert_eq!(rows.len(), 1, "no staged rows may remain after promotion");
+    assert_eq!(rows[0].0, staged.id);
+    assert_eq!(rows[0].2.as_deref(), Some(card.id.as_str()));
+    assert_eq!(rows[0].3, None);
+}
+
+/// Seeds a trashed card whose committed media file lives on disk, returning
+/// `(card_id, media_file, media_id)`.
+fn seed_trashed_card_with_media(
+    library_root: &Path,
+    app: &tauri::App<tauri::test::MockRuntime>,
+) -> (String, std::path::PathBuf, String) {
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage blob");
+
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "front".into(),
+            back: "back".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(image_doc(&staged.id, "photo")),
+            back_doc: None,
+            media_draft_id: Some("draft-1".into()),
+        },
+        app.state(),
+    )
+    .expect("create card referencing staged blob");
+
+    let media_file = library_root
+        .join("card-media")
+        .join(&card.id)
+        .join(format!("{}.png", staged.id));
+    assert!(
+        media_file.is_file(),
+        "committed media file must exist on disk"
+    );
+
+    crate::commands::trash_cards(vec![card.id.clone()], app.state()).expect("trash the card");
+    assert!(
+        media_file.is_file(),
+        "trashing a card must keep its media files for restore"
+    );
+
+    (card.id, media_file, staged.id)
+}
+
+#[test]
+fn delete_card_command_removes_committed_media_files() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+
+    let staged = stage_card_media(
+        StageCardMediaInput {
+            draft_id: "draft-1".to_string(),
+            source_type: "clipboard".to_string(),
+            attribution: None,
+            file_path: None,
+            bytes_base64: Some(base64_standard(MEDIA_PNG_BYTES)),
+        },
+        app.state(),
+    )
+    .expect("stage blob");
+    let card = crate::commands::create_card(
+        crate::commands::CreateCardInput {
+            deck_name: "Biology".into(),
+            front: "front".into(),
+            back: "back".into(),
+            source: None,
+            tags: Vec::new(),
+            front_language: None,
+            front_doc: Some(image_doc(&staged.id, "photo")),
+            back_doc: None,
+            media_draft_id: Some("draft-1".into()),
+        },
+        app.state(),
+    )
+    .expect("create card referencing staged blob");
+    let media_file = library_root
+        .join("card-media")
+        .join(&card.id)
+        .join(format!("{}.png", staged.id));
+    assert!(
+        media_file.is_file(),
+        "committed media file must exist on disk"
+    );
+
+    crate::commands::delete_card(card.id.clone(), app.state()).expect("delete card");
+
+    assert!(
+        !media_file.exists(),
+        "delete_card must remove the card media directory"
+    );
+    let rows = media_rows(&library_root);
+    assert!(
+        rows.iter().all(|(id, _, _, _)| *id != staged.id),
+        "media rows must be removed via CASCADE on delete_card"
+    );
+}
+
+#[test]
+fn delete_cards_permanently_command_removes_committed_media_files() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let (card_id, media_file, media_id) = seed_trashed_card_with_media(&library_root, &app);
+
+    crate::commands::delete_cards_permanently(vec![card_id.clone()], app.state())
+        .expect("permanently delete trashed card");
+
+    assert!(
+        !media_file.exists(),
+        "permanent delete must remove the card media directory"
+    );
+    let rows = media_rows(&library_root);
+    assert!(
+        rows.iter().all(|(id, _, _, _)| *id != media_id),
+        "media rows must be removed via CASCADE on permanent delete"
+    );
+}
+
+#[test]
+fn empty_trash_command_removes_committed_media_files() {
+    let directory = tempdir().expect("temporary directory");
+    let library_root = directory.path().join("library");
+    let app = app_with_library(&library_root);
+    let (_card_id, media_file, media_id) = seed_trashed_card_with_media(&library_root, &app);
+
+    crate::commands::empty_trash(app.state()).expect("empty trash");
+
+    assert!(
+        !media_file.exists(),
+        "empty trash must remove the card media directory"
+    );
+    let rows = media_rows(&library_root);
+    assert!(
+        rows.iter().all(|(id, _, _, _)| *id != media_id),
+        "media rows must be removed via CASCADE on empty trash"
+    );
 }

@@ -708,7 +708,8 @@ interface ReaderPageProps {
   composerDecks?: CardComposerDeck[];
   composerError?: string | null;
   onSaveCard?: (input: CardSaveInput) => Promise<void>;
-  onTranslate?: (text: string) => Promise<string>;
+  onTranslate?: (text: string, sourceLanguage?: string | null, targetLanguage?: string | null) => Promise<string>;
+  composerDefaultBackLanguage?: string | null;
   onCloseComposer?: () => void;
   sourceHighlight?: CardSource | null;
   listPageTags?: (docId: string) => Promise<PageTag[]>;
@@ -726,6 +727,7 @@ export function ReaderPage({
   composerError,
   onSaveCard,
   onTranslate,
+  composerDefaultBackLanguage,
   onCloseComposer,
   sourceHighlight,
   listPageTags,
@@ -1266,81 +1268,83 @@ export function ReaderPage({
 
           <h1 className="reader-toolbar__title">{document.title}</h1>
 
-          <div className="reader-toolbar__group reader-toolbar__group--page">
-            <button
-              type="button"
-              className="reader-icon-button"
-              aria-label="Previous page"
-              title="Previous page"
-              disabled={currentPage <= 1}
-              onClick={() => handlePageSelect(currentPage - 1)}
-            >
-              ‹
-            </button>
-            <span className="reader-page-indicator">
-              Page {currentPage} of {pdfDoc?.numPages}
-            </span>
-            <button
-              type="button"
-              className="reader-icon-button"
-              aria-label="Next page"
-              title="Next page"
-              disabled={currentPage >= (pdfDoc?.numPages ?? 1)}
-              onClick={() => handlePageSelect(currentPage + 1)}
-            >
-              ›
-            </button>
-          </div>
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "3px" }}>
+            {togglePageTag && (
+              <div className="reader-tag-menu">
+                <button
+                  type="button"
+                  className="reader-icon-button"
+                  aria-label="Page tags"
+                  title="Page tags"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTagMenuOpen(!tagMenuOpen);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                    <line x1="7" y1="7" x2="7.01" y2="7" />
+                  </svg>
+                </button>
+                {tagMenuOpen && (
+                  <div className="reader-tag-dropdown" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="reader-tag-dropdown__toggle"
+                      onClick={() => void handleToggleTag()}
+                    >
+                      {currentTagged ? `✓ Page ${currentPage} tagged` : `+ Tag Page ${currentPage}`}
+                    </button>
+                    <div className="reader-tag-dropdown__list">
+                      {pageTags.length === 0 ? (
+                        <p className="reader-tag-dropdown__empty">No tagged pages yet</p>
+                      ) : (
+                        pageTags.map((tag) => (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            className={`reader-tag-dropdown__item${tag.page === currentPage ? " is-active" : ""}`}
+                            onClick={() => {
+                              handlePageSelect(tag.page);
+                              setTagMenuOpen(false);
+                            }}
+                          >
+                            Page {tag.page}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-          {togglePageTag && (
-            <div className="reader-tag-menu">
+            <div className="reader-toolbar__group reader-toolbar__group--page">
               <button
                 type="button"
                 className="reader-icon-button"
-                aria-label="Page tags"
-                title="Page tags"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setTagMenuOpen(!tagMenuOpen);
-                }}
+                aria-label="Previous page"
+                title="Previous page"
+                disabled={currentPage <= 1}
+                onClick={() => handlePageSelect(currentPage - 1)}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-                  <line x1="7" y1="7" x2="7.01" y2="7" />
-                </svg>
+                ‹
               </button>
-              {tagMenuOpen && (
-                <div className="reader-tag-dropdown" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    type="button"
-                    className="reader-tag-dropdown__toggle"
-                    onClick={() => void handleToggleTag()}
-                  >
-                    {currentTagged ? `✓ Page ${currentPage} tagged` : `+ Tag Page ${currentPage}`}
-                  </button>
-                  <div className="reader-tag-dropdown__list">
-                    {pageTags.length === 0 ? (
-                      <p className="reader-tag-dropdown__empty">No tagged pages yet</p>
-                    ) : (
-                      pageTags.map((tag) => (
-                        <button
-                          key={tag.id}
-                          type="button"
-                          className={`reader-tag-dropdown__item${tag.page === currentPage ? " is-active" : ""}`}
-                          onClick={() => {
-                            handlePageSelect(tag.page);
-                            setTagMenuOpen(false);
-                          }}
-                        >
-                          Page {tag.page}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
+              <span className="reader-page-indicator">
+                Page {currentPage} of {pdfDoc?.numPages}
+              </span>
+              <button
+                type="button"
+                className="reader-icon-button"
+                aria-label="Next page"
+                title="Next page"
+                disabled={currentPage >= (pdfDoc?.numPages ?? 1)}
+                onClick={() => handlePageSelect(currentPage + 1)}
+              >
+                ›
+              </button>
             </div>
-          )}
+          </div>
 
           <div className="reader-toolbar__group">
             <button
@@ -1502,6 +1506,7 @@ export function ReaderPage({
           onCancel={onCloseComposer}
           onSave={onSaveCard}
           onTranslate={onTranslate}
+          defaultBackLanguage={composerDefaultBackLanguage}
           variant="panel"
           externalError={composerError}
         />

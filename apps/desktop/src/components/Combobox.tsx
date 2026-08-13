@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { IconCheck, IconChevronDown, IconSearch } from "../app/icons";
+import { ScrollArea } from "./ScrollArea";
 
 export interface ComboboxOption<T extends string> {
   value: T;
@@ -207,7 +208,7 @@ export function Combobox<T extends string>({
             </div>
           )}
 
-          <div ref={listRef} id={listboxId} className="combobox__list" role="listbox">
+          <ScrollArea ref={listRef} id={listboxId} className="combobox__list" role="listbox">
             {filtered.length === 0 ? (
               <div className="combobox__empty">{noOptionsMessage}</div>
             ) : (
@@ -235,7 +236,7 @@ export function Combobox<T extends string>({
                 </button>
               ))
             )}
-          </div>
+          </ScrollArea>
         </div>
       )}
     </div>

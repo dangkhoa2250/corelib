@@ -524,3 +524,10 @@ test("settings search finds Memora by learning and FSRS terms", async () => {
   await user.type(screen.getByLabelText("Search settings"), "fsrs");
   expect(screen.getByRole("button", { name: "Memora" })).toBeInTheDocument();
 });
+
+test("does not expose a deleted Media settings section", () => {
+  renderSettings();
+
+  expect(screen.queryByRole("button", { name: "Media" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Pixabay")).not.toBeInTheDocument();
+});

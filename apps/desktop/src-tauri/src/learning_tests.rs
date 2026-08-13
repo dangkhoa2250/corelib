@@ -1,8 +1,11 @@
 use rusqlite::params;
 use tempfile::TempDir;
 
-use crate::learning::{AppliedReview, CardBrowserQuery, CardSort, NewCard, NewCardSource};
+use crate::learning::{
+    AppliedReview, CardBrowserQuery, CardSort, NewCard, NewCardSource, UpdateCard,
+};
 use crate::library_db::LibraryDatabase;
+use crate::media::{CardMediaStore, MEDIA_DIR_NAME};
 
 fn db() -> (TempDir, LibraryDatabase) {
     let dir = TempDir::new().expect("temp dir");
@@ -30,13 +33,16 @@ fn card(front: &str) -> NewCard {
         }),
         tags: vec!["English".into(), " english ".into(), "books".into()],
         front_language: None,
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
     }
 }
 
 #[test]
 fn creates_card_source_and_normalizes_tags() {
     let (_dir, mut db) = db();
-    let result = db.create_card(card("What is ATP?")).expect("create");
+    let result = db.create_card(card("What is ATP?"), None).expect("create");
     assert_eq!(result.front, "What is ATP?");
     assert_eq!(result.state, "new");
     assert_eq!(result.tags, vec!["English", "books"]);
@@ -56,7 +62,7 @@ fn rejects_blank_inputs_without_writes() {
         if invalid.front == "front" {
             invalid.back = " ".into();
         }
-        assert!(db.create_card(invalid).is_err());
+        assert!(db.create_card(invalid, None).is_err());
     }
     assert!(db.card_by_id("missing").expect("read").is_none());
 }
@@ -66,10 +72,10 @@ fn rejects_missing_or_invalid_source() {
     let (_dir, mut db) = db();
     let mut missing = card("front");
     missing.source.as_mut().unwrap().document_id = "nope".into();
-    assert!(db.create_card(missing).is_err());
+    assert!(db.create_card(missing, None).is_err());
     let mut page = card("front");
     page.source.as_mut().unwrap().page = 0;
-    assert!(db.create_card(page).is_err());
+    assert!(db.create_card(page, None).is_err());
 }
 
 #[test]
@@ -77,7 +83,7 @@ fn rejects_malformed_rects_before_writing_any_learning_rows() {
     let (_dir, mut db) = db();
     let mut malformed = card("front");
     malformed.source.as_mut().unwrap().rects_json = "[1]".into();
-    assert!(db.create_card(malformed).is_err());
+    assert!(db.create_card(malformed, None).is_err());
     let count: i64 = db
         .connection
         .query_row("SELECT (SELECT COUNT(*) FROM decks) + (SELECT COUNT(*) FROM cards) + (SELECT COUNT(*) FROM tags) + (SELECT COUNT(*) FROM card_text)", [], |row| row.get(0))
@@ -87,14 +93,14 @@ fn rejects_malformed_rects_before_writing_any_learning_rows() {
     let mut negative = card("front");
     negative.source.as_mut().unwrap().rects_json =
         r#"[{"x":0,"y":0,"width":-1,"height":2}]"#.into();
-    assert!(db.create_card(negative).is_err());
+    assert!(db.create_card(negative, None).is_err());
 }
 
 #[test]
 fn due_cards_order_and_filter_state() {
     let (_dir, mut db) = db();
-    let first = db.create_card(card("first")).expect("first");
-    let second = db.create_card(card("second")).expect("second");
+    let first = db.create_card(card("first"), None).expect("first");
+    let second = db.create_card(card("second"), None).expect("second");
     let due = db.due_cards("9999-12-31T00:00:00.000Z", 20).expect("due");
     assert_eq!(due.len(), 2);
     assert!(
@@ -115,7 +121,10 @@ fn due_cards_honors_limits_above_five_hundred() {
             source: None,
             tags: Vec::new(),
             front_language: None,
-        })
+            front_doc_json: None,
+            back_doc_json: None,
+            media_draft_id: None,
+        }, None)
         .expect("create bulk card");
     }
     assert_eq!(
@@ -129,7 +138,7 @@ fn due_cards_honors_limits_above_five_hundred() {
 #[test]
 fn card_search_and_source_delete_are_resilient() {
     let (_dir, mut db) = db();
-    let created = db.create_card(card("unique mitochondria")).expect("create");
+    let created = db.create_card(card("unique mitochondria"), None).expect("create");
     let matches = db.learning_search("mitochondria", 10).expect("search");
     assert_eq!(matches.len(), 1);
     db.delete_document("doc-1").expect("delete");
@@ -146,15 +155,15 @@ fn card_search_and_source_delete_are_resilient() {
 #[test]
 fn duplicate_deck_name_reuses_deck() {
     let (_dir, mut db) = db();
-    let a = db.create_card(card("one")).expect("one");
-    let b = db.create_card(card("two")).expect("two");
+    let a = db.create_card(card("one"), None).expect("one");
+    let b = db.create_card(card("two"), None).expect("two");
     assert_eq!(a.deck_id, b.deck_id);
 }
 
 #[test]
 fn review_updates_card_and_log_atomically() {
     let (_dir, mut db) = db();
-    let created = db.create_card(card("review me")).expect("create");
+    let created = db.create_card(card("review me"), None).expect("create");
     let updated = db
         .apply_review_atomic(AppliedReview {
             card_id: created.id.clone(),
@@ -180,7 +189,7 @@ fn review_updates_card_and_log_atomically() {
 #[test]
 fn review_again_increments_lapses_once_then_relearning_again_does_not() {
     let (_dir, mut db) = db();
-    let created = db.create_card(card("lapse me")).expect("create");
+    let created = db.create_card(card("lapse me"), None).expect("create");
     db.connection
         .execute(
             "UPDATE cards SET state='review', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
@@ -234,7 +243,7 @@ fn review_again_increments_lapses_once_then_relearning_again_does_not() {
 #[test]
 fn review_log_failure_rolls_back_card_update() {
     let (_dir, mut db) = db();
-    let created = db.create_card(card("rollback")).expect("create");
+    let created = db.create_card(card("rollback"), None).expect("create");
     db.install_learning_review_failure_for_test()
         .expect("trigger");
     let result = db.apply_review_atomic(AppliedReview {
@@ -262,7 +271,7 @@ fn review_log_failure_rolls_back_card_update() {
 #[test]
 fn rejects_invalid_review_state_and_empty_timestamps() {
     let (_dir, mut db) = db();
-    let created = db.create_card(card("invalid review")).expect("create");
+    let created = db.create_card(card("invalid review"), None).expect("create");
     let invalid = AppliedReview {
         card_id: created.id,
         rating: "good".into(),
@@ -285,7 +294,7 @@ fn rejects_invalid_review_state_and_empty_timestamps() {
 #[test]
 fn rejects_nonfinite_review_parameters_and_nonobject_memory() {
     let (_dir, mut db) = db();
-    let created = db.create_card(card("invalid fsrs")).expect("create");
+    let created = db.create_card(card("invalid fsrs"), None).expect("create");
     for (stability, difficulty, memory) in [
         (Some(f64::NAN), None, None),
         (None, Some(f64::INFINITY), None),
@@ -350,7 +359,7 @@ fn deletes_an_empty_deck() {
 #[test]
 fn deleting_a_deck_cascades_to_its_cards() {
     let (_dir, mut db) = db();
-    let result = db.create_card(card("What is ATP?")).expect("create");
+    let result = db.create_card(card("What is ATP?"), None).expect("create");
     let decks = db.list_decks().expect("list");
     let biology = decks.iter().find(|d| d.name == "Biology").expect("deck");
     assert_eq!(db.count_cards_in_deck(&biology.id).expect("count"), 1);
@@ -372,14 +381,14 @@ fn counts_cards_in_an_empty_deck_as_zero() {
 #[test]
 fn lists_cards_in_a_deck_in_creation_order() {
     let (_dir, mut db) = db();
-    let first = db.create_card(card("What is ATP?")).expect("create");
+    let first = db.create_card(card("What is ATP?"), None).expect("create");
     let second = db
-        .create_card(card("What is a mitochondrion?"))
+        .create_card(card("What is a mitochondrion?"), None)
         .expect("create");
 
     let mut other_deck_card = card("What is a neuron?");
     other_deck_card.deck_name = "Neuroscience".into();
-    db.create_card(other_deck_card).expect("create");
+    db.create_card(other_deck_card, None).expect("create");
 
     let decks = db.list_decks().expect("list");
     let biology = decks.iter().find(|d| d.name == "Biology").expect("deck");
@@ -406,7 +415,7 @@ fn lists_no_cards_for_an_empty_deck() {
 #[test]
 fn deletes_a_card() {
     let (_dir, mut db) = db();
-    let created = db.create_card(card("What is ATP?")).expect("create");
+    let created = db.create_card(card("What is ATP?"), None).expect("create");
     db.delete_card(&created.id).expect("delete");
     assert!(db.card_by_id(&created.id).expect("read").is_none());
 }
@@ -426,7 +435,7 @@ fn card_browser() {
 
     let mut card1 = card("ATP energy");
     card1.tags = vec!["Biology".into(), "Cell".into()];
-    let c1 = db.create_card(card1).expect("c1");
+    let c1 = db.create_card(card1, None).expect("c1");
     db.connection
         .execute(
             "UPDATE cards SET state='review', updated_at='2026-07-10T10:00:00Z' WHERE id=?1",
@@ -436,7 +445,7 @@ fn card_browser() {
 
     let mut card2 = card("Mitochondria ATP");
     card2.tags = vec!["biology".into(), "Organelle".into()];
-    let c2 = db.create_card(card2).expect("c2");
+    let c2 = db.create_card(card2, None).expect("c2");
     db.connection
         .execute(
             "UPDATE cards SET state='review', updated_at='2026-07-10T09:00:00Z' WHERE id=?1",
@@ -446,7 +455,7 @@ fn card_browser() {
 
     let mut card3 = card("ATP synthesis");
     card3.tags = vec!["Biology".into()];
-    let c3 = db.create_card(card3).expect("c3");
+    let c3 = db.create_card(card3, None).expect("c3");
     db.connection
         .execute(
             "UPDATE cards SET state='new', updated_at='2026-07-10T08:00:00Z' WHERE id=?1",
@@ -456,7 +465,7 @@ fn card_browser() {
 
     let mut card_trashed = card("ATP trashed");
     card_trashed.tags = vec!["Biology".into()];
-    let c_trashed = db.create_card(card_trashed).expect("c_trashed");
+    let c_trashed = db.create_card(card_trashed, None).expect("c_trashed");
     db.connection
         .execute(
             "UPDATE cards SET deleted_at='2026-07-10T11:00:00Z' WHERE id=?1",
@@ -467,7 +476,7 @@ fn card_browser() {
     let mut card_chem = card("Reaction chemistry");
     card_chem.deck_name = "Chemistry".into();
     card_chem.tags = vec!["Chemistry".into()];
-    let _c_chem = db.create_card(card_chem).expect("c_chem");
+    let _c_chem = db.create_card(card_chem, None).expect("c_chem");
 
     let page = db
         .query_deck_cards(CardBrowserQuery {
@@ -541,7 +550,7 @@ fn lifecycle_active() {
 
     let mut card1 = card("ATP energy");
     card1.tags = vec!["Biology".into()];
-    let c1 = db.create_card(card1).expect("c1");
+    let c1 = db.create_card(card1, None).expect("c1");
 
     db.connection.execute(
         "UPDATE cards SET state='review', stability=4.5, difficulty=2.1, reps=5, lapses=2, due_at='2026-07-10T12:00:00Z', memory_state_json='{\"fsrs\":1}' WHERE id=?1",
@@ -556,7 +565,10 @@ fn lifecycle_active() {
             back: "Adenosine triphosphate".into(),
             tags: vec!["biology".into(), "Cell".into()],
             front_language: None,
-        })
+            front_doc_json: None,
+            back_doc_json: None,
+            media_draft_id: None,
+        }, None)
         .expect("update_card");
 
     assert_eq!(updated.front, "ATP energy updated");
@@ -576,7 +588,7 @@ fn lifecycle_active() {
     assert_eq!(preserved.5, "2026-07-10T12:00:00Z");
     assert_eq!(preserved.6.as_deref(), Some("{\"fsrs\":1}"));
 
-    let c2 = db.create_card(card("card 2")).expect("c2");
+    let c2 = db.create_card(card("card 2"), None).expect("c2");
 
     let move_res = db
         .move_cards(&[c1.id.clone(), c2.id.clone()], &deck_chem.id)
@@ -665,7 +677,7 @@ fn update_and_move_card_is_atomic() {
     let deck_bio = db.create_deck("Biology").expect("deck");
     let deck_chem = db.create_deck("Chemistry").expect("deck");
 
-    let c1 = db.create_card(card("ATP energy")).expect("c1");
+    let c1 = db.create_card(card("ATP energy"), None).expect("c1");
 
     use crate::learning::UpdateAndMoveCard;
 
@@ -678,7 +690,10 @@ fn update_and_move_card_is_atomic() {
             tags: vec!["energy".into()],
             destination_deck_id: Some(deck_chem.id.clone()),
             front_language: None,
-        })
+            front_doc_json: None,
+            back_doc_json: None,
+            media_draft_id: None,
+        }, None)
         .expect("update_and_move");
 
     assert_eq!(moved.front, "ATP updated");
@@ -706,7 +721,10 @@ fn update_and_move_card_is_atomic() {
             tags: vec![],
             destination_deck_id: None,
             front_language: None,
-        })
+            front_doc_json: None,
+            back_doc_json: None,
+            media_draft_id: None,
+        }, None)
         .expect("update only");
     assert_eq!(updated.front, "ATP v2");
     let deck_id_unchanged: String = db
@@ -728,7 +746,10 @@ fn update_and_move_card_is_atomic() {
             tags: vec![],
             destination_deck_id: Some(deck_chem.id.clone()),
             front_language: None,
-        })
+            front_doc_json: None,
+            back_doc_json: None,
+            media_draft_id: None,
+        }, None)
         .expect("same deck");
 
     // Atomicity: move to a non-existent deck must roll back the content edit.
@@ -748,7 +769,10 @@ fn update_and_move_card_is_atomic() {
         tags: vec!["ghost".into()],
         destination_deck_id: Some("nonexistent-deck".into()),
         front_language: None,
-    });
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None);
     assert!(failed.is_err());
 
     let front_after: String = db
@@ -770,7 +794,10 @@ fn update_and_move_card_is_atomic() {
         tags: vec![],
         destination_deck_id: Some(deck_bio.id.clone()),
         front_language: None,
-    })
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None)
     .expect("move back");
 
     db.trash_cards(std::slice::from_ref(&c1.id))
@@ -783,7 +810,10 @@ fn update_and_move_card_is_atomic() {
         tags: vec![],
         destination_deck_id: None,
         front_language: None,
-    });
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None);
     assert!(trashed_edit.is_err());
 }
 
@@ -794,8 +824,8 @@ fn trash_and_isolation() {
     let deck_bio = db.create_deck("Biology").expect("deck");
     let deck_chem = db.create_deck("Chemistry").expect("deck");
 
-    let c1 = db.create_card(card("ATP energy")).expect("c1");
-    let c2 = db.create_card(card("Mitochondria")).expect("c2");
+    let c1 = db.create_card(card("ATP energy"), None).expect("c1");
+    let c2 = db.create_card(card("Mitochondria"), None).expect("c2");
 
     let trash_res = db.trash_cards(std::slice::from_ref(&c1.id)).expect("trash");
     assert_eq!(trash_res.affected_count, 1);
@@ -937,7 +967,7 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
     let deck_chem = db.create_deck("Chemistry").expect("deck");
 
     // Create cards in different states for Biology
-    let c_new = db.create_card(card("new card")).expect("new");
+    let c_new = db.create_card(card("new card"), None).expect("new");
     db.connection
         .execute(
             "UPDATE cards SET state='new', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
@@ -945,7 +975,7 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
         )
         .expect("update");
 
-    let c_learning = db.create_card(card("learning card")).expect("learning");
+    let c_learning = db.create_card(card("learning card"), None).expect("learning");
     db.connection
         .execute(
             "UPDATE cards SET state='learning', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
@@ -953,7 +983,7 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
         )
         .expect("update");
 
-    let c_review = db.create_card(card("review card")).expect("review");
+    let c_review = db.create_card(card("review card"), None).expect("review");
     db.connection
         .execute(
             "UPDATE cards SET state='review', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
@@ -961,7 +991,7 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
         )
         .expect("update");
 
-    let c_relearning = db.create_card(card("relearning card")).expect("relearning");
+    let c_relearning = db.create_card(card("relearning card"), None).expect("relearning");
     db.connection
         .execute(
             "UPDATE cards SET state='relearning', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
@@ -969,7 +999,7 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
         )
         .expect("update");
 
-    let c_suspended = db.create_card(card("suspended card")).expect("suspended");
+    let c_suspended = db.create_card(card("suspended card"), None).expect("suspended");
     db.connection
         .execute(
             "UPDATE cards SET state='suspended', due_at='2026-07-10T00:00:00Z' WHERE id=?1",
@@ -977,7 +1007,7 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
         )
         .expect("update");
 
-    let c_not_due = db.create_card(card("not due card")).expect("not due");
+    let c_not_due = db.create_card(card("not due card"), None).expect("not due");
     db.connection
         .execute(
             "UPDATE cards SET state='review', due_at='2099-12-31T00:00:00Z' WHERE id=?1",
@@ -991,10 +1021,10 @@ fn get_deck_statistics_counts_cards_by_state_and_due_status() {
         deck_name: "Chemistry".into(),
         ..c_chem
     };
-    let _c_chem = db.create_card(c_chem).expect("chemistry");
+    let _c_chem = db.create_card(c_chem, None).expect("chemistry");
 
     // Create a trashed card to verify it's excluded
-    let c_trashed = db.create_card(card("trashed card")).expect("trashed");
+    let c_trashed = db.create_card(card("trashed card"), None).expect("trashed");
     db.connection
         .execute(
             "UPDATE cards SET deleted_at='2026-07-10T00:00:00Z' WHERE id=?1",
@@ -1031,13 +1061,13 @@ fn invalid_language_codes_are_rejected() {
     
     // Test creation validation
     card_to_create.front_language = Some("invalid_lang".to_string());
-    let failed_create = db.create_card(card_to_create);
+    let failed_create = db.create_card(card_to_create, None);
     assert!(failed_create.is_err());
     
     // Test valid code works
     let mut card_valid = card("ATP energy");
     card_valid.front_language = Some("en".to_string());
-    let created = db.create_card(card_valid).expect("create card with valid language");
+    let created = db.create_card(card_valid, None).expect("create card with valid language");
     assert_eq!(created.front_language, Some("en".to_string()));
 
     // Test update validation
@@ -1048,7 +1078,10 @@ fn invalid_language_codes_are_rejected() {
         back: "Adenosine triphosphate".into(),
         tags: vec![],
         front_language: Some("invalid_lang".to_string()),
-    });
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None);
     assert!(failed_update.is_err());
 
     // Test update and move validation
@@ -1060,6 +1093,379 @@ fn invalid_language_codes_are_rejected() {
         tags: vec![],
         destination_deck_id: None,
         front_language: Some("invalid_lang".to_string()),
-    });
+        front_doc_json: None,
+        back_doc_json: None,
+        media_draft_id: None,
+    }, None);
     assert!(failed_update_move.is_err());
+}
+
+/// Minimal valid 1x1 PNG and JPEG blobs for media promotion tests.
+const PNG_BYTES: &[u8] = &[
+    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+    0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x62, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+    0x42, 0x60, 0x82,
+];
+
+const JPEG_BYTES: &[u8] = &[
+    0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, b'J', b'F', b'I', b'F', 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+    0x00, 0x01, 0x00, 0x00, 0xFF, 0xD9,
+];
+
+fn text_doc(text: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "doc",
+        "content": [{
+            "type": "paragraph",
+            "content": [{"type": "text", "text": text}],
+        }],
+    })
+}
+
+fn image_doc(media_id: &str, alt: &str) -> serde_json::Value {
+    serde_json::json!({
+        "type": "doc",
+        "content": [{
+            "type": "image",
+            "attrs": { "mediaId": media_id, "alt": alt, "widthPercent": 50 },
+        }],
+    })
+}
+
+#[test]
+fn create_card_with_docs_derives_plain_text_and_persists_doc_columns() {
+    let (_dir, mut db) = db();
+    let front_doc = text_doc("What is ATP?");
+    let back_doc = text_doc("Adenosine triphosphate");
+    let created = db
+        .create_card(
+            NewCard {
+                front: "ignored front".into(),
+                back: "ignored back".into(),
+                front_doc_json: Some(front_doc.clone()),
+                back_doc_json: Some(back_doc.clone()),
+                ..card("placeholder")
+            },
+            None
+        )
+        .expect("create rich card");
+
+    assert_eq!(created.front, "What is ATP?");
+    assert_eq!(created.back, "Adenosine triphosphate");
+    assert_eq!(created.front_doc, Some(front_doc.clone()));
+    assert_eq!(created.back_doc, Some(back_doc.clone()));
+
+    let (front_json, back_json): (Option<String>, Option<String>) = db
+        .connection
+        .query_row(
+            "SELECT front_doc_json, back_doc_json FROM cards WHERE id = ?1",
+            params![created.id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("read doc columns");
+    assert_eq!(
+        front_json
+            .map(|raw| serde_json::from_str::<serde_json::Value>(&raw).expect("valid json")),
+        Some(front_doc)
+    );
+    assert_eq!(
+        back_json
+            .map(|raw| serde_json::from_str::<serde_json::Value>(&raw).expect("valid json")),
+        Some(back_doc)
+    );
+}
+
+#[test]
+fn create_card_with_image_only_doc_succeeds() {
+    let (_dir, mut db) = db();
+    let front_doc = image_doc("media-1", "mitochondrion diagram");
+    let created = db
+        .create_card(
+            NewCard {
+                front_doc_json: Some(front_doc.clone()),
+                back_doc_json: None,
+                ..card("placeholder")
+            },
+            None
+        )
+        .expect("image-only doc card is valid");
+
+    assert_eq!(created.front, "mitochondrion diagram");
+    assert_eq!(created.back, "answer");
+    assert_eq!(created.front_doc, Some(front_doc));
+    assert_eq!(created.back_doc, None);
+}
+
+#[test]
+fn create_card_rejects_invalid_doc_without_writing_card_or_promoting_media() {
+    let (_dir, mut db) = db();
+    let invalid = serde_json::json!({
+        "type": "doc",
+        "content": [{ "type": "bogus" }],
+    });
+    let error = db
+        .create_card(
+            NewCard {
+                front_doc_json: Some(invalid),
+                ..card("front")
+            },
+            None
+        )
+        .expect_err("invalid doc must be rejected");
+    assert!(
+        error.to_string().contains("doc.content[0]"),
+        "error must name the offending node path, got: {error}"
+    );
+
+    let count: i64 = db
+        .connection
+        .query_row("SELECT COUNT(*) FROM cards", [], |row| row.get(0))
+        .expect("count cards");
+    assert_eq!(count, 0, "no card row may be written for an invalid doc");
+}
+
+#[test]
+fn create_card_with_media_draft_promotes_only_referenced_staged_media() {
+    use std::sync::{Arc, Mutex};
+
+    let dir = TempDir::new().expect("temp dir");
+    let database = Arc::new(Mutex::new(
+        LibraryDatabase::open(dir.path()).expect("open db"),
+    ));
+    let media_root = dir.path().join(MEDIA_DIR_NAME);
+    let store = CardMediaStore::new(Arc::clone(&database), media_root.clone());
+
+    let referenced = store
+        .stage_from_bytes("draft-1", PNG_BYTES, "", "clipboard", None)
+        .expect("stage referenced png")
+        .id;
+    let unreferenced = store
+        .stage_from_bytes("draft-1", JPEG_BYTES, "", "clipboard", None)
+        .expect("stage unreferenced jpeg")
+        .id;
+
+    let front_doc = image_doc(&referenced, "referenced image");
+    let mut db = database.lock().expect("lock db");
+    let created = db
+        .create_card(
+            NewCard {
+                deck_name: "Biology".into(),
+                front: "placeholder".into(),
+                back: "placeholder".into(),
+                source: None,
+                tags: Vec::new(),
+                front_language: None,
+                front_doc_json: Some(front_doc.clone()),
+                back_doc_json: None,
+                media_draft_id: Some("draft-1".into()),
+            },
+            Some(&media_root)
+        )
+        .expect("create rich card with staged media");
+    drop(db);
+
+    let committed_file = media_root
+        .join(&created.id)
+        .join(format!("{referenced}.png"));
+    assert!(
+        committed_file.is_file(),
+        "referenced media must be committed under card-media/<cardId>"
+    );
+    let staged_file = media_root
+        .join("staging")
+        .join("draft-1")
+        .join(format!("{unreferenced}.jpg"));
+    assert!(
+        staged_file.is_file(),
+        "unreferenced media must stay staged under staging/draft-1"
+    );
+
+    let db = database.lock().expect("lock db");
+    let (card_id, draft_id): (Option<String>, Option<String>) = db
+        .connection
+        .query_row(
+            "SELECT card_id, draft_id FROM card_media WHERE id = ?1",
+            params![referenced],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("referenced row");
+    assert_eq!(card_id.as_deref(), Some(created.id.as_str()));
+    assert_eq!(draft_id, None);
+
+    let (card_id, draft_id): (Option<String>, Option<String>) = db
+        .connection
+        .query_row(
+            "SELECT card_id, draft_id FROM card_media WHERE id = ?1",
+            params![unreferenced],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("unreferenced row");
+    assert_eq!(card_id, None);
+    assert_eq!(draft_id.as_deref(), Some("draft-1"));
+
+    // Hydrated summary carries the committed media list.
+    assert_eq!(created.media.len(), 1);
+    assert_eq!(created.media[0].id, referenced);
+    assert_eq!(created.media[0].card_id.as_deref(), Some(created.id.as_str()));
+}
+
+#[test]
+fn update_and_move_card_with_docs_persists_docs_and_promotes_referenced_media() {
+    use crate::learning::UpdateAndMoveCard;
+    use std::sync::{Arc, Mutex};
+
+    let dir = TempDir::new().expect("temp dir");
+    let database = Arc::new(Mutex::new(
+        LibraryDatabase::open(dir.path()).expect("open db"),
+    ));
+    let media_root = dir.path().join(MEDIA_DIR_NAME);
+    let store = CardMediaStore::new(Arc::clone(&database), media_root.clone());
+
+    let referenced = store
+        .stage_from_bytes("draft-1", PNG_BYTES, "", "clipboard", None)
+        .expect("stage referenced png")
+        .id;
+    let unreferenced = store
+        .stage_from_bytes("draft-1", JPEG_BYTES, "", "clipboard", None)
+        .expect("stage unreferenced jpeg")
+        .id;
+
+    let mut db = database.lock().expect("lock db");
+    let created = db
+        .create_card(
+            NewCard {
+                deck_name: "Biology".into(),
+                front: "old front".into(),
+                back: "old back".into(),
+                source: None,
+                tags: Vec::new(),
+                front_language: None,
+                front_doc_json: None,
+                back_doc_json: None,
+                media_draft_id: None,
+            },
+            None,
+        )
+        .expect("create plain card");
+
+    let back_doc = image_doc(&referenced, "imported image");
+    let updated = db
+        .update_and_move_card(
+            UpdateAndMoveCard {
+                card_id: created.id.clone(),
+                front: "ignored front".into(),
+                back: "ignored back".into(),
+                tags: Vec::new(),
+                destination_deck_id: None,
+                front_language: None,
+                front_doc_json: Some(text_doc("new front")),
+                back_doc_json: Some(back_doc.clone()),
+                media_draft_id: Some("draft-1".into()),
+            },
+            Some(&media_root),
+        )
+        .expect("update and move with rich back doc");
+
+    assert_eq!(updated.front, "new front");
+    assert_eq!(updated.back, "imported image");
+    assert_eq!(updated.back_doc, Some(back_doc));
+    assert_eq!(updated.media.len(), 1);
+    assert_eq!(updated.media[0].id, referenced);
+    assert_eq!(updated.media[0].card_id.as_deref(), Some(created.id.as_str()));
+
+    let committed_file = media_root
+        .join(&created.id)
+        .join(format!("{referenced}.png"));
+    assert!(
+        committed_file.is_file(),
+        "referenced media must be committed under card-media/<cardId>"
+    );
+    let staged_file = media_root
+        .join("staging")
+        .join("draft-1")
+        .join(format!("{unreferenced}.jpg"));
+    assert!(
+        staged_file.is_file(),
+        "unreferenced media must stay staged under staging/draft-1"
+    );
+
+    let (card_id, draft_id): (Option<String>, Option<String>) = db
+        .connection
+        .query_row(
+            "SELECT card_id, draft_id FROM card_media WHERE id = ?1",
+            params![referenced],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("referenced row");
+    assert_eq!(card_id.as_deref(), Some(created.id.as_str()));
+    assert_eq!(draft_id, None);
+}
+
+#[test]
+fn update_card_with_docs_updates_docs_and_derived_plain_text() {
+    let (_dir, mut db) = db();
+    let created = db.create_card(card("old front"), None).expect("create");
+    let front_doc = text_doc("new front");
+    let back_doc = text_doc("new back");
+
+    let updated = db
+        .update_card(
+            UpdateCard {
+                card_id: created.id.clone(),
+                front: "ignored front".into(),
+                back: "ignored back".into(),
+                tags: Vec::new(),
+                front_language: None,
+                front_doc_json: Some(front_doc.clone()),
+                back_doc_json: Some(back_doc.clone()),
+                media_draft_id: None,
+            },
+            None
+        )
+        .expect("update with docs");
+
+    assert_eq!(updated.front, "new front");
+    assert_eq!(updated.back, "new back");
+    assert_eq!(updated.front_doc, Some(front_doc));
+    assert_eq!(updated.back_doc, Some(back_doc));
+}
+
+#[test]
+fn update_card_with_null_docs_preserves_legacy_plain_text_path() {
+    let (_dir, mut db) = db();
+    let created = db.create_card(card("old front"), None).expect("create");
+
+    let updated = db
+        .update_card(
+            UpdateCard {
+                card_id: created.id,
+                front: "plain front".into(),
+                back: "plain back".into(),
+                tags: Vec::new(),
+                front_language: None,
+                front_doc_json: None,
+                back_doc_json: None,
+                media_draft_id: None,
+            },
+            None
+        )
+        .expect("legacy update");
+
+    assert_eq!(updated.front, "plain front");
+    assert_eq!(updated.back, "plain back");
+    assert_eq!(updated.front_doc, None);
+    assert_eq!(updated.back_doc, None);
+    assert!(updated.media.is_empty());
+}
+
+#[test]
+fn hydration_returns_null_docs_and_empty_media_for_legacy_cards() {
+    let (_dir, mut db) = db();
+    let created = db.create_card(card("legacy"), None).expect("create");
+    let read = db.card_by_id(&created.id).expect("read").unwrap();
+    assert_eq!(read.front_doc, None);
+    assert_eq!(read.back_doc, None);
+    assert!(read.media.is_empty());
 }
