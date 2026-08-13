@@ -42,6 +42,16 @@
   height: 40px;
 }
 
+:root[data-platform="windows"] .app-sidebar {
+  padding-top: 16px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:root[data-platform="windows"] .app-sidebar__drag-region {
+  display: none;
+}
+
 .app-sidebar__resize-handle {
   position: absolute;
   top: 0;

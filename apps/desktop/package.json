@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test --pass-with-no-tests",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "tauri:build:windows": "tauri build --bundles nsis --config src-tauri/tauri.windows.local.conf.json"
   },
   "dependencies": {
     "@lobehub/icons-static-svg": "^1.91.0",

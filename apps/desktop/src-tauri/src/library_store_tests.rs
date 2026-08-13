@@ -123,7 +123,7 @@ fn safe_open_rejects_a_path_replaced_with_a_symlink_after_metadata_validation() 
     });
 
     if let Some(error) = symlink_creation_error {
-        if error.kind() == io::ErrorKind::PermissionDenied {
+        if error.kind() == io::ErrorKind::PermissionDenied || error.raw_os_error() == Some(1314) {
             return;
         }
         panic!("create replacement symlink: {error}");

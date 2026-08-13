@@ -3,25 +3,32 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { expect, test } from "vitest";
 
+const normalizeNewlines = (value: string) => value.replace(/\r\n?/g, "\n");
+
 test("does not apply global color transitions to every element", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
-  const css = readFileSync(join(currentDir, "base.css"), "utf8");
+  const css = normalizeNewlines(readFileSync(join(currentDir, "base.css"), "utf8"));
 
   expect(css).not.toContain("transition: background-color 0.18s ease, border-color 0.18s ease, color 0.18s ease;");
 });
 
-test("keeps the native window transparent for the sidebar glass surface", () => {
+test("keeps transparency macOS-only and uses standard Windows decorations", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const config = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.conf.json"), "utf8"));
+  const macConfig = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.macos.conf.json"), "utf8"));
+  const windowsConfig = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.windows.conf.json"), "utf8"));
 
-  expect(config.app.windows[0].transparent).toBe(true);
+  expect(config.app.windows[0]).toMatchObject({ transparent: false, decorations: true });
+  expect(macConfig.app.windows[0]).toMatchObject({ transparent: true, titleBarStyle: "Overlay" });
+  expect(windowsConfig.app.windows[0]).toMatchObject({ transparent: false, decorations: true });
+  expect(windowsConfig.bundle.targets).toBe("nsis");
 });
 
 test("uses one transparent-track scrollbar primitive across the app", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = [
-    readFileSync(join(currentDir, "tokens.css"), "utf8"),
-    readFileSync(join(currentDir, "base.css"), "utf8"),
+    normalizeNewlines(readFileSync(join(currentDir, "tokens.css"), "utf8")),
+    normalizeNewlines(readFileSync(join(currentDir, "base.css"), "utf8")),
   ].join("\n");
 
   expect(css).toContain("--scrollbar-track: transparent;");

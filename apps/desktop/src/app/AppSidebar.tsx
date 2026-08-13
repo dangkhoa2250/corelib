@@ -2,6 +2,7 @@ import { useContext, useCallback, useState, type ComponentType, type MouseEvent 
 
 import { IconLibrary, IconMemora, IconSearch, IconSettings, IconStatistics, IconTrash } from "./icons";
 import { AccountContext } from "../features/account/AccountGate";
+import { primaryShortcut } from "../lib/platform";
 
 export type AppSection = "library" | "memora" | "trash" | "settings" | "admin" | "statistics";
 
@@ -26,6 +27,7 @@ const NAV_ITEMS: { section: AppSection; label: string; icon: ComponentType }[] =
 
 export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick, onAdminClick }: AppSidebarProps) {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const searchShortcut = primaryShortcut("K");
   
   const accountContext = useContext(AccountContext);
   const isAdmin = accountContext?.session?.profile?.role === "admin";
@@ -62,14 +64,14 @@ export function AppSidebar({ active, onNavigate, onSearchClick, onSettingsClick,
     <nav aria-label="Primary" className="app-sidebar" style={{ width, flexBasis: width }}>
       <div aria-hidden="true" className="app-sidebar__drag-region" data-tauri-drag-region="true" />
       <button
-        aria-label="Search (Command K)"
+        aria-label={`Search (${searchShortcut})`}
         className="app-sidebar__search"
         onClick={onSearchClick}
         type="button"
       >
         <span aria-hidden="true" className="app-sidebar__search-icon"><IconSearch /></span>
         <span className="app-sidebar__search-label">Search</span>
-        <kbd className="app-sidebar__search-kbd">⌘K</kbd>
+        <kbd className="app-sidebar__search-kbd">{searchShortcut}</kbd>
       </button>
       <ul className="app-sidebar__nav">
         {NAV_ITEMS.map((item) => {

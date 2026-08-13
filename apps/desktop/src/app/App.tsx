@@ -38,7 +38,7 @@ import { TrashPage } from "../features/cards/TrashPage";
 import { SettingsPage, readTranslationPreference } from "../features/settings/SettingsPage";
 import { appleTranslationAvailable, clearAiApiKey, hasAiApiKey, listAiModels, saveAiApiKey, translateText } from "../lib/ai";
 import type { AiModel, AiProviderId } from "../domain/ai";
-import type { TranslationEngineId } from "../domain/translation";
+import { TRANSLATION_ENGINE_KEY, type TranslationEngineId } from "../domain/translation";
 import { createCard as nativeCreateCard, createDeck as nativeCreateDeck, renameDeck as nativeRenameDeck, deleteDeck as nativeDeleteDeck, countDeckCards as nativeCountDeckCards, listDeckCards as nativeListDeckCards, deleteCard as nativeDeleteCard, listDecks as nativeListDecks, getStudyReadyCounts as nativeGetStudyReadyCounts, getCard as nativeGetCard, searchEverything as nativeSearchEverything, getCardSource as nativeGetCardSource, listActiveTags as nativeListActiveTags, queryDeckCards as nativeQueryDeckCards, trashCards as nativeTrashCards, listTrashedCards as nativeListTrashedCards, updateCard as nativeUpdateCard, updateAndMoveCard as nativeUpdateAndMoveCard, moveCards as nativeMoveCards, setCardsSuspended as nativeSetCardsSuspended, getDeckStatistics as nativeGetDeckStatistics, startStudySession as nativeStartStudySession, refreshStudySession as nativeRefreshStudySession, rateStudyCard as nativeRateStudyCard, getMemoraSettings as nativeGetMemoraSettings, updateMemoraSettings as nativeUpdateMemoraSettings, getDeckLearningSettings as nativeGetDeckLearningSettings, updateDeckLearningSettings as nativeUpdateDeckLearningSettings } from "../lib/learning";
 import { type BulkResult, type CardBrowserQuery, type CardPage, type CardSource, type Deck, type DeckStatistics, type LearningCard, type ReviewRating, type StudyReadyCounts, type UpdateCardInput, type UpdateAndMoveCardInput, type StudyScope, type StudySession, type StudyRatingInput, type StudyRatingResult, type StudyGrant, type MemoraSettings, type DeckLearningSettings } from "../domain/learning";
 import type { CreateCardInput } from "../lib/learning";
@@ -52,6 +52,7 @@ import { AnalyticsClient } from "../lib/analytics";
 import { createCommandRegistry } from "./commandRegistry";
 import type { AppRoute } from "./routes";
 import { useInputPrivacyGuard } from "../components/InputPrivacyGuard";
+import { translateWithWindowsOnDevice, windowsOnDeviceTranslationAvailable } from "../lib/windowsTranslation";
 
 export interface LibraryApi {
   list: () => Promise<LibraryDocument[]>;
@@ -197,6 +198,7 @@ interface AiApi {
   clearApiKey: (provider: AiProviderId) => Promise<void>;
   listModels: (provider: AiProviderId) => Promise<AiModel[]>;
   appleTranslationAvailable: () => Promise<boolean>;
+  windowsTranslationAvailable?: () => boolean | Promise<boolean>;
   translate: (
     engineId: TranslationEngineId,
     text: string,
@@ -211,7 +213,10 @@ const nativeAiApi: AiApi = {
   clearApiKey: clearAiApiKey,
   listModels: listAiModels,
   appleTranslationAvailable,
-  translate: translateText,
+  windowsTranslationAvailable: windowsOnDeviceTranslationAvailable,
+  translate: (engineId, text, targetLanguage, sourceLanguage) => engineId === "windows-translation"
+    ? translateWithWindowsOnDevice(text, targetLanguage)
+    : translateText(engineId, text, targetLanguage, sourceLanguage),
 };
 
 const defaultAccountApi = new PocketBaseAccountApiClient();
@@ -325,9 +330,23 @@ export function App({
   const [driveEntries, setDriveEntries] = useState<DriveEntry[]>([]);
   const [driveFolderStack, setDriveFolderStack] = useState<string[]>([]);
   const [driveCurrentFolderId, setDriveCurrentFolderId] = useState<string | undefined>();
+  const [windowsTranslationAvailableForCommands, setWindowsTranslationAvailableForCommands] = useState(false);
   const requestId = useRef(0);
   const pendingImportId = useRef(0);
   const quickOpenRef = useRef<CommandPaletteHandle>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.resolve(aiApi.windowsTranslationAvailable?.() ?? false).then(
+      (available) => {
+        if (!cancelled) setWindowsTranslationAvailableForCommands(available);
+      },
+      () => {
+        if (!cancelled) setWindowsTranslationAvailableForCommands(false);
+      },
+    );
+    return () => { cancelled = true; };
+  }, [aiApi.windowsTranslationAvailable]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
@@ -492,6 +511,11 @@ export function App({
     setTranslationPreference(readTranslationPreference());
   }, []);
 
+  const handleSetTranslationEngine = useCallback((engineId: TranslationEngineId) => {
+    window.localStorage.setItem(TRANSLATION_ENGINE_KEY, engineId);
+    setTranslationPreference(readTranslationPreference());
+  }, []);
+
   const handleOpenCard = useCallback(async (id: string, title: string) => {
     const card = await learning.getCard(id);
     const deck = decks.find((candidate) => candidate.id === card.deckId);
@@ -646,7 +670,9 @@ export function App({
     importPdf: handleImport,
     reviewToday: handleReviewToday,
     setTheme,
-  }), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, setTheme]);
+    setTranslationEngine: handleSetTranslationEngine,
+    windowsOnDeviceTranslationAvailable: windowsTranslationAvailableForCommands,
+  }), [decks, documents, handleImport, handleOpen, handleOpenCard, handleOpenDeck, handleReviewToday, handleSetTranslationEngine, setTheme, windowsTranslationAvailableForCommands]);
 
   const palette = (
     <>
@@ -749,6 +775,7 @@ export function App({
           getMemoraSettings={learning.getMemoraSettings}
           updateMemoraSettings={learning.updateMemoraSettings}
           appleTranslationAvailable={aiApi.appleTranslationAvailable}
+          windowsTranslationAvailable={aiApi.windowsTranslationAvailable}
           onDefaultChange={handleTranslationDefaultChange}
           onBack={() => setRoute({ name: "library" })}
           saveDriveCredentials={saveGoogleDriveCredentials}

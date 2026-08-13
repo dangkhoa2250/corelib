@@ -2,6 +2,7 @@ import { AI_PROVIDERS, type AiProviderId } from "./ai";
 
 export type TranslationEngineId =
   | "apple-translation"
+  | "windows-translation"
   | "google-translation"
   | `ai:${AiProviderId}:${string}`;
 
@@ -22,6 +23,7 @@ const LEGACY_MODEL_KEY = `${LEGACY_PROVIDER_KEY}.model`;
 export function builtinTranslationEngines(
   appleAvailable: boolean,
   googleConfigured = true,
+  windowsAvailable = false,
 ): TranslationEngine[] {
   return [
     {
@@ -32,6 +34,15 @@ export function builtinTranslationEngines(
       provider: null,
       model: null,
       available: appleAvailable,
+    },
+    {
+      id: "windows-translation",
+      name: "Windows Translation",
+      description: "On-device · Private · No API key",
+      source: "native",
+      provider: null,
+      model: null,
+      available: windowsAvailable,
     },
     {
       id: "google-translation",
@@ -47,8 +58,38 @@ export function builtinTranslationEngines(
 
 export function defaultTranslationSelection(
   appleAvailable: boolean,
+  windowsAvailable = false,
 ): TranslationEngineId | null {
-  return appleAvailable ? "apple-translation" : null;
+  if (appleAvailable) return "apple-translation";
+  if (windowsAvailable) return "windows-translation";
+  return null;
+}
+
+export function targetLanguageCode(value: string): string | null {
+  const normalized = value.trim().toLowerCase();
+  const codes: Record<string, string> = {
+    arabic: "ar", ar: "ar",
+    chinese: "zh", "chinese (simplified)": "zh", zh: "zh", "zh-cn": "zh",
+    "chinese (traditional)": "zh-TW", "zh-tw": "zh-TW",
+    dutch: "nl", nl: "nl",
+    english: "en", en: "en", "en-us": "en", "en-gb": "en",
+    french: "fr", fr: "fr",
+    german: "de", de: "de",
+    hindi: "hi", hi: "hi",
+    indonesian: "id", id: "id",
+    italian: "it", it: "it",
+    japanese: "ja", ja: "ja",
+    korean: "ko", ko: "ko",
+    polish: "pl", pl: "pl",
+    portuguese: "pt", pt: "pt", "pt-br": "pt",
+    russian: "ru", ru: "ru",
+    spanish: "es", es: "es",
+    thai: "th", th: "th",
+    turkish: "tr", tr: "tr",
+    ukrainian: "uk", uk: "uk",
+    vietnamese: "vi", vi: "vi", "vi-vn": "vi",
+  };
+  return codes[normalized] ?? null;
 }
 
 export function aiEngineId(
@@ -75,7 +116,7 @@ export function parseAiEngineId(
 }
 
 function validEngineId(value: string | null): TranslationEngineId | null {
-  if (value === "apple-translation" || value === "google-translation") return value;
+  if (value === "apple-translation" || value === "windows-translation" || value === "google-translation") return value;
   if (!value?.startsWith("ai:")) return null;
   const candidate = value as TranslationEngineId;
   return parseAiEngineId(candidate) ? candidate : null;
@@ -84,9 +125,12 @@ function validEngineId(value: string | null): TranslationEngineId | null {
 export function readTranslationSelection(
   storage: Pick<Storage, "getItem" | "setItem">,
   appleAvailable: boolean,
+  windowsAvailable = false,
 ): TranslationEngineId | null {
   const saved = validEngineId(storage.getItem(TRANSLATION_ENGINE_KEY));
-  if (saved) return saved;
+  if (saved === "apple-translation" && appleAvailable) return saved;
+  if (saved === "windows-translation" && windowsAvailable) return saved;
+  if (saved && saved !== "apple-translation" && saved !== "windows-translation") return saved;
 
   const legacyProvider = storage.getItem(LEGACY_PROVIDER_KEY) as AiProviderId | null;
   const legacyModel = storage.getItem(LEGACY_MODEL_KEY)?.trim();
@@ -101,5 +145,5 @@ export function readTranslationSelection(
     return migrated;
   }
 
-  return defaultTranslationSelection(appleAvailable);
+  return defaultTranslationSelection(appleAvailable, windowsAvailable);
 }

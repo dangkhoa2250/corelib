@@ -29,8 +29,11 @@ pub const MAX_PDF_INPUT_BYTES: usize = 10 * 1024 * 1024;
 pub const MAX_PDF_PAGE_COUNT: usize = 256;
 pub const MAX_EXTRACTED_TEXT_BYTES: usize = 4 * 1024 * 1024;
 const PDF_TEXT_WORKER_ARGUMENT: &str = "--pdf-text-extract-worker";
+#[cfg(unix)]
 const MAX_WORKER_DATA_BYTES: u64 = 64 * 1024 * 1024;
+#[cfg(unix)]
 const MAX_WORKER_ADDRESS_SPACE_BYTES: u64 = 512 * 1024 * 1024;
+#[cfg(unix)]
 const MAX_WORKER_CPU_SECONDS: u64 = 3;
 const MAX_WORKER_WALL_CLOCK: Duration = Duration::from_secs(5);
 const WORKER_POLL_INTERVAL: Duration = Duration::from_millis(10);

@@ -15,6 +15,7 @@ vi.mock("pdfjs-dist", () => {
           getViewport: vi.fn().mockReturnValue({ width: 200, height: 300 }),
           render: vi.fn().mockReturnValue({ promise: Promise.resolve(), cancel: vi.fn() }),
           getTextContent: vi.fn().mockResolvedValue({ items: [] }),
+          getAnnotations: vi.fn().mockResolvedValue([]),
           streamTextContent: vi.fn().mockReturnValue({
             getReader: vi.fn().mockReturnValue({
               read: vi.fn()
@@ -699,6 +700,8 @@ test("replaces the front when creating a card from a newer selection while the c
 });
 
 test("auto-translates again when a newer selection replaces the front", async () => {
+  const platform = vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+  const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
   const user = userEvent.setup();
   const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
   await openReaderAndSelectText(
@@ -735,9 +738,13 @@ test("auto-translates again when a newer selection replaces the front", async ()
   await waitFor(() => {
     expect(editor("Back")).toHaveTextContent("Văn bản nguồn đã chọn");
   });
+  userAgent.mockRestore();
+  platform.mockRestore();
 });
 
-test("auto-translates a new card into the configured language", async () => {
+test("uses Apple Translation by default for a new installation", async () => {
+  const platform = vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+  const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
   const user = userEvent.setup();
   const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
   await openReaderAndSelectText(
@@ -765,6 +772,42 @@ test("auto-translates a new card into the configured language", async () => {
   await waitFor(() => {
     expect(editor("Back")).toHaveTextContent("Văn bản nguồn đã chọn");
   });
+  userAgent.mockRestore();
+  platform.mockRestore();
+});
+
+test("auto-translates a new card into the configured language", async () => {
+  const platform = vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+  const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
+  const user = userEvent.setup();
+  const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
+  await openReaderAndSelectText(
+    user,
+    undefined,
+    {
+      listDecks: vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]),
+      createCard: vi.fn(),
+    },
+    {
+      hasApiKey: vi.fn().mockResolvedValue(false),
+      saveApiKey: vi.fn().mockResolvedValue(undefined),
+      clearApiKey: vi.fn().mockResolvedValue(undefined),
+      listModels: vi.fn().mockResolvedValue([]),
+      appleTranslationAvailable: vi.fn().mockResolvedValue(true),
+      translate,
+    },
+  );
+
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+
+  await waitFor(() => {
+    expect(translate).toHaveBeenCalledWith("apple-translation", "selected source text", "Vietnamese", "en");
+  });
+  await waitFor(() => {
+    expect(editor("Back")).toHaveTextContent("Văn bản nguồn đã chọn");
+  });
+  userAgent.mockRestore();
+  platform.mockRestore();
 });
 
 test("keeps the composer visible and reports deck loading errors", async () => {
@@ -1260,7 +1303,7 @@ test("Quick Open resolves insights alias to the statistics route", async () => {
     />,
   );
 
-  const searchButton = screen.getByRole("button", { name: "Search (Command K)" });
+  const searchButton = screen.getByRole("button", { name: "Search (Ctrl+K)" });
   await user.click(searchButton);
   await screen.findByRole("searchbox", { name: "Quick Open" });
   const searchbox = screen.getByRole("searchbox", { name: "Quick Open" });
@@ -1283,7 +1326,7 @@ test("opens the search palette from the sidebar search field", async () => {
     />,
   );
 
-  await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
+  await user.click(screen.getByRole("button", { name: "Search (Ctrl+K)" }));
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
   expect(screen.getByRole("searchbox", { name: "Quick Open" })).toHaveFocus();
 });
@@ -1333,7 +1376,7 @@ test("Quick Open surfaces Settings → Memora and deep-links its section", async
     />,
   );
 
-  await user.click(screen.getByRole("button", { name: "Search (Command K)" }));
+  await user.click(screen.getByRole("button", { name: "Search (Ctrl+K)" }));
   await user.type(await screen.findByRole("searchbox", { name: "Quick Open" }), "Settings Memora");
   await user.click(await screen.findByRole("button", { name: /Open Memora/ }));
 

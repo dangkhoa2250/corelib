@@ -54,6 +54,21 @@ test("defaults a new supported Mac to Apple Translation and ranks it first", asy
   expect(results[0]).toHaveTextContent("On-device · Fast · No API key");
 });
 
+test("defaults a supported Windows runtime to API-key-free on-device translation", async () => {
+  const user = userEvent.setup();
+  renderSettings({
+    appleTranslationAvailable: vi.fn().mockResolvedValue(false),
+    windowsTranslationAvailable: vi.fn().mockResolvedValue(true),
+  });
+
+  const search = screen.getByLabelText("Search models");
+  await waitFor(() => expect(search).toHaveValue("Windows Translation"));
+  await user.clear(search);
+  await user.type(search, "Windows Translation");
+  const result = await screen.findByRole("button", { name: /Windows Translation/ });
+  expect(result).toHaveTextContent("On-device · Private · No API key");
+});
+
 test("offers Google Cloud Translation after its dedicated key is connected", async () => {
   const user = userEvent.setup();
   const onDefaultChange = vi.fn();
