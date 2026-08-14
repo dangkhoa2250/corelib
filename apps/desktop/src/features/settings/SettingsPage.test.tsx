@@ -5,11 +5,6 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { readTranslationPreference, SettingsPage, type SettingsPageProps } from "./SettingsPage";
 import { aiEngineId, TRANSLATION_ENGINE_KEY } from "../../domain/translation";
 
-vi.mock("../../lib/platform", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../lib/platform")>();
-  return { ...actual, desktopPlatform: () => "macos" as const };
-});
-
 beforeEach(() => {
   window.localStorage?.clear?.();
 });
@@ -41,7 +36,7 @@ test("defaults a new supported Mac to Apple Translation and ranks it first", asy
   const user = userEvent.setup();
   render(
     <SettingsPage
-      appleTranslationAvailable={vi.fn().mockResolvedValue(true)}
+      appleAvailable={true}
       hasApiKey={vi.fn().mockResolvedValue(false)}
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
@@ -60,11 +55,11 @@ test("defaults a new supported Mac to Apple Translation and ranks it first", asy
   expect(results[0]).toHaveTextContent("On-device · Fast · No API key");
 });
 
-test("keeps Apple Translation unselected until its native check resolves on a Mac", () => {
+test("keeps Apple Translation unselected until App resolves native availability", () => {
   expect(readTranslationPreference().engineId).toBeNull();
 });
 
-test("keeps a saved AI engine while native availability is unresolved on a Mac", () => {
+test("keeps a saved AI engine while native availability is unresolved", () => {
   window.localStorage.setItem(TRANSLATION_ENGINE_KEY, aiEngineId("opencode-go", "deepseek-v4-flash"));
   try {
     expect(readTranslationPreference().engineId).toBe("ai:opencode-go:deepseek-v4-flash");
@@ -73,11 +68,11 @@ test("keeps a saved AI engine while native availability is unresolved on a Mac",
   }
 });
 
-test("does not offer Apple Translation once an unsupported Mac resolves", async () => {
+test("does not offer Apple Translation on an unsupported Mac", async () => {
   const user = userEvent.setup();
   renderSettings({
-    appleTranslationAvailable: vi.fn().mockResolvedValue(false),
-    windowsTranslationAvailable: vi.fn().mockResolvedValue(false),
+    appleAvailable: false,
+    windowsAvailable: false,
   });
 
   const search = screen.getByLabelText("Search models");
@@ -91,11 +86,35 @@ test("does not offer Apple Translation once an unsupported Mac resolves", async 
   });
 });
 
+test("reacts when App-owned native capabilities resolve after opening", async () => {
+  const onDefaultChange = vi.fn();
+  const props: SettingsPageProps = {
+    hasApiKey: vi.fn().mockResolvedValue(false),
+    saveApiKey: vi.fn().mockResolvedValue(undefined),
+    clearApiKey: vi.fn().mockResolvedValue(undefined),
+    listModels: vi.fn().mockResolvedValue([]),
+    getMemoraSettings: vi.fn().mockResolvedValue(defaultMemoraSettings),
+    updateMemoraSettings: vi.fn().mockResolvedValue(defaultMemoraSettings),
+    onDefaultChange,
+    appleAvailable: false,
+    windowsAvailable: false,
+  };
+  const { rerender } = render(<SettingsPage {...props} />);
+
+  const search = screen.getByLabelText("Search models");
+  expect(search).toHaveValue("");
+
+  rerender(<SettingsPage {...props} appleAvailable={true} />);
+
+  await waitFor(() => expect(search).toHaveValue("Apple Translation"));
+  expect(onDefaultChange).toHaveBeenCalledWith("apple-translation");
+});
+
 test("defaults a supported Windows runtime to API-key-free on-device translation", async () => {
   const user = userEvent.setup();
   renderSettings({
-    appleTranslationAvailable: vi.fn().mockResolvedValue(false),
-    windowsTranslationAvailable: vi.fn().mockResolvedValue(true),
+    appleAvailable: false,
+    windowsAvailable: true,
   });
 
   const search = screen.getByLabelText("Search models");
@@ -111,7 +130,7 @@ test("offers Google Cloud Translation after its dedicated key is connected", asy
   const onDefaultChange = vi.fn();
   render(
     <SettingsPage
-      appleTranslationAvailable={vi.fn().mockResolvedValue(true)}
+      appleAvailable={true}
       hasApiKey={vi.fn((provider: string) => Promise.resolve(provider === "google-translation"))}
       saveApiKey={vi.fn().mockResolvedValue(undefined)}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
@@ -593,7 +612,7 @@ test("settings search finds Memora by learning and FSRS terms", async () => {
   const user = userEvent.setup();
   render(
     <SettingsPage
-      appleTranslationAvailable={vi.fn().mockResolvedValue(true)}
+      appleAvailable={true}
       clearApiKey={vi.fn().mockResolvedValue(undefined)}
       getMemoraSettings={vi.fn().mockResolvedValue({
         newCardsPerDay: 20,

@@ -28,7 +28,6 @@ import { AccountSettingsSection } from "../account/AccountSettingsSection";
 import type { SettingsSection } from "../../app/routes";
 import { MemoraSettingsSection } from "./MemoraSettingsSection";
 import type { MemoraSettings } from "../../domain/learning";
-import { windowsOnDeviceTranslationAvailable } from "../../lib/windowsTranslation";
 
 interface SettingsNavItem {
   section: SettingsSection;
@@ -51,8 +50,6 @@ function matchesSearch(item: SettingsNavItem, query: string): boolean {
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
-const defaultAppleTranslationAvailable = async () => false;
-const defaultWindowsTranslationAvailable = windowsOnDeviceTranslationAvailable;
 
 function storage(): Storage | null {
   const candidate = typeof window !== "undefined" ? window.localStorage : null;
@@ -78,8 +75,8 @@ export interface SettingsPageProps {
   listModels: (provider: AiProviderId) => Promise<AiModel[]>;
   getMemoraSettings: () => Promise<MemoraSettings>;
   updateMemoraSettings: (settings: MemoraSettings) => Promise<MemoraSettings>;
-  appleTranslationAvailable?: () => Promise<boolean>;
-  windowsTranslationAvailable?: () => boolean | Promise<boolean>;
+  appleAvailable?: boolean;
+  windowsAvailable?: boolean;
   onDefaultChange?: (engineId: TranslationEngineId | null) => void;
   onBack?: () => void;
   saveDriveCredentials?: (clientId: string, clientSecret: string) => Promise<void>;
@@ -108,7 +105,7 @@ export function readTranslationPreference(
   };
 }
 
-export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleTranslationAvailable = defaultAppleTranslationAvailable, windowsTranslationAvailable = defaultWindowsTranslationAvailable, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, initialSection = "model" }: SettingsPageProps) {
+export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, getMemoraSettings, updateMemoraSettings, appleAvailable = false, windowsAvailable = false, onDefaultChange, onBack, saveDriveCredentials, loadDriveCredentials, clearDriveCredentials, initialSection = "model" }: SettingsPageProps) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const [provider, setProvider] = useState<AiProviderId>(readProvider);
   const [apiKey, setApiKey] = useState("");
@@ -123,12 +120,10 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
     "opencode-go": false,
   });
   const [modelsByProvider, setModelsByProvider] = useState<Partial<Record<AiProviderId, AiModel[]>>>({});
-  const initialPreference = readTranslationPreference();
+  const initialPreference = readTranslationPreference(appleAvailable, windowsAvailable);
   const [selectedEngineId, setSelectedEngineId] = useState<TranslationEngineId | null>(initialPreference.engineId);
   const selectedEngineIdRef = useRef(selectedEngineId);
   selectedEngineIdRef.current = selectedEngineId;
-  const [appleAvailable, setAppleAvailable] = useState(false);
-  const [windowsAvailable, setWindowsAvailable] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState(initialPreference.targetLanguage);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -252,35 +247,24 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
   }, [modelSearch]);
 
   useEffect(() => {
-    let cancelled = false;
-    void Promise.all([
-      appleTranslationAvailable().catch(() => false),
-      Promise.resolve(windowsTranslationAvailable()).catch(() => false),
-    ]).then(([appleSupported, windowsSupported]) => {
-      if (cancelled) return;
-      setAppleAvailable(appleSupported);
-      setWindowsAvailable(windowsSupported);
+    const selected = selectedEngineIdRef.current;
+    const selectedIsUnavailable = selected === "apple-translation" && !appleAvailable
+      || selected === "windows-translation" && !windowsAvailable;
+    if (!selectedIsUnavailable && selected) return;
 
-      const selected = selectedEngineIdRef.current;
-      const selectedIsUnavailable = selected === "apple-translation" && !appleSupported
-        || selected === "windows-translation" && !windowsSupported;
-      if (!selectedIsUnavailable && selected) return;
-
-      const fallback = defaultTranslationSelection(appleSupported, windowsSupported);
-      selectedEngineIdRef.current = fallback;
-      setSelectedEngineId(fallback);
-      setModelSearch(fallback === "apple-translation"
-        ? "Apple Translation"
-        : fallback === "windows-translation"
-          ? "Windows Translation"
-          : "");
-      setModelSelectionMade(Boolean(fallback));
-      if (fallback) setPreference(TRANSLATION_ENGINE_KEY, fallback);
-      else removePreference(TRANSLATION_ENGINE_KEY);
-      onDefaultChange?.(fallback);
-    });
-    return () => { cancelled = true; };
-  }, [appleTranslationAvailable, windowsTranslationAvailable]);
+    const fallback = defaultTranslationSelection(appleAvailable, windowsAvailable);
+    selectedEngineIdRef.current = fallback;
+    setSelectedEngineId(fallback);
+    setModelSearch(fallback === "apple-translation"
+      ? "Apple Translation"
+      : fallback === "windows-translation"
+        ? "Windows Translation"
+        : "");
+    setModelSelectionMade(Boolean(fallback));
+    if (fallback) setPreference(TRANSLATION_ENGINE_KEY, fallback);
+    else removePreference(TRANSLATION_ENGINE_KEY);
+    onDefaultChange?.(fallback);
+  }, [appleAvailable, windowsAvailable]);
 
   useEffect(() => {
     let cancelled = false;
@@ -300,7 +284,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
     try {
       const result = await listModels(providerToLoad);
       setModelsByProvider((current) => ({ ...current, [providerToLoad]: result }));
-      const savedEngine = readTranslationPreference().engineId;
+      const savedEngine = readTranslationPreference(appleAvailable, windowsAvailable).engineId;
       const savedAi = savedEngine ? parseAiEngineId(savedEngine) : null;
       const savedModel = savedAi?.provider === providerToLoad
         ? savedAi.model

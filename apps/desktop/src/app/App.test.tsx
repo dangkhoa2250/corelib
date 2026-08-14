@@ -884,6 +884,43 @@ test("keeps a saved AI translation engine usable while native availability is pe
   }
 });
 
+test("Settings consumes App-owned native capabilities without probing again", async () => {
+  const user = userEvent.setup();
+  const appleTranslationAvailable = vi.fn().mockResolvedValue(false);
+  const windowsTranslationAvailable = vi.fn().mockResolvedValue(true);
+  render(
+    <App
+      libraryApi={{
+        list: vi.fn().mockResolvedValue([]),
+        pick: vi.fn(),
+        importDocuments: vi.fn(),
+      }}
+      learningApi={{
+        listDecks: vi.fn().mockResolvedValue([]),
+        createCard: vi.fn(),
+        getStudyReadyCounts: vi.fn().mockResolvedValue({ learning: 0, review: 0, new: 0, total: 0 }),
+        getDeckStatistics: vi.fn().mockResolvedValue(emptyDeckStatistics),
+      }}
+      aiApi={{
+        hasApiKey: vi.fn().mockResolvedValue(false),
+        saveApiKey: vi.fn().mockResolvedValue(undefined),
+        clearApiKey: vi.fn().mockResolvedValue(undefined),
+        listModels: vi.fn().mockResolvedValue([]),
+        appleTranslationAvailable,
+        windowsTranslationAvailable,
+        translate: vi.fn(),
+      }}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: "Settings" }));
+  await screen.findByLabelText("Search settings");
+  const search = screen.getByLabelText("Search models");
+  await waitFor(() => expect(search).toHaveValue("Windows Translation"));
+  expect(appleTranslationAvailable).toHaveBeenCalledTimes(1);
+  expect(windowsTranslationAvailable).toHaveBeenCalledTimes(1);
+});
+
 test("keeps the composer visible and reports deck loading errors", async () => {
   const user = userEvent.setup();
   const listDecks = vi.fn().mockRejectedValue(new Error("Deck service unavailable"));

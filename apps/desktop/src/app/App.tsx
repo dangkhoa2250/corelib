@@ -335,7 +335,7 @@ export function App({
   const pendingImportId = useRef(0);
   const quickOpenRef = useRef<CommandPaletteHandle>(null);
   const [translationPreference, setTranslationPreference] = useState(() => readTranslationPreference());
-  const translationCapabilitiesRef = useRef<{ apple: boolean; windows: boolean }>({ apple: false, windows: false });
+  const [nativeTranslationCapabilities, setNativeTranslationCapabilities] = useState({ apple: false, windows: false });
 
   useEffect(() => {
     let cancelled = false;
@@ -344,7 +344,7 @@ export function App({
       Promise.resolve(aiApi.windowsTranslationAvailable?.() ?? false).catch(() => false),
     ]).then(([apple, windows]) => {
       if (cancelled) return;
-      translationCapabilitiesRef.current = { apple, windows };
+      setNativeTranslationCapabilities({ apple, windows });
       setWindowsTranslationAvailableForCommands(windows);
       setTranslationPreference(readTranslationPreference(apple, windows));
     });
@@ -510,15 +510,15 @@ export function App({
   }, [aiApi, translationPreference]);
 
   const handleTranslationDefaultChange = useCallback((_engineId: TranslationEngineId | null) => {
-    const { apple, windows } = translationCapabilitiesRef.current;
+    const { apple, windows } = nativeTranslationCapabilities;
     setTranslationPreference(readTranslationPreference(apple, windows));
-  }, []);
+  }, [nativeTranslationCapabilities]);
 
   const handleSetTranslationEngine = useCallback((engineId: TranslationEngineId) => {
     window.localStorage.setItem(TRANSLATION_ENGINE_KEY, engineId);
-    const { apple, windows } = translationCapabilitiesRef.current;
+    const { apple, windows } = nativeTranslationCapabilities;
     setTranslationPreference(readTranslationPreference(apple, windows));
-  }, []);
+  }, [nativeTranslationCapabilities]);
 
   const handleOpenCard = useCallback(async (id: string, title: string) => {
     const card = await learning.getCard(id);
@@ -778,8 +778,8 @@ export function App({
           listModels={aiApi.listModels}
           getMemoraSettings={learning.getMemoraSettings}
           updateMemoraSettings={learning.updateMemoraSettings}
-          appleTranslationAvailable={aiApi.appleTranslationAvailable}
-          windowsTranslationAvailable={aiApi.windowsTranslationAvailable}
+          appleAvailable={nativeTranslationCapabilities.apple}
+          windowsAvailable={nativeTranslationCapabilities.windows}
           onDefaultChange={handleTranslationDefaultChange}
           onBack={() => setRoute({ name: "library" })}
           saveDriveCredentials={saveGoogleDriveCredentials}
