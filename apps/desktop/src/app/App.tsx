@@ -334,25 +334,27 @@ export function App({
   const requestId = useRef(0);
   const pendingImportId = useRef(0);
   const quickOpenRef = useRef<CommandPaletteHandle>(null);
+  const [translationPreference, setTranslationPreference] = useState(() => readTranslationPreference());
+  const translationCapabilitiesRef = useRef<{ apple: boolean; windows: boolean }>({ apple: false, windows: false });
 
   useEffect(() => {
     let cancelled = false;
-    void Promise.resolve(aiApi.windowsTranslationAvailable?.() ?? false).then(
-      (available) => {
-        if (!cancelled) setWindowsTranslationAvailableForCommands(available);
-      },
-      () => {
-        if (!cancelled) setWindowsTranslationAvailableForCommands(false);
-      },
-    );
+    void Promise.all([
+      Promise.resolve(aiApi.appleTranslationAvailable()).catch(() => false),
+      Promise.resolve(aiApi.windowsTranslationAvailable?.() ?? false).catch(() => false),
+    ]).then(([apple, windows]) => {
+      if (cancelled) return;
+      translationCapabilitiesRef.current = { apple, windows };
+      setWindowsTranslationAvailableForCommands(windows);
+      setTranslationPreference(readTranslationPreference(apple, windows));
+    });
     return () => { cancelled = true; };
-  }, [aiApi.windowsTranslationAvailable]);
+  }, [aiApi.appleTranslationAvailable, aiApi.windowsTranslationAvailable]);
   const [decks, setDecks] = useState<Deck[]>([]);
   const [selectedCardIds, setSelectedCardIds] = useState<Set<string>>(new Set());
   const [browserRefreshTrigger, setBrowserRefreshTrigger] = useState(0);
   const [isBrowserDirty, setIsBrowserDirty] = useState(false);
   const [sourceHighlight, setSourceHighlight] = useState<CardSource | null>(null);
-  const [translationPreference, setTranslationPreference] = useState(readTranslationPreference);
 
   const reloadDecks = useCallback(async () => {
     try {
@@ -508,12 +510,14 @@ export function App({
   }, [aiApi, translationPreference]);
 
   const handleTranslationDefaultChange = useCallback((_engineId: TranslationEngineId | null) => {
-    setTranslationPreference(readTranslationPreference());
+    const { apple, windows } = translationCapabilitiesRef.current;
+    setTranslationPreference(readTranslationPreference(apple, windows));
   }, []);
 
   const handleSetTranslationEngine = useCallback((engineId: TranslationEngineId) => {
     window.localStorage.setItem(TRANSLATION_ENGINE_KEY, engineId);
-    setTranslationPreference(readTranslationPreference());
+    const { apple, windows } = translationCapabilitiesRef.current;
+    setTranslationPreference(readTranslationPreference(apple, windows));
   }, []);
 
   const handleOpenCard = useCallback(async (id: string, title: string) => {

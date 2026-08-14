@@ -28,7 +28,6 @@ import { AccountSettingsSection } from "../account/AccountSettingsSection";
 import type { SettingsSection } from "../../app/routes";
 import { MemoraSettingsSection } from "./MemoraSettingsSection";
 import type { MemoraSettings } from "../../domain/learning";
-import { desktopPlatform } from "../../lib/platform";
 import { windowsOnDeviceTranslationAvailable } from "../../lib/windowsTranslation";
 
 interface SettingsNavItem {
@@ -52,7 +51,7 @@ function matchesSearch(item: SettingsNavItem, query: string): boolean {
 
 const DEFAULT_PROVIDER_KEY = "library.ai.default-provider";
 const TARGET_LANGUAGE_KEY = "library.ai.target-language";
-const defaultAppleTranslationAvailable = async () => desktopPlatform() === "macos";
+const defaultAppleTranslationAvailable = async () => false;
 const defaultWindowsTranslationAvailable = windowsOnDeviceTranslationAvailable;
 
 function storage(): Storage | null {
@@ -96,21 +95,15 @@ function readProvider(): AiProviderId {
     : "google-ai-studio";
 }
 
-export function readTranslationPreference(): { engineId: TranslationEngineId | null; targetLanguage: string } {
+export function readTranslationPreference(
+  appleAvailable = false,
+  windowsAvailable = false,
+): { engineId: TranslationEngineId | null; targetLanguage: string } {
   const candidate = storage();
-  const platform = desktopPlatform();
-  const appleCandidate = platform === "macos" || platform === "unknown";
-  // Windows model availability is asynchronous and is resolved by the effect
-  // below. Avoid selecting the engine merely because WebView2 exposes its API.
-  const windowsCandidate = false;
   return {
     engineId: candidate
-      ? readTranslationSelection(candidate, appleCandidate, windowsCandidate)
-      : appleCandidate
-        ? "apple-translation"
-        : windowsCandidate
-          ? "windows-translation"
-          : null,
+      ? readTranslationSelection(candidate, appleAvailable, windowsAvailable)
+      : defaultTranslationSelection(appleAvailable, windowsAvailable),
     targetLanguage: getPreference(TARGET_LANGUAGE_KEY) ?? "Vietnamese",
   };
 }
@@ -134,10 +127,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
   const [selectedEngineId, setSelectedEngineId] = useState<TranslationEngineId | null>(initialPreference.engineId);
   const selectedEngineIdRef = useRef(selectedEngineId);
   selectedEngineIdRef.current = selectedEngineId;
-  const [appleAvailable, setAppleAvailable] = useState(() => {
-    const platform = desktopPlatform();
-    return platform === "macos" || platform === "unknown";
-  });
+  const [appleAvailable, setAppleAvailable] = useState(false);
   const [windowsAvailable, setWindowsAvailable] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState(initialPreference.targetLanguage);
   const [loading, setLoading] = useState(false);

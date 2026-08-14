@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, test, vi } from "vitest";
 import { App } from "./App";
 import type { AccountApi } from "../domain/account";
+import { aiEngineId, TRANSLATION_ENGINE_KEY } from "../domain/translation";
 
 // Mock pdfjs-dist globally for App tests
 vi.mock("pdfjs-dist", () => {
@@ -85,6 +86,7 @@ if (
 }
 
 beforeEach(() => {
+  window.localStorage?.clear?.();
   vi.mocked(invoke).mockImplementation(async (cmd, _args) => {
     if (cmd === "account_session") {
       return {
@@ -253,6 +255,7 @@ async function openReaderAndSelectText(
     clearApiKey: (provider: string) => Promise<void>;
     listModels: (provider: string) => Promise<any[]>;
     appleTranslationAvailable: () => Promise<boolean>;
+    windowsTranslationAvailable?: () => boolean | Promise<boolean>;
     translate: (engineId: string, text: string, targetLanguage: string) => Promise<{ translation: string }>;
   },
 ) {
@@ -808,6 +811,77 @@ test("auto-translates a new card into the configured language", async () => {
   });
   userAgent.mockRestore();
   platform.mockRestore();
+});
+
+test("resolves native translation availability at startup and never calls Apple Translation on an unsupported Mac", async () => {
+  const platform = vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+  const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
+  const user = userEvent.setup();
+  const appleTranslationAvailable = vi.fn().mockResolvedValue(false);
+  const windowsTranslationAvailable = vi.fn().mockResolvedValue(false);
+  const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
+  await openReaderAndSelectText(
+    user,
+    undefined,
+    {
+      listDecks: vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]),
+      createCard: vi.fn(),
+    },
+    {
+      hasApiKey: vi.fn().mockResolvedValue(false),
+      saveApiKey: vi.fn().mockResolvedValue(undefined),
+      clearApiKey: vi.fn().mockResolvedValue(undefined),
+      listModels: vi.fn().mockResolvedValue([]),
+      appleTranslationAvailable,
+      windowsTranslationAvailable,
+      translate,
+    },
+  );
+
+  await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+  await waitFor(() => {
+    expect(appleTranslationAvailable).toHaveBeenCalled();
+    expect(windowsTranslationAvailable).toHaveBeenCalled();
+  });
+  expect(translate).not.toHaveBeenCalled();
+  userAgent.mockRestore();
+  platform.mockRestore();
+});
+
+test("keeps a saved AI translation engine usable while native availability is pending", async () => {
+  const platform = vi.spyOn(window.navigator, "platform", "get").mockReturnValue("MacIntel");
+  const userAgent = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue("Mozilla/5.0 (Macintosh)");
+  const user = userEvent.setup();
+  window.localStorage.setItem(TRANSLATION_ENGINE_KEY, aiEngineId("opencode-go", "deepseek-v4-flash"));
+  const translate = vi.fn().mockResolvedValue({ translation: "Văn bản nguồn đã chọn" });
+  try {
+    await openReaderAndSelectText(
+      user,
+      undefined,
+      {
+        listDecks: vi.fn().mockResolvedValue([{ id: "english", name: "English", description: null, color: null, archived: false }]),
+        createCard: vi.fn(),
+      },
+      {
+        hasApiKey: vi.fn().mockResolvedValue(false),
+        saveApiKey: vi.fn().mockResolvedValue(undefined),
+        clearApiKey: vi.fn().mockResolvedValue(undefined),
+        listModels: vi.fn().mockResolvedValue([]),
+        appleTranslationAvailable: vi.fn().mockReturnValue(new Promise<boolean>(() => {})),
+        translate,
+      },
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create flashcard" }));
+
+    await waitFor(() => {
+      expect(translate).toHaveBeenCalledWith("ai:opencode-go:deepseek-v4-flash", "selected source text", "Vietnamese", "en");
+    });
+  } finally {
+    window.localStorage.removeItem(TRANSLATION_ENGINE_KEY);
+    userAgent.mockRestore();
+    platform.mockRestore();
+  }
 });
 
 test("keeps the composer visible and reports deck loading errors", async () => {

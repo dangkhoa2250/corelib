@@ -2,7 +2,13 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, test, vi } from "vitest";
 
-import { SettingsPage, type SettingsPageProps } from "./SettingsPage";
+import { readTranslationPreference, SettingsPage, type SettingsPageProps } from "./SettingsPage";
+import { aiEngineId, TRANSLATION_ENGINE_KEY } from "../../domain/translation";
+
+vi.mock("../../lib/platform", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/platform")>();
+  return { ...actual, desktopPlatform: () => "macos" as const };
+});
 
 beforeEach(() => {
   window.localStorage?.clear?.();
@@ -52,6 +58,37 @@ test("defaults a new supported Mac to Apple Translation and ranks it first", asy
   const results = await screen.findAllByRole("button", { name: /Translation/ });
   expect(results[0]).toHaveTextContent("Apple Translation");
   expect(results[0]).toHaveTextContent("On-device · Fast · No API key");
+});
+
+test("keeps Apple Translation unselected until its native check resolves on a Mac", () => {
+  expect(readTranslationPreference().engineId).toBeNull();
+});
+
+test("keeps a saved AI engine while native availability is unresolved on a Mac", () => {
+  window.localStorage.setItem(TRANSLATION_ENGINE_KEY, aiEngineId("opencode-go", "deepseek-v4-flash"));
+  try {
+    expect(readTranslationPreference().engineId).toBe("ai:opencode-go:deepseek-v4-flash");
+  } finally {
+    window.localStorage.removeItem(TRANSLATION_ENGINE_KEY);
+  }
+});
+
+test("does not offer Apple Translation once an unsupported Mac resolves", async () => {
+  const user = userEvent.setup();
+  renderSettings({
+    appleTranslationAvailable: vi.fn().mockResolvedValue(false),
+    windowsTranslationAvailable: vi.fn().mockResolvedValue(false),
+  });
+
+  const search = screen.getByLabelText("Search models");
+  await waitFor(() => {
+    expect(search).toHaveValue("");
+  });
+  expect(screen.queryByLabelText("Selected model")).not.toBeInTheDocument();
+  await user.type(search, "Apple Translation");
+  await waitFor(() => {
+    expect(screen.queryByRole("button", { name: /Apple Translation/ })).not.toBeInTheDocument();
+  });
 });
 
 test("defaults a supported Windows runtime to API-key-free on-device translation", async () => {
