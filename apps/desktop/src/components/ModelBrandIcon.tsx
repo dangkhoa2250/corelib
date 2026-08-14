@@ -8,6 +8,18 @@ interface ModelBrandIconProps {
 export function ModelBrandIcon({ modelId }: ModelBrandIconProps) {
   const brand = modelBrandFor(modelId);
 
+  if (brand.src && brand.variant === "mask") {
+    return (
+      <span
+        aria-hidden="true"
+        className="model-brand-icon model-brand-icon--mask"
+        data-asset={brand.asset}
+        data-brand={brand.id}
+        style={{ maskImage: `url("${brand.src}")`, WebkitMaskImage: `url("${brand.src}")` }}
+      />
+    );
+  }
+
   if (brand.src) {
     return <img alt="" aria-hidden="true" className="model-brand-icon" data-asset={brand.asset} data-brand={brand.id} src={brand.src} />;
   }
