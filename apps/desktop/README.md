@@ -2,6 +2,10 @@
 
 Library is the Corelib desktop application. The macOS and Windows editions share the same React, TypeScript, Rust, SQLite, and Tauri codebase; platform integrations live behind explicit platform boundaries.
 
+## macOS 12 and later
+
+The macOS release is a Universal application for Intel and Apple Silicon and supports macOS 12.0 or later. Apple Translation is available only on macOS 15.0 or later; on macOS 12 through 14 it is hidden and users can select OpenCode Go or another configured cloud translation provider.
+
 ## Run and verify
 
 ```bash
