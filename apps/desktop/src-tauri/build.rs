@@ -1,6 +1,9 @@
 fn main() {
     println!("cargo:rerun-if-env-changed=ACCOUNT_API_BASE_URL");
 
+    #[cfg(target_os = "macos")]
+    const MACOS_DEPLOYMENT_TARGET: &str = "12.0";
+
     #[cfg(target_os = "windows")]
     println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
     #[cfg(target_os = "windows")]
@@ -13,8 +16,8 @@ fn main() {
 
     #[cfg(target_os = "macos")]
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
-        println!("cargo:rustc-link-arg=-mmacosx-version-min=15.0");
-        swift_rs::SwiftLinker::new("15.0")
+        println!("cargo:rustc-link-arg=-mmacosx-version-min={MACOS_DEPLOYMENT_TARGET}");
+        swift_rs::SwiftLinker::new(MACOS_DEPLOYMENT_TARGET)
             .with_package("AppleTranslation", "swift/AppleTranslation")
             .link();
         println!("cargo:rerun-if-changed=swift/AppleTranslation/Package.swift");

@@ -17,7 +17,7 @@
   "bundle": {
     "targets": "all",
     "macOS": {
-      "minimumSystemVersion": "15.0"
+      "minimumSystemVersion": "12.0"
     }
   }
 }
