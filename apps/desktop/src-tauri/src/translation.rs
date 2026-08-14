@@ -373,7 +373,10 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn links_apple_translation_on_supported_macos() {
-        assert!(apple::available());
+    fn apple_translation_bridge_links_on_macos() {
+        // Link-safety net for the weak-linked C bridge. Availability is a
+        // runtime property of the host macOS version (macOS 15+), so the
+        // return value must not be asserted here.
+        let _ = apple::available();
     }
 }
