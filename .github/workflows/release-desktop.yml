@@ -43,6 +43,22 @@ jobs:
           test "$(lipo -archs "$binary")" = "$expected_archs"
           test "$(otool -arch x86_64 -l "$binary" | awk '$1 == "minos" { print $2 }')" = "12.0"
           test "$(otool -arch arm64 -l "$binary" | awk '$1 == "minos" { print $2 }')" = "12.0"
+          for arch in x86_64 arm64; do
+            weak_translation="$(otool -arch "$arch" -l "$binary" | awk '
+              /cmd LC_LOAD_WEAK_DYLIB/ { weak = 1; next }
+              /cmd LC_LOAD_DYLIB/ { weak = 0; next }
+              weak && /Translation/ { print $2 }
+            ')"
+            strong_translation="$(otool -arch "$arch" -l "$binary" | awk '
+              /cmd LC_LOAD_WEAK_DYLIB/ { weak = 1; next }
+              /cmd LC_LOAD_DYLIB/ { weak = 0; next }
+              !weak && /Translation/ { print $2 }
+            ')"
+            test -z "$strong_translation"
+            test "$(printf '%s\n' "$weak_translation" | grep -c .)" = "2"
+            printf '%s\n' "$weak_translation" | grep -q 'Translation.framework'
+            printf '%s\n' "$weak_translation" | grep -q '_Translation_SwiftUI.framework'
+          done
       - name: Stage macOS release files
         working-directory: apps/desktop
         shell: bash

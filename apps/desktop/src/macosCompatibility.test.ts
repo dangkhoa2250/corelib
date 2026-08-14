@@ -56,4 +56,16 @@ describe("macOS compatibility floor", () => {
       `test "$(otool -arch arm64 -l "$binary" | awk '$1 == "minos" { print $2 }')" = "12.0"`,
     );
   });
+
+  it("requires Apple Translation to be weak-linked on both universal slices in the release workflow", () => {
+    const workflow = readSource("../../../.github/workflows/release-desktop.yml");
+    expect(workflow).toContain("for arch in x86_64 arm64; do");
+    expect(workflow).toContain('weak_translation="$(otool -arch "$arch" -l "$binary" | awk \'');
+    expect(workflow).toContain("/cmd LC_LOAD_WEAK_DYLIB/ { weak = 1; next }");
+    expect(workflow).toContain("weak && /Translation/ { print $2 }");
+    expect(workflow).toContain("!weak && /Translation/ { print $2 }");
+    expect(workflow).toContain('test -z "$strong_translation"');
+    expect(workflow).toContain('test "$(printf \'%s\\n\' "$weak_translation" | grep -c .)" = "2"');
+    expect(workflow).toContain("_Translation_SwiftUI.framework");
+  });
 });
