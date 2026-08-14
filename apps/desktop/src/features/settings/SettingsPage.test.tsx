@@ -135,6 +135,41 @@ test("connects a provider and loads models using only an API key", async () => {
   expect(screen.queryByRole("checkbox", { name: /Use this provider/ })).not.toBeInTheDocument();
 });
 
+test("connects OpenCode Go and lists its models with brand icons", async () => {
+  const user = userEvent.setup();
+  const saveApiKey = vi.fn().mockResolvedValue(undefined);
+  const listModels = vi.fn().mockResolvedValue([
+    { id: "deepseek-v4-flash", name: "deepseek-v4-flash" },
+    { id: "qwen3.7-max", name: "qwen3.7-max" },
+    { id: "hy3", name: "hy3" },
+    { id: "gpt-5.6-luna", name: "gpt-5.6-luna" },
+  ]);
+
+  renderSettings({ saveApiKey, listModels });
+
+  await user.click(screen.getByRole("button", { name: "+ Add provider" }));
+  await user.click(screen.getByRole("combobox", { name: "AI provider" }));
+  await user.click(screen.getByText("OpenCode Go"));
+  await user.type(screen.getByLabelText("API key"), "oc-go-test");
+  await user.click(screen.getByRole("button", { name: "Connect" }));
+
+  await waitFor(() => expect(saveApiKey).toHaveBeenCalledWith("opencode-go", "oc-go-test"));
+  expect(listModels).toHaveBeenCalledWith("opencode-go");
+
+  await user.click(screen.getByRole("button", { name: "Close provider settings" }));
+  await user.type(screen.getByLabelText("Search models"), "OpenCode Go");
+  const results = await screen.findByLabelText("Model results");
+  for (const [modelName, brand] of [
+    ["deepseek-v4-flash", "deepseek"],
+    ["qwen3.7-max", "qwen"],
+    ["hy3", "hunyuan"],
+    ["gpt-5.6-luna", "openai"],
+  ]) {
+    const row = within(results).getByRole("button", { name: new RegExp(modelName) });
+    expect(row.querySelector("[data-brand]")).toHaveAttribute("data-brand", brand);
+  }
+});
+
 test("shows provider errors without losing the settings form", async () => {
   const user = userEvent.setup();
   render(
@@ -309,7 +344,7 @@ test("shows colored provider brands in connected rows and provider options", asy
 
   const providers = await screen.findByLabelText("Connected providers");
   expect(within(providers).getByText("NVIDIA NIM").closest(".settings-page__provider-row")?.querySelector("img")).toHaveAttribute("data-brand", "nvidia");
-  expect(within(providers).getByText("OpenRouter").closest(".settings-page__provider-row")?.querySelector("[data-brand='fallback']")).toBeInTheDocument();
+  expect(within(providers).getByText("OpenRouter").closest(".settings-page__provider-row")?.querySelector(".provider-brand-icon--mask")).toHaveAttribute("data-brand", "openrouter");
 
   await user.click(screen.getByRole("button", { name: "+ Add provider" }));
   await user.click(screen.getByRole("combobox", { name: "AI provider" }));

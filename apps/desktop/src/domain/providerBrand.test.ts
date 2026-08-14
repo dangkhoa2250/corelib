@@ -9,6 +9,7 @@ test.each([
   ["nvidia", "nvidia", "nvidia-color.svg"],
   ["openrouter", "openrouter", "openrouter.svg"],
   ["cerebras", "cerebras", "cerebras-color.svg"],
+  ["opencode-go", "opencode-go", "opencode.svg"],
 ])("resolves %s to its provider brand", (providerId, id, assetName) => {
   const brand = providerBrandFor(providerId as AiProviderId);
   expect(brand.id).toBe(id);

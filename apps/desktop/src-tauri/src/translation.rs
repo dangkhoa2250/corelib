@@ -125,7 +125,10 @@ fn parse_ai_engine_id(value: &str) -> Result<(String, String), String> {
     let (provider, encoded_model) = rest
         .split_once(':')
         .ok_or_else(|| "engine_unavailable: Invalid AI engine ID.".to_owned())?;
-    if !matches!(provider, "google-ai-studio" | "nvidia" | "openrouter" | "cerebras") {
+    if !matches!(
+        provider,
+        "google-ai-studio" | "nvidia" | "openrouter" | "cerebras" | "opencode-go"
+    ) {
         return Err("engine_unavailable: Unknown AI provider.".to_owned());
     }
     let model = percent_decode_component(encoded_model)?;
@@ -352,6 +355,14 @@ mod tests {
     fn parses_encoded_ai_engine_ids() {
         let parsed = parse_ai_engine_id("ai:openrouter:vendor%2Fmodel%3Afree").unwrap();
         assert_eq!(parsed, ("openrouter".to_owned(), "vendor/model:free".to_owned()));
+    }
+
+    #[test]
+    fn parses_opencode_go_engine_ids() {
+        assert_eq!(
+            parse_ai_engine_id("ai:opencode-go:deepseek-v4-flash").unwrap(),
+            ("opencode-go".to_owned(), "deepseek-v4-flash".to_owned())
+        );
     }
 
     #[test]

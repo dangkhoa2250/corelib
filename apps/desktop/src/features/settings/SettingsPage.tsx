@@ -127,6 +127,7 @@ export function SettingsPage({ hasApiKey, saveApiKey, clearApiKey, listModels, g
     nvidia: false,
     openrouter: false,
     cerebras: false,
+    "opencode-go": false,
   });
   const [modelsByProvider, setModelsByProvider] = useState<Partial<Record<AiProviderId, AiModel[]>>>({});
   const initialPreference = readTranslationPreference();

@@ -1,4 +1,4 @@
-export type AiProviderId = "google-ai-studio" | "google-translation" | "nvidia" | "openrouter" | "cerebras";
+export type AiProviderId = "google-ai-studio" | "google-translation" | "nvidia" | "openrouter" | "cerebras" | "opencode-go";
 
 export interface AiProviderDefinition {
   id: AiProviderId;
@@ -52,6 +52,11 @@ export const AI_PROVIDERS: AiProviderDefinition[] = [
     id: "cerebras",
     name: "Cerebras",
     description: "Fast inference with a free developer tier.",
+  },
+  {
+    id: "opencode-go",
+    name: "OpenCode Go",
+    description: "Low-cost OpenCode models for translation.",
   },
 ];
 
