@@ -180,182 +180,184 @@ export function TrashPage({ decks, refreshTrigger = 0, onRefreshNeeded }: TrashP
 
   return (
     <div className="card-browser trash-page">
-      <div className="card-browser__header">
-        <div className="card-browser__title-group">
-          <h1 className="card-browser__title">Trash</h1>
-          <span className="card-browser__count">({total} cards)</span>
-        </div>
-        {total > 0 && (
-          <button
-            className="card-browser__empty-trash-btn"
-            type="button"
-            onClick={handleEmptyTrash}
-          >
-            Empty Trash
-          </button>
-        )}
-      </div>
-
-      <div className="card-browser__toolbar">
-        {/* Search */}
-        <div className="card-browser__search-box">
-          <input
-            className="card-browser__search-input"
-            type="text"
-            placeholder="Search front, back, or tags..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-
-        {/* Sort */}
-        <div className="card-browser__filter-group">
-          <label className="card-browser__label">Sort:</label>
-          <Combobox
-            value={sort}
-            onChange={(v) => setSort(v as TrashSort)}
-            options={[
-              { value: "deleted_desc", label: "Deleted Date (Newest)" },
-              { value: "front_asc", label: "Front (A-Z)" },
-            ]}
-            ariaLabel="Sort"
-          />
-        </div>
-
-        {/* Clear Filters */}
-        <button
-          className="card-browser__clear-btn"
-          type="button"
-          onClick={() => {
-            setQuery("");
-            setSort("deleted_desc");
-          }}
-        >
-          Clear
-        </button>
-      </div>
-
-      {error && <div className="card-browser__error" role="alert">{error}</div>}
-
-      {/* Bulk Action Banner */}
-      {selectedIds.size > 0 && (
-        <div className="card-browser__bulk-banner card-browser__bulk-banner--trash">
-          <span className="card-browser__bulk-count">
-            {selectedIds.size} cards selected
-          </span>
-          <div className="card-browser__bulk-actions">
+      <div className="card-browser__content">
+        <div className="card-browser__header">
+          <div className="card-browser__title-group">
+            <h1 className="card-browser__title">Trash</h1>
+            <span className="card-browser__count">({total} cards)</span>
+          </div>
+          {total > 0 && (
             <button
-              className="card-browser__bulk-btn"
+              className="card-browser__empty-trash-btn"
               type="button"
-              onClick={() => handleRestoreSelected(false)}
+              onClick={handleEmptyTrash}
             >
-              Restore to Original Deck
+              Empty Trash
             </button>
-            
-            <div className="card-browser__restore-dest-group">
-              <Combobox
-                value={restoreDeckId || null}
-                onChange={(v) => setRestoreDeckId(v)}
-                options={decks.map(d => ({
-                  value: d.id,
-                  label: d.name,
-                }))}
-                placeholder="Restore to specific deck..."
-                ariaLabel="Restore to specific deck"
-              />
+          )}
+        </div>
+
+        <div className="card-browser__toolbar">
+          {/* Search */}
+          <div className="card-browser__search-box">
+            <input
+              className="card-browser__search-input"
+              type="text"
+              placeholder="Search front, back, or tags..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
+
+          {/* Sort */}
+          <div className="card-browser__filter-group">
+            <label className="card-browser__label">Sort:</label>
+            <Combobox
+              value={sort}
+              onChange={(v) => setSort(v as TrashSort)}
+              options={[
+                { value: "deleted_desc", label: "Deleted Date (Newest)" },
+                { value: "front_asc", label: "Front (A-Z)" },
+              ]}
+              ariaLabel="Sort"
+            />
+          </div>
+
+          {/* Clear Filters */}
+          <button
+            className="card-browser__clear-btn"
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setSort("deleted_desc");
+            }}
+          >
+            Clear
+          </button>
+        </div>
+
+        {error && <div className="card-browser__error" role="alert">{error}</div>}
+
+        {/* Bulk Action Banner */}
+        {selectedIds.size > 0 && (
+          <div className="card-browser__bulk-banner card-browser__bulk-banner--trash">
+            <span className="card-browser__bulk-count">
+              {selectedIds.size} cards selected
+            </span>
+            <div className="card-browser__bulk-actions">
               <button
                 className="card-browser__bulk-btn"
                 type="button"
-                onClick={() => handleRestoreSelected(true)}
-                disabled={!restoreDeckId}
+                onClick={() => handleRestoreSelected(false)}
               >
-                Restore
+                Restore to Original Deck
+              </button>
+
+              <div className="card-browser__restore-dest-group">
+                <Combobox
+                  value={restoreDeckId || null}
+                  onChange={(v) => setRestoreDeckId(v)}
+                  options={decks.map(d => ({
+                    value: d.id,
+                    label: d.name,
+                  }))}
+                  placeholder="Restore to specific deck..."
+                  ariaLabel="Restore to specific deck"
+                />
+                <button
+                  className="card-browser__bulk-btn"
+                  type="button"
+                  onClick={() => handleRestoreSelected(true)}
+                  disabled={!restoreDeckId}
+                >
+                  Restore
+                </button>
+              </div>
+
+              <button
+                className="card-browser__bulk-btn card-browser__bulk-btn--danger"
+                type="button"
+                onClick={handleDeleteSelectedPermanently}
+              >
+                Delete Permanently
               </button>
             </div>
-
-            <button
-              className="card-browser__bulk-btn card-browser__bulk-btn--danger"
-              type="button"
-              onClick={handleDeleteSelectedPermanently}
-            >
-              Delete Permanently
-            </button>
-          </div>
-          {bulkError && <div className="card-browser__bulk-error">{bulkError}</div>}
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="card-browser__table-container">
-        <table className="card-browser__table">
-          <thead>
-            <tr>
-              <th className="card-browser__th-select">
-                <input
-                  type="checkbox"
-                  checked={rows.length > 0 && selectedIds.size === rows.length}
-                  onChange={handleToggleSelectAll}
-                />
-              </th>
-              <th>Front</th>
-              <th>Back</th>
-              <th>Original Deck</th>
-              <th>Deleted Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(row => {
-              const isSelected = selectedIds.has(row.id);
-              return (
-                <tr
-                  key={row.id}
-                  className={`card-browser__row ${isSelected ? 'is-selected' : ''}`}
-                >
-                  <td className="card-browser__td-select">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleToggleRow(row.id)}
-                    />
-                  </td>
-                  <td className="card-browser__td-text card-browser__td-front">
-                    <div className="card-browser__cell-text">{row.front}</div>
-                    {row.tags.length > 0 && (
-                      <div className="card-browser__cell-tags">
-                        {row.tags.map(t => <span key={t} className="card-browser__cell-tag">#{t}</span>)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="card-browser__td-text card-browser__td-back">
-                    <div className="card-browser__cell-text">{row.back}</div>
-                  </td>
-                  <td>
-                    <span className="card-browser__deck-badge card-browser__deck-badge--trashed">
-                      {row.deletedFromDeckName || row.deckName || "Unknown"}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="card-browser__date-cell">{formatDate(row.deletedAt)}</span>
-                  </td>
-                </tr>
-              );
-            })}
-            {rows.length === 0 && !loading && (
-              <tr>
-                <td colSpan={5} className="card-browser__empty">
-                  Trash is empty.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-
-        {/* Intersection Observer scroll target */}
-        {nextCursor && (
-          <div ref={observerRef} className="card-browser__scroll-trigger">
-            {loadingMore ? "Loading more cards..." : <button type="button" onClick={loadMore}>Load More</button>}
+            {bulkError && <div className="card-browser__bulk-error">{bulkError}</div>}
           </div>
         )}
+
+        {/* Table */}
+        <div className="card-browser__table-container">
+          <table className="card-browser__table">
+            <thead>
+              <tr>
+                <th className="card-browser__th-select">
+                  <input
+                    type="checkbox"
+                    checked={rows.length > 0 && selectedIds.size === rows.length}
+                    onChange={handleToggleSelectAll}
+                  />
+                </th>
+                <th>Front</th>
+                <th>Back</th>
+                <th>Original Deck</th>
+                <th>Deleted Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(row => {
+                const isSelected = selectedIds.has(row.id);
+                return (
+                  <tr
+                    key={row.id}
+                    className={`card-browser__row ${isSelected ? 'is-selected' : ''}`}
+                  >
+                    <td className="card-browser__td-select">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => handleToggleRow(row.id)}
+                      />
+                    </td>
+                    <td className="card-browser__td-text card-browser__td-front">
+                      <div className="card-browser__cell-text">{row.front}</div>
+                      {row.tags.length > 0 && (
+                        <div className="card-browser__cell-tags">
+                          {row.tags.map(t => <span key={t} className="card-browser__cell-tag">#{t}</span>)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="card-browser__td-text card-browser__td-back">
+                      <div className="card-browser__cell-text">{row.back}</div>
+                    </td>
+                    <td>
+                      <span className="card-browser__deck-badge card-browser__deck-badge--trashed">
+                        {row.deletedFromDeckName || row.deckName || "Unknown"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className="card-browser__date-cell">{formatDate(row.deletedAt)}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={5} className="card-browser__empty">
+                    Trash is empty.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          {/* Intersection Observer scroll target */}
+          {nextCursor && (
+            <div ref={observerRef} className="card-browser__scroll-trigger">
+              {loadingMore ? "Loading more cards..." : <button type="button" onClick={loadMore}>Load More</button>}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

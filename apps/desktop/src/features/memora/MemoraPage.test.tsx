@@ -81,7 +81,7 @@ describe("MemoraPage", () => {
     expect(await screen.findByRole("button", { name: "Review 2 Ready" })).toBeInTheDocument();
   });
 
-  it("opens Learning settings from the deck actions menu", async () => {
+  it("opens Settings from the deck actions menu", async () => {
     const user = userEvent.setup();
     const getDeckLearningSettings = vi.fn().mockResolvedValue({
       deckId: "english",
@@ -95,12 +95,12 @@ describe("MemoraPage", () => {
       name: "Actions for English",
     }));
     await user.click(screen.getByRole("button", {
-      name: "Learning settings",
+      name: "Settings",
     }));
 
     expect(getDeckLearningSettings).toHaveBeenCalledWith("english");
     expect(await screen.findByRole("dialog", {
-      name: "Learning settings for English",
+      name: "Settings for English",
     })).toBeInTheDocument();
   });
 });

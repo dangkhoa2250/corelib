@@ -235,7 +235,7 @@ export function DocumentCard({
                         onViewStatistics(document.id);
                       }}
                     >
-                      View statistics
+                      Statistics
                     </button>
                   )}
                   {onRename && (

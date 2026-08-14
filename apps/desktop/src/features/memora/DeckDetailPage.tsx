@@ -112,7 +112,7 @@ export function DeckDetailPage({
                       onClick={() => onViewStatistics(deck.id)}
                       variant="secondary"
                     >
-                      View statistics
+                      Statistics
                     </Button>
                   )}
                   <Button

@@ -31,11 +31,11 @@ describe("DeckDetailPage", () => {
     expect(screen.queryByText(/Learning:/)).not.toBeInTheDocument();
   });
 
-  it("shows View statistics button when onViewStatistics provided", async () => {
+  it("shows Statistics button when onViewStatistics provided", async () => {
     const onViewStatistics = vi.fn();
     render(<DeckDetailPage {...defaultProps} onViewStatistics={onViewStatistics} />);
 
-    expect(await screen.findByRole("button", { name: /view statistics/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /statistics/i })).toBeInTheDocument();
   });
 
   it("calls onViewStatistics with deck ID", async () => {
@@ -43,7 +43,7 @@ describe("DeckDetailPage", () => {
     const onViewStatistics = vi.fn();
     render(<DeckDetailPage {...defaultProps} onViewStatistics={onViewStatistics} />);
 
-    await user.click(await screen.findByRole("button", { name: /view statistics/i }));
+    await user.click(await screen.findByRole("button", { name: /statistics/i }));
 
     expect(onViewStatistics).toHaveBeenCalledWith("english");
   });

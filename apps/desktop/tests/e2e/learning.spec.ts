@@ -500,14 +500,14 @@ test("changes settings and deck override", async ({ page }) => {
   expect(counts.review).toBeGreaterThan(0);
 
   await page.getByLabel("Actions for Biology").click();
-  await page.getByRole("button", { name: "Learning settings" }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
 
   await page.getByRole("radio", { name: "Custom limit" }).check();
   await page.getByRole("spinbutton", { name: "Custom new cards per day" }).fill("5");
   await page.getByRole("button", { name: "Save" }).click();
 
   await page.getByLabel("Actions for Biology").click();
-  await page.getByRole("button", { name: "Learning settings" }).click();
+  await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByRole("spinbutton", { name: "Custom new cards per day" })).toHaveValue("5");
   await expect(page.getByRole("radio", { name: "Custom limit" })).toBeChecked();
 });

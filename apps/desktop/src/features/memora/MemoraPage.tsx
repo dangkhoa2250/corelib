@@ -194,7 +194,7 @@ function DeckRow({ deck, menuOpen, onMenuToggle, onOpen, onRename, onDelete, onS
               }}
               type="button"
             >
-              Learning settings
+              Settings
             </button>
             <button
               onClick={(event) => {

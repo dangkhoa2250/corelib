@@ -75,11 +75,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("shows View statistics button in actions popover when onViewStatistics provided", () => {
+test("shows Statistics button in actions popover when onViewStatistics provided", () => {
   const onViewStatistics = vi.fn();
   render(<DocumentCard document={document} onOpen={vi.fn()} onViewStatistics={onViewStatistics} menuOpen />);
 
-  expect(screen.getByRole("button", { name: /view statistics/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /statistics/i })).toBeInTheDocument();
 });
 
 test("calls onViewStatistics with document ID", async () => {
@@ -87,7 +87,7 @@ test("calls onViewStatistics with document ID", async () => {
   const onViewStatistics = vi.fn();
   render(<DocumentCard document={document} onOpen={vi.fn()} onViewStatistics={onViewStatistics} menuOpen />);
 
-  await user.click(screen.getByRole("button", { name: /view statistics/i }));
+  await user.click(screen.getByRole("button", { name: /statistics/i }));
 
   expect(onViewStatistics).toHaveBeenCalledWith("linear-algebra");
 });

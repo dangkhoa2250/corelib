@@ -45,9 +45,9 @@ export function DeckLearningSettingsDialog({ deckName, settings, onSave, onCance
     <div className="deck-learning-dialog__backdrop" aria-modal="true" role="dialog" aria-labelledby={headingId}>
       <div className="deck-learning-dialog">
         <div className="deck-learning-dialog__header">
-          <h2 id={headingId}>Learning settings for {deckName}</h2>
+          <h2 id={headingId}>Settings for {deckName}</h2>
           <button
-            aria-label="Close learning settings"
+            aria-label="Close settings"
             className="deck-learning-dialog__close"
             onClick={onCancel}
             type="button"

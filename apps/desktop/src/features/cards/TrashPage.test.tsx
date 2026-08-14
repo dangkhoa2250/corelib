@@ -40,6 +40,23 @@ const mockRows = [
 ];
 
 describe("TrashPage component", () => {
+  it("keeps the header, filters, and table in the full-width content column", async () => {
+    vi.mocked(listTrashedCards).mockResolvedValue({
+      rows: [],
+      total: 0,
+      nextCursor: null,
+    });
+
+    render(<TrashPage decks={mockDecks} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Trash is empty.")).toBeInTheDocument();
+    });
+
+    expect(screen.getByRole("heading", { name: "Trash" }).closest(".card-browser__content")).not.toBeNull();
+    expect(screen.getByText("Trash is empty.").closest(".card-browser__content")).not.toBeNull();
+  });
+
   it("renders list and triggers search", async () => {
     vi.mocked(listTrashedCards).mockResolvedValue({
       rows: mockRows,
