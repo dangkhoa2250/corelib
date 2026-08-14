@@ -31,6 +31,18 @@ jobs:
       - name: Build signed universal macOS artifacts
         working-directory: apps/desktop
         run: npm run tauri -- build --target universal-apple-darwin
+      - name: Verify macOS 12 Universal compatibility
+        working-directory: apps/desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="src-tauri/target/universal-apple-darwin/release/bundle/macos/Corelib.app"
+          binary="$app/Contents/MacOS/library_desktop"
+          test "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")" = "12.0"
+          expected_archs="x86_64 arm64"
+          test "$(lipo -archs "$binary")" = "$expected_archs"
+          otool -arch x86_64 -l "$binary" | grep -A4 LC_BUILD_VERSION | grep -q "minos 12.0"
+          otool -arch arm64 -l "$binary" | grep -A4 LC_BUILD_VERSION | grep -q "minos 12.0"
       - name: Stage macOS release files
         working-directory: apps/desktop
         shell: bash

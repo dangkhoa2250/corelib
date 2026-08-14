@@ -38,4 +38,13 @@ describe("macOS compatibility floor", () => {
     );
     expect(availableGuards?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
+
+  it("verifies macOS 12 universal compatibility on the release workflow artifact", () => {
+    const workflow = readSource("../../../.github/workflows/release-desktop.yml");
+    expect(workflow).toContain("Verify macOS 12 Universal compatibility");
+    expect(workflow).toContain("LSMinimumSystemVersion");
+    expect(workflow).toContain('expected_archs="x86_64 arm64"');
+    expect(workflow).toContain("otool -arch x86_64 -l");
+    expect(workflow).toContain("otool -arch arm64 -l");
+  });
 });
