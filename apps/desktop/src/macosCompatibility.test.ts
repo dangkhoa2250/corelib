@@ -45,6 +45,7 @@ describe("macOS compatibility floor", () => {
     expect(workflow).toContain(
       'test "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")" = "12.0"',
     );
+    expect(workflow).toContain('expected_archs="x86_64 arm64"');
     expect(workflow).toContain(
       'test "$(lipo -archs "$binary")" = "$expected_archs"',
     );
