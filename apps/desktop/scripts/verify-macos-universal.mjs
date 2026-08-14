@@ -6,7 +6,10 @@ import { pathToFileURL } from "node:url";
 const EXPECTED_MINIMUM_SYSTEM_VERSION = "12.0";
 const EXPECTED_ARCHS = ["x86_64", "arm64"];
 const EXPECTED_MINOS = "12.0";
-const EXPECTED_WEAK_TRANSLATION_FRAMEWORKS = ["Translation", "_Translation_SwiftUI"];
+const CANONICAL_TRANSLATION_FRAMEWORKS = [
+  "/System/Library/Frameworks/Translation.framework/Versions/A/Translation",
+  "/System/Library/Frameworks/_Translation_SwiftUI.framework/Versions/A/_Translation_SwiftUI",
+];
 
 export function parseLoadCommands(otoolOutput) {
   const blocks = [];
@@ -36,10 +39,10 @@ export function parseLoadCommands(otoolOutput) {
 }
 
 export function translationDependencyKind(name) {
-  if (!name?.includes("Translation")) return null;
-  const match = /(^|\/)([^/\s]+)\.framework\//.exec(name);
-  if (!match) return "non-framework";
-  return match[2];
+  if (!name?.toLowerCase().includes("translation")) return null;
+  const normalized = name.trim();
+  if (CANONICAL_TRANSLATION_FRAMEWORKS.includes(normalized)) return normalized;
+  return "invalid";
 }
 
 export function verifyOtoolWeakLinkage(otoolOutput) {
@@ -51,8 +54,8 @@ export function verifyOtoolWeakLinkage(otoolOutput) {
 
   for (const dep of deps) {
     const kind = translationDependencyKind(dep.name);
-    if (kind === "non-framework") {
-      problems.push(`Translation-like non-framework dependency ${dep.name} is not allowed`);
+    if (kind === "invalid") {
+      problems.push(`unknown Translation-like dependency ${dep.name} is not allowed`);
       continue;
     }
     if (dep.command !== "LC_LOAD_WEAK_DYLIB") {
@@ -65,9 +68,9 @@ export function verifyOtoolWeakLinkage(otoolOutput) {
   const weakNames = deps
     .filter((dep) => dep.command === "LC_LOAD_WEAK_DYLIB")
     .map((dep) => translationDependencyKind(dep.name))
-    .filter((kind) => kind !== "non-framework")
+    .filter((kind) => kind !== "invalid")
     .sort();
-  const expected = [...EXPECTED_WEAK_TRANSLATION_FRAMEWORKS].sort();
+  const expected = [...CANONICAL_TRANSLATION_FRAMEWORKS].sort();
   if (
     weakNames.length !== expected.length
     || weakNames.some((name, index) => name !== expected[index])
@@ -83,17 +86,17 @@ function run(command, args) {
   return spawnSync(command, args, { encoding: "utf8" });
 }
 
-export function verifyApp(appPath) {
+export function verifyApp(appPath, runCommand = run) {
   const problems = [];
   const plist = path.join(appPath, "Contents", "Info.plist");
   const binary = path.join(appPath, "Contents", "MacOS", "library_desktop");
 
-  const plistResult = run("plutil", ["-extract", "LSMinimumSystemVersion", "raw", plist]);
+  const plistResult = runCommand("plutil", ["-extract", "LSMinimumSystemVersion", "raw", plist]);
   if (plistResult.status !== 0 || plistResult.stdout.trim() !== EXPECTED_MINIMUM_SYSTEM_VERSION) {
     problems.push(`LSMinimumSystemVersion must be ${EXPECTED_MINIMUM_SYSTEM_VERSION}`);
   }
 
-  const lipoResult = run("lipo", ["-archs", binary]);
+  const lipoResult = runCommand("lipo", ["-archs", binary]);
   const archs = lipoResult.status === 0 ? lipoResult.stdout.trim().split(/\s+/) : [];
   const archsMatch = archs.length === EXPECTED_ARCHS.length
     && archs.every((arch, index) => arch === EXPECTED_ARCHS[index]);
@@ -102,7 +105,7 @@ export function verifyApp(appPath) {
   }
 
   for (const arch of EXPECTED_ARCHS) {
-    const otoolResult = run("otool", ["-arch", arch, "-l", binary]);
+    const otoolResult = runCommand("otool", ["-arch", arch, "-l", binary]);
     if (otoolResult.status !== 0) {
       problems.push(`otool failed for ${arch}`);
       continue;
