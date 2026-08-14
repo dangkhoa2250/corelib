@@ -51,7 +51,7 @@ jobs:
 
       - name: Test Rust backend
         working-directory: apps/desktop
-        run: cargo test --all-targets --manifest-path src-tauri/Cargo.toml
+        run: cargo test --all-targets --features dev-tools --manifest-path src-tauri/Cargo.toml
 
       - name: Lint Rust backend
         working-directory: apps/desktop

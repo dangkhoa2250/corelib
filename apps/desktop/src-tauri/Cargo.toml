@@ -6,6 +6,14 @@ authors = ["you"]
 edition = "2021"
 default-run = "library_desktop"
 
+[features]
+dev-tools = []
+
+[[bin]]
+name = "pdf_text_extractor"
+path = "dev-bin/pdf_text_extractor.rs"
+required-features = ["dev-tools"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]

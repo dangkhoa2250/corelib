@@ -81,9 +81,8 @@ jobs:
         run: |
           New-Item -ItemType Directory -Path release-artifacts | Out-Null
           Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe release-artifacts/
-          Copy-Item src-tauri/target/release/bundle/nsis/*.nsis.zip release-artifacts/
-          Copy-Item src-tauri/target/release/bundle/nsis/*.nsis.zip.sig release-artifacts/
-          $bundle = Get-ChildItem release-artifacts/*.nsis.zip | Select-Object -First 1
+          Copy-Item src-tauri/target/release/bundle/nsis/*-setup.exe.sig release-artifacts/
+          $bundle = Get-ChildItem release-artifacts/*-setup.exe | Select-Object -First 1
           if (-not $bundle -or -not (Test-Path "$($bundle.FullName).sig")) {
             throw "The signed Windows updater bundle is missing"
           }
@@ -143,7 +142,6 @@ jobs:
             release-assets/macos/*.app.tar.gz.sig
             release-assets/macos/*.dmg
             release-assets/windows/*-setup.exe
-            release-assets/windows/*.nsis.zip
-            release-assets/windows/*.nsis.zip.sig
+            release-assets/windows/*-setup.exe.sig
             latest.json
           generate_release_notes: true

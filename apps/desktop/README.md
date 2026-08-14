@@ -8,7 +8,7 @@ Library is the Corelib desktop application. The macOS and Windows editions share
 npm ci
 npm test
 npm run build
-cargo test --all-targets --manifest-path src-tauri/Cargo.toml
+cargo test --all-targets --features dev-tools --manifest-path src-tauri/Cargo.toml
 cargo clippy --all-targets --all-features --manifest-path src-tauri/Cargo.toml -- -D warnings -A linker-messages
 ```
 
