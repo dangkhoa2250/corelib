@@ -51,7 +51,7 @@ PDF reading, cards, decks, study scheduling, trash, statistics, and settings use
 
 `.github/workflows/windows-desktop.yml` tests the frontend and Rust backend on Windows, runs Clippy, builds an unsigned NSIS installer, and uploads it as a workflow artifact.
 
-Tags matching `desktop-vX.Y.Z` run `.github/workflows/release-desktop.yml`. The workflow builds signed Tauri updater artifacts for the native macOS runner architecture and Windows x64, then publishes one `latest.json` containing both platform entries.
+Tags matching `vX.Y.Z` run `.github/workflows/release-desktop.yml`. The workflow builds signed Tauri updater artifacts for the native macOS runner architecture and Windows x64, then publishes one `latest.json` containing both platform entries.
 
 Before publishing a tag:
 

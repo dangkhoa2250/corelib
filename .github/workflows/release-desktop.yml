@@ -3,7 +3,7 @@ name: Release desktop
 on:
   push:
     tags:
-      - "desktop-v*"
+      - "v*"
 
 permissions:
   contents: write
@@ -116,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           tag=${GITHUB_REF#refs/tags/}
-          version=${tag#desktop-v}
+          version=${tag#v}
           pub_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           mac_filename=$(jq -r .filename release-assets/macos/metadata.json)
           mac_signature=$(jq -r .signature release-assets/macos/metadata.json)
