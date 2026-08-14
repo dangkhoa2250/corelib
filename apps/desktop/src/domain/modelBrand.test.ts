@@ -17,6 +17,10 @@ test("matches model IDs case-insensitively", () => {
   expect(modelBrandFor("META/LLAMA-3.1-70B-INSTRUCT").id).toBe("meta");
 });
 
+test("loads model icons from bundled files instead of data URLs", () => {
+  expect(modelBrandFor("google/gemma-4-31b").src).not.toMatch(/^data:/);
+});
+
 test.each([
   ["community-meta-model", "meta"],
   ["Community-AI21-Model", "ai21"],

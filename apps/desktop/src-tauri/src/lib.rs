@@ -83,6 +83,25 @@ mod statistics_tests;
 #[cfg(test)]
 mod rich_document_tests;
 
+#[cfg(test)]
+mod account_service_config_tests {
+    use super::account_api_base_url;
+
+    #[test]
+    fn defaults_to_the_shared_pocketbase_service() {
+        assert_eq!(account_api_base_url(), "https://corelib.duckdns.org");
+    }
+}
+
+const DEFAULT_ACCOUNT_API_BASE_URL: &str = "https://corelib.duckdns.org";
+
+fn account_api_base_url() -> String {
+    option_env!("ACCOUNT_API_BASE_URL")
+        .filter(|url| !url.trim().is_empty())
+        .unwrap_or(DEFAULT_ACCOUNT_API_BASE_URL)
+        .to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -99,11 +118,8 @@ pub fn run() {
                 commands::LibraryStore::open(app_data_directory).map_err(std::io::Error::other)?,
             );
 
-            let base_url = option_env!("ACCOUNT_API_BASE_URL")
-                .unwrap_or("")
-                .to_string();
             let account_api = crate::account::PocketBaseAccountApi::new_with_deps(
-                base_url,
+                account_api_base_url(),
                 crate::account::KeyringSessionStore,
                 crate::account::ReqwestHttpClient::new(),
             );

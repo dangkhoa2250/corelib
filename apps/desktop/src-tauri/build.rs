@@ -1,4 +1,6 @@
 fn main() {
+    println!("cargo:rerun-if-env-changed=ACCOUNT_API_BASE_URL");
+
     #[cfg(target_os = "windows")]
     println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
     #[cfg(target_os = "windows")]

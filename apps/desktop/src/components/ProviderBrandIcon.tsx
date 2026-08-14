@@ -17,5 +17,17 @@ export function ProviderBrandIcon({ providerId }: ProviderBrandIconProps) {
     );
   }
 
+  if (brand.variant === "mask") {
+    return (
+      <span
+        aria-hidden="true"
+        className="provider-brand-icon provider-brand-icon--mask"
+        data-asset={brand.asset}
+        data-brand={brand.id}
+        style={{ maskImage: `url("${brand.src}")`, WebkitMaskImage: `url("${brand.src}")` }}
+      />
+    );
+  }
+
   return <img alt="" aria-hidden="true" className="provider-brand-icon" data-asset={brand.asset} data-brand={brand.id} src={brand.src} />;
 }

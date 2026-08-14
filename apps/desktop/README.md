@@ -28,7 +28,7 @@ The installer is written to `src-tauri/target/release/bundle/nsis/*-setup.exe`. 
 
 Windows creates a new local library under the application's Windows roaming AppData directory. It does not import or synchronize a macOS library. The SQLite schema and application identifier remain shared so future product features can evolve without a Windows-only fork.
 
-Set `ACCOUNT_API_BASE_URL` while building to connect account features to the shared PocketBase service. CI and releases read it from the GitHub repository variable named `ACCOUNT_API_BASE_URL`; the backend URL is not committed to source.
+Desktop builds connect to the shared PocketBase service at `https://corelib.duckdns.org` by default. Set `ACCOUNT_API_BASE_URL` only when you need to override that endpoint for a staging or local server; Cargo rebuilds the native app when the value changes.
 
 ## Translation
 

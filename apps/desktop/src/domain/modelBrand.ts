@@ -1,12 +1,12 @@
-import ai21 from "@lobehub/icons-static-svg/icons/ai21-brand-color.svg";
-import baai from "@lobehub/icons-static-svg/icons/baai.svg";
-import deepseek from "@lobehub/icons-static-svg/icons/deepseek-color.svg";
-import gemini from "@lobehub/icons-static-svg/icons/gemini-color.svg";
-import grok from "@lobehub/icons-static-svg/icons/grok.svg";
-import meta from "@lobehub/icons-static-svg/icons/meta-color.svg";
-import mistral from "@lobehub/icons-static-svg/icons/mistral-color.svg";
-import qwen from "@lobehub/icons-static-svg/icons/qwen-color.svg";
-import zeroone from "@lobehub/icons-static-svg/icons/zeroone-color.svg";
+import ai21 from "@lobehub/icons-static-svg/icons/ai21-brand-color.svg?no-inline";
+import baai from "@lobehub/icons-static-svg/icons/baai.svg?no-inline";
+import deepseek from "@lobehub/icons-static-svg/icons/deepseek-color.svg?no-inline";
+import gemini from "@lobehub/icons-static-svg/icons/gemini-color.svg?no-inline";
+import grok from "@lobehub/icons-static-svg/icons/grok.svg?no-inline";
+import meta from "@lobehub/icons-static-svg/icons/meta-color.svg?no-inline";
+import mistral from "@lobehub/icons-static-svg/icons/mistral-color.svg?no-inline";
+import qwen from "@lobehub/icons-static-svg/icons/qwen-color.svg?no-inline";
+import zeroone from "@lobehub/icons-static-svg/icons/zeroone-color.svg?no-inline";
 
 export type ModelBrand =
   | { id: "zeroone" | "meta" | "ai21" | "baai" | "gemini" | "mistral" | "qwen" | "deepseek" | "grok"; src: string; asset: string }

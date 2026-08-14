@@ -18,6 +18,30 @@
   color: var(--text-secondary);
 }
 
+.provider-brand-icon--mask {
+  display: inline-block;
+  color: var(--text-primary);
+  background-color: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
+.model-brand-icon--mask {
+  display: inline-block;
+  color: var(--text-primary);
+  background-color: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
 .model-brand-icon--fallback {
   display: inline-flex;
   align-items: center;
