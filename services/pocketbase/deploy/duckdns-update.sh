@@ -25,13 +25,22 @@ if [ -z "${DUCKDNS_TOKEN:-}" ]; then
   echo "ERROR: DUCKDNS_TOKEN is not set in $ENV_FILE" >&2
   exit 1
 fi
+if [[ ! "$DUCKDNS_DOMAIN" =~ ^[A-Za-z0-9-]+$ ]]; then
+  echo "ERROR: DUCKDNS_DOMAIN contains unsupported characters" >&2
+  exit 1
+fi
+if [[ ! "$DUCKDNS_TOKEN" =~ ^[A-Za-z0-9-]+$ ]]; then
+  echo "ERROR: DUCKDNS_TOKEN contains unsupported characters" >&2
+  exit 1
+fi
 
 # Send the update request. The response body must be exactly "OK".
-# curl is called with --silent so the URL (which contains the token)
-# is never printed to stdout/stderr.
-response=$(curl --silent --show-error \
-  "https://www.duckdns.org/update?domains=${DUCKDNS_DOMAIN}&token=${DUCKDNS_TOKEN}&ip=" \
-  2>&1) || {
+# Feed curl its URL through stdin so the token never appears in the
+# process command line or normal stdout/stderr output.
+response=$(printf \
+  'url = "https://www.duckdns.org/update?domains=%s&token=%s&ip="\n' \
+  "$DUCKDNS_DOMAIN" "$DUCKDNS_TOKEN" \
+  | curl --silent --show-error --config - 2>&1) || {
     echo "ERROR: DuckDNS update request failed" >&2
     exit 1
   }

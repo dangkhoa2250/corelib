@@ -44,7 +44,7 @@ bash tests/smoke.sh http://127.0.0.1:8090
 2. A DuckDNS subdomain (e.g. `library-home`) — record the domain name and token.
 3. PocketBase binary placed at `/opt/corelib-pocketbase/pocketbase`.
 4. Caddy installed (it manages Let's Encrypt certificates automatically).
-5. GPG key pair for encrypted backups (export `BACKUP_GPG_RECIPI`).
+5. GPG key pair for encrypted backups (export `BACKUP_GPG_RECIPIENT`).
 
 ### Install steps
 
@@ -67,7 +67,7 @@ sudo chmod +x /opt/corelib-pocketbase/duckdns-update.sh /opt/corelib-pocketbase/
 sudo tee /etc/corelib-pocketbase.env > /dev/null <<EOF
 DUCKDNS_DOMAIN=library-home
 DUCKDNS_TOKEN=your-duckdns-token
-BACKUP_GPG_RECIPI=your@gpg.key
+BACKUP_GPG_RECIPIENT=your@gpg.key
 EOF
 sudo chmod 600 /etc/corelib-pocketbase.env
 sudo chown root:root /etc/corelib-pocketbase.env
@@ -136,7 +136,7 @@ rm -rf /tmp/corelib-restore
 ```bash
 cd apps/desktop && npm test
 cd apps/desktop && npm run build
-cargo test --all-targets --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo test --all-targets --features dev-tools --manifest-path apps/desktop/src-tauri/Cargo.toml
 cargo clippy --all-targets --all-features --manifest-path apps/desktop/src-tauri/Cargo.toml -- -D warnings
 bash services/pocketbase/tests/smoke.sh https://LIBRARY_HOME.duckdns.org
 ```

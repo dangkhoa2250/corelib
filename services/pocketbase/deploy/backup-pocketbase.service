@@ -1,12 +1,12 @@
 [Unit]
 Description=Backup Library PocketBase data (encrypted)
 After=corelib-pocketbase.service
-Requires=corelib-pocketbase.service
 
 [Service]
 Type=oneshot
 ExecStart=/opt/corelib-pocketbase/backup-pocketbase.sh
 EnvironmentFile=/etc/corelib-pocketbase.env
+Environment=GNUPGHOME=/var/lib/corelib-pocketbase/gnupg
 
 ProtectSystem=strict
 ProtectHome=true

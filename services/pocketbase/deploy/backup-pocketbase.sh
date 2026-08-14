@@ -15,10 +15,10 @@ DATA_DIR="${POCKETBASE_DATA_DIR:-/var/lib/corelib-pocketbase/pb_data}"
 BACKUP_DIR="${BACKUP_DIR:-/var/lib/corelib-pocketbase/backups}"
 SERVICE_NAME="corelib-pocketbase"
 RETENTION_COUNT=7
-GPG_RECIPI="${BACKUP_GPG_RECIPI:-}"
+GPG_RECIPIENT="${BACKUP_GPG_RECIPIENT:-}"
 
-if [ -z "$GPG_RECIPI" ]; then
-  echo "ERROR: BACKUP_GPG_RECIPI must be set to a GPG key ID or email" >&2
+if [ -z "$GPG_RECIPIENT" ]; then
+  echo "ERROR: BACKUP_GPG_RECIPIENT must be set to a GPG key ID or email" >&2
   exit 1
 fi
 
@@ -30,10 +30,10 @@ ARCHIVE_PATH="${BACKUP_DIR}/${ARCHIVE_NAME}"
 ENCRYPTED_PATH="${ARCHIVE_PATH}.gpg"
 
 echo "Stopping ${SERVICE_NAME} for consistent snapshot..."
-sudo systemctl stop "$SERVICE_NAME"
+systemctl stop "$SERVICE_NAME"
 
 # Ensure the service is restarted even if the backup fails.
-trap 'sudo systemctl start "$SERVICE_NAME"' EXIT
+trap 'systemctl start "$SERVICE_NAME"' EXIT
 
 echo "Creating archive: ${ARCHIVE_PATH}"
 tar --create --gzip --file "$ARCHIVE_PATH" \
@@ -41,12 +41,12 @@ tar --create --gzip --file "$ARCHIVE_PATH" \
   "$(basename "$DATA_DIR")"
 
 echo "Starting ${SERVICE_NAME}..."
-sudo systemctl start "$SERVICE_NAME"
+systemctl start "$SERVICE_NAME"
 trap - EXIT
 
 echo "Encrypting archive..."
 gpg --batch --yes --trust-model always \
-  --recipient "$GPG_RECIPI" \
+  --recipient "$GPG_RECIPIENT" \
   --output "$ENCRYPTED_PATH" \
   --encrypt "$ARCHIVE_PATH"
 

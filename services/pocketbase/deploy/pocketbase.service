@@ -9,7 +9,7 @@ User=corelib
 Group=corelib
 WorkingDirectory=/opt/corelib-pocketbase
 UMask=0077
-ExecStart=/opt/corelib-pocketbase/pocketbase serve --http=127.0.0.1:8090 --dir /var/lib/corelib-pocketbase/pb_data
+ExecStart=/opt/corelib-pocketbase/pocketbase serve --http=127.0.0.1:8090 --dir /var/lib/corelib-pocketbase/pb_data --hooksDir /opt/corelib-pocketbase/pb_hooks
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true

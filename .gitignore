@@ -15,3 +15,6 @@ services/pocketbase/pocketbase
 .corebase/queue/
 .corebase/logs/
 .ua
+
+# SSH keys for deployment (never commit private keys!)
+deploy/ssh/
