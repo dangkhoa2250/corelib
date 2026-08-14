@@ -42,9 +42,17 @@ describe("macOS compatibility floor", () => {
   it("verifies macOS 12 universal compatibility on the release workflow artifact", () => {
     const workflow = readSource("../../../.github/workflows/release-desktop.yml");
     expect(workflow).toContain("Verify macOS 12 Universal compatibility");
-    expect(workflow).toContain("LSMinimumSystemVersion");
-    expect(workflow).toContain('expected_archs="x86_64 arm64"');
-    expect(workflow).toContain("otool -arch x86_64 -l");
-    expect(workflow).toContain("otool -arch arm64 -l");
+    expect(workflow).toContain(
+      'test "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")" = "12.0"',
+    );
+    expect(workflow).toContain(
+      'test "$(lipo -archs "$binary")" = "$expected_archs"',
+    );
+    expect(workflow).toContain(
+      `test "$(otool -arch x86_64 -l "$binary" | awk '$1 == "minos" { print $2 }')" = "12.0"`,
+    );
+    expect(workflow).toContain(
+      `test "$(otool -arch arm64 -l "$binary" | awk '$1 == "minos" { print $2 }')" = "12.0"`,
+    );
   });
 });

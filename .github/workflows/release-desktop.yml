@@ -41,8 +41,8 @@ jobs:
           test "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")" = "12.0"
           expected_archs="x86_64 arm64"
           test "$(lipo -archs "$binary")" = "$expected_archs"
-          otool -arch x86_64 -l "$binary" | grep -A4 LC_BUILD_VERSION | grep -q "minos 12.0"
-          otool -arch arm64 -l "$binary" | grep -A4 LC_BUILD_VERSION | grep -q "minos 12.0"
+          test "$(otool -arch x86_64 -l "$binary" | awk '$1 == "minos" { print $2 }')" = "12.0"
+          test "$(otool -arch arm64 -l "$binary" | awk '$1 == "minos" { print $2 }')" = "12.0"
       - name: Stage macOS release files
         working-directory: apps/desktop
         shell: bash
