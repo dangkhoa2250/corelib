@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Library",
+  "productName": "Corelib",
   "version": "0.1.0",
   "identifier": "com.library.desktop",
   "build": {
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Library",
+        "title": "Corelib",
         "width": 1200,
         "height": 800,
         "transparent": false,

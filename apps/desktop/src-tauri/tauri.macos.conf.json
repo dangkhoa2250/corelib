@@ -4,7 +4,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Library",
+        "title": "Corelib",
         "width": 1200,
         "height": 800,
         "transparent": true,
