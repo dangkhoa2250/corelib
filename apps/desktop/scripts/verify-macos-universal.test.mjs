@@ -77,6 +77,21 @@ describe("verifyOtoolWeakLinkage", () => {
       [WEAK, "/System/Library/Frameworks/Translation.framework/Versions/A/_Translation_SwiftUI.framework"],
     ])).not.toEqual([]);
   });
+
+  it("rejects a Translation framework whose complete component is not exact", () => {
+    expect(problemsFor([
+      [WEAK, "/System/Library/Frameworks/Foo-Translation.framework/Versions/A/Foo-Translation"],
+      [WEAK, TRANSLATION_SWIFTUI],
+    ])).not.toEqual([]);
+  });
+
+  it("rejects a strong Translation-like non-framework dependency", () => {
+    expect(problemsFor([
+      [WEAK, TRANSLATION],
+      [WEAK, TRANSLATION_SWIFTUI],
+      [DYLIB, "@rpath/libTranslation.dylib"],
+    ])).not.toEqual([]);
+  });
 });
 
 describe("parseLoadCommands", () => {

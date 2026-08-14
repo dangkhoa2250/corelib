@@ -35,21 +35,26 @@ export function parseLoadCommands(otoolOutput) {
   return blocks;
 }
 
-export function translationFrameworkName(name) {
-  const match = /([A-Za-z0-9_]*)\.framework\//.exec(name ?? "");
-  if (!match) return null;
-  const component = match[1];
-  return component.includes("Translation") ? component : null;
+export function translationDependencyKind(name) {
+  if (!name?.includes("Translation")) return null;
+  const match = /(^|\/)([^/\s]+)\.framework\//.exec(name);
+  if (!match) return "non-framework";
+  return match[2];
 }
 
 export function verifyOtoolWeakLinkage(otoolOutput) {
   const problems = [];
   const blocks = parseLoadCommands(otoolOutput);
   const deps = blocks
-    .filter((block) => block.command && block.name && translationFrameworkName(block.name))
+    .filter((block) => block.command && block.name && translationDependencyKind(block.name))
     .map((block) => ({ command: block.command, name: block.name }));
 
   for (const dep of deps) {
+    const kind = translationDependencyKind(dep.name);
+    if (kind === "non-framework") {
+      problems.push(`Translation-like non-framework dependency ${dep.name} is not allowed`);
+      continue;
+    }
     if (dep.command !== "LC_LOAD_WEAK_DYLIB") {
       problems.push(
         `${dep.name} must be LC_LOAD_WEAK_DYLIB, got ${dep.command}`,
@@ -59,7 +64,8 @@ export function verifyOtoolWeakLinkage(otoolOutput) {
 
   const weakNames = deps
     .filter((dep) => dep.command === "LC_LOAD_WEAK_DYLIB")
-    .map((dep) => translationFrameworkName(dep.name))
+    .map((dep) => translationDependencyKind(dep.name))
+    .filter((kind) => kind !== "non-framework")
     .sort();
   const expected = [...EXPECTED_WEAK_TRANSLATION_FRAMEWORKS].sort();
   if (
