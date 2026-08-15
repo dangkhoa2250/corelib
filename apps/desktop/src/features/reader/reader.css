@@ -152,7 +152,10 @@
 }
 
 .reader-toolbar__group--page {
-  margin-left: auto;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
 }
 
 .reader-toolbar__overflow {
