@@ -221,6 +221,215 @@ function ThumbnailPage({ pdfDoc, pageNumber, onClick, active, tagged }: Thumbnai
   );
 }
 
+export interface SearchResultItem {
+  pageNumber: number;
+  matchCount: number;
+  snippets: string[];
+}
+
+export function extractSnippets(text: string, query: string, maxSnippets = 2, snippetRadius = 22): string[] {
+  if (!text || !query) return [];
+  const qLower = query.toLowerCase();
+  const tLower = text.toLowerCase();
+  const snippets: string[] = [];
+  let startIndex = 0;
+
+  while (snippets.length < maxSnippets) {
+    const matchIdx = tLower.indexOf(qLower, startIndex);
+    if (matchIdx === -1) break;
+
+    const start = Math.max(0, matchIdx - snippetRadius);
+    const end = Math.min(text.length, matchIdx + query.length + snippetRadius);
+    let snippet = text.slice(start, end).trim();
+    if (start > 0) snippet = "..." + snippet;
+    if (end < text.length) snippet = snippet + "...";
+    snippets.push(snippet);
+
+    startIndex = matchIdx + query.length;
+  }
+  return snippets;
+}
+
+export function HighlightSnippet({ text, query }: { text: string; query: string }) {
+  if (!query || !text) return <span>{text}</span>;
+  const qLower = query.toLowerCase();
+  const tLower = text.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let lastIdx = 0;
+  let matchIdx = tLower.indexOf(qLower, lastIdx);
+  let key = 0;
+
+  while (matchIdx !== -1) {
+    if (matchIdx > lastIdx) {
+      parts.push(<span key={key++}>{text.slice(lastIdx, matchIdx)}</span>);
+    }
+    parts.push(
+      <strong key={key++} className="reader-search-snippet-match">
+        {text.slice(matchIdx, matchIdx + query.length)}
+      </strong>
+    );
+    lastIdx = matchIdx + query.length;
+    matchIdx = tLower.indexOf(qLower, lastIdx);
+  }
+
+  if (lastIdx < text.length) {
+    parts.push(<span key={key++}>{text.slice(lastIdx)}</span>);
+  }
+
+  return <span>{parts}</span>;
+}
+
+interface SearchResultSidebarItemProps {
+  pdfDoc: pdfjs.PDFDocumentProxy;
+  result: SearchResultItem;
+  query: string;
+  active: boolean;
+  onClick: () => void;
+}
+
+function SearchResultSidebarItem({
+  pdfDoc,
+  result,
+  query,
+  active,
+  onClick,
+}: SearchResultSidebarItemProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const containerRef = useRef<HTMLButtonElement | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [rendered, setRendered] = useState(false);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "100px" }
+    );
+    observer.observe(container);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isVisible || rendered) return;
+    let isCurrent = true;
+    const renderThumb = async () => {
+      try {
+        const page = await pdfDoc.getPage(result.pageNumber);
+        if (!isCurrent) return;
+        const viewport = page.getViewport({ scale: 0.12 });
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        const dpr = getCanvasPixelRatio(window.devicePixelRatio || 1, viewport.width, viewport.height);
+        canvas.width = viewport.width * dpr;
+        canvas.height = viewport.height * dpr;
+        context.scale(dpr, dpr);
+        await page.render({ canvasContext: context, viewport }).promise;
+        if (isCurrent) {
+          setRendered(true);
+        }
+      } catch (_) {}
+    };
+    void renderThumb();
+    return () => {
+      isCurrent = false;
+    };
+  }, [pdfDoc, result.pageNumber, isVisible, rendered]);
+
+  return (
+    <button
+      ref={containerRef}
+      type="button"
+      className={`reader-search-result-item ${active ? "is-active" : ""}`}
+      onClick={onClick}
+      aria-label={`Page ${result.pageNumber}, ${result.matchCount} ${result.matchCount === 1 ? "match" : "matches"}`}
+    >
+      <div className="reader-search-result-item__thumb">
+        <canvas
+          ref={canvasRef}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: rendered ? "block" : "none" }}
+        />
+        {!rendered && <span className="reader-page-number">{result.pageNumber}</span>}
+      </div>
+      <div className="reader-search-result-item__info">
+        <div className="reader-search-result-item__header">
+          <span className="reader-search-result-item__page">Page {result.pageNumber}</span>
+          <span className="reader-search-result-item__count">
+            {result.matchCount} {result.matchCount === 1 ? "match" : "matches"}
+          </span>
+        </div>
+        {result.snippets.map((snippet, idx) => (
+          <div key={idx} className="reader-search-result-item__snippet">
+            <HighlightSnippet text={snippet} query={query} />
+          </div>
+        ))}
+      </div>
+    </button>
+  );
+}
+
+export function applySearchHighlight(container: HTMLElement | null, query: string) {
+  if (!container) return;
+  const trimmed = query.trim();
+
+  if (!trimmed) {
+    container.querySelectorAll<HTMLSpanElement>("span[data-orig-text]").forEach((span) => {
+      if (span.dataset.origText !== undefined) {
+        span.textContent = span.dataset.origText;
+        delete span.dataset.origText;
+      }
+    });
+    return;
+  }
+
+  const spans = container.querySelectorAll<HTMLSpanElement>("span");
+  const qLower = trimmed.toLowerCase();
+  spans.forEach((span) => {
+    if (span.classList.contains("reader-search-highlight") || span.closest(".reader-search-highlight")) {
+      return;
+    }
+    const origText = span.dataset.origText ?? span.textContent ?? "";
+    if (span.dataset.origText === undefined) {
+      span.dataset.origText = origText;
+    }
+    const lower = origText.toLowerCase();
+    if (!lower.includes(qLower)) {
+      span.textContent = origText;
+      return;
+    }
+
+    span.innerHTML = "";
+    let start = 0;
+    let idx = lower.indexOf(qLower, start);
+    while (idx !== -1) {
+      if (idx > start) {
+        span.appendChild(window.document.createTextNode(origText.slice(start, idx)));
+      }
+      const mark = window.document.createElement("mark");
+      mark.className = "reader-search-highlight";
+      mark.textContent = origText.slice(idx, idx + trimmed.length);
+      span.appendChild(mark);
+      start = idx + trimmed.length;
+      idx = lower.indexOf(qLower, start);
+    }
+    if (start < origText.length) {
+      span.appendChild(window.document.createTextNode(origText.slice(start)));
+    }
+  });
+}
+
 interface PdfPageProps {
   documentId: string;
   pdfDoc: pdfjs.PDFDocumentProxy;
@@ -232,6 +441,7 @@ interface PdfPageProps {
   onVisible: () => void;
   onSelection: (source: CardSource, focusPage: number) => void;
   highlightRects?: SelectionRect[] | null;
+  searchQuery?: string;
 }
 
 const PdfPage = React.memo(
@@ -245,6 +455,7 @@ const PdfPage = React.memo(
     onVisible,
     onSelection,
     highlightRects,
+    searchQuery,
   }: PdfPageProps) {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -487,7 +698,10 @@ const PdfPage = React.memo(
                 linkService: linkService as any,
                 renderForms: false,
               });
-              if (isCurrent) layersRenderedRef.current = true;
+              if (isCurrent) {
+                layersRenderedRef.current = true;
+                applySearchHighlight(textLayerContainer, searchQuery ?? "");
+              }
             }
           }
         } catch (error) {
@@ -504,7 +718,13 @@ const PdfPage = React.memo(
         renderTask?.cancel();
         if (renderToken) pageRenderQueue.supersede(renderToken.id);
       };
-    }, [pdfDoc, pageNumber, previewScale, isVisible]);
+    }, [pdfDoc, pageNumber, previewScale, isVisible, searchQuery]);
+
+    useEffect(() => {
+      if (textLayerRef.current && layersRenderedRef.current) {
+        applySearchHighlight(textLayerRef.current, searchQuery ?? "");
+      }
+    }, [searchQuery]);
 
     // A page can briefly leave the observer margin while scrolling or while
     // the zoom layout is being recomputed. Retaining its completed frame for a
@@ -650,7 +870,8 @@ const PdfPage = React.memo(
       prevProps.defaultHeight === nextProps.defaultHeight &&
       prevProps.pagesContainerRef === nextProps.pagesContainerRef &&
       prevProps.onSelection === nextProps.onSelection &&
-      prevProps.highlightRects === nextProps.highlightRects
+      prevProps.highlightRects === nextProps.highlightRects &&
+      prevProps.searchQuery === nextProps.searchQuery
     );
   }
 );
@@ -742,9 +963,10 @@ export function ReaderPage({
   const [defaultSize, setDefaultSize] = useState<{ width: number; height: number }>({ width: 600, height: 800 });
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<number[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searchIndex, setSearchIndex] = useState(-1);
   const [searching, setSearching] = useState(false);
+  const [sortBy, setSortBy] = useState<"rank" | "page">("rank");
 
   const [sidebarTab, setSidebarTab] = useState<"pages" | "outline">("pages");
   const [outline, setOutline] = useState<any[] | null>(null);
@@ -1127,36 +1349,98 @@ export function ReaderPage({
     };
   }, [pdfDoc, zoomBy]);
 
+  const sortedResults = useMemo(() => {
+    const list = [...searchResults];
+    if (sortBy === "rank") {
+      return list.sort((a, b) => {
+        if (b.matchCount !== a.matchCount) return b.matchCount - a.matchCount;
+        return a.pageNumber - b.pageNumber;
+      });
+    }
+    return list.sort((a, b) => a.pageNumber - b.pageNumber);
+  }, [searchResults, sortBy]);
+
   // Search
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!pdfDoc || !searchQuery) return;
+  const handleSearch = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = searchQuery.trim();
+    if (!pdfDoc || !trimmed) {
+      setSearchResults([]);
+      setSearchIndex(-1);
+      return;
+    }
     setSearching(true);
-    const results: number[] = [];
+    const results: SearchResultItem[] = [];
+    const qLower = trimmed.toLowerCase();
     for (let i = 1; i <= pdfDoc.numPages; i++) {
       const page = await pdfDoc.getPage(i);
       const content = await page.getTextContent();
       const text = content.items.map((item: any) => item.str).join(" ");
-      if (text.toLowerCase().includes(searchQuery.toLowerCase())) {
-        results.push(i);
+      const tLower = text.toLowerCase();
+      if (tLower.includes(qLower)) {
+        let count = 0;
+        let pos = 0;
+        while ((pos = tLower.indexOf(qLower, pos)) !== -1) {
+          count++;
+          pos += qLower.length;
+        }
+        const snippets = extractSnippets(text, trimmed, 3, 22);
+        results.push({
+          pageNumber: i,
+          matchCount: count,
+          snippets,
+        });
       }
     }
     setSearchResults(results);
     setSearching(false);
     if (results.length > 0) {
       setSearchIndex(0);
-      handlePageSelect(results[0]);
+      const sorted = sortBy === "rank"
+        ? [...results].sort((a, b) => b.matchCount - a.matchCount || a.pageNumber - b.pageNumber)
+        : [...results].sort((a, b) => a.pageNumber - b.pageNumber);
+      handlePageSelect(sorted[0].pageNumber);
     } else {
       setSearchIndex(-1);
     }
   };
 
-  const handleNextSearchResult = () => {
-    if (searchResults.length === 0) return;
-    const nextIdx = (searchIndex + 1) % searchResults.length;
-    setSearchIndex(nextIdx);
-    handlePageSelect(searchResults[nextIdx]);
+  const handlePrevSearchResult = () => {
+    if (sortedResults.length === 0) return;
+    const prevIdx = (searchIndex - 1 + sortedResults.length) % sortedResults.length;
+    setSearchIndex(prevIdx);
+    handlePageSelect(sortedResults[prevIdx].pageNumber);
   };
+
+  const handleNextSearchResult = () => {
+    if (sortedResults.length === 0) return;
+    const nextIdx = (searchIndex + 1) % sortedResults.length;
+    setSearchIndex(nextIdx);
+    handlePageSelect(sortedResults[nextIdx].pageNumber);
+  };
+
+  const handleSortChange = (newSortBy: "rank" | "page") => {
+    setSortBy(newSortBy);
+    const newSorted = newSortBy === "rank"
+      ? [...searchResults].sort((a, b) => b.matchCount - a.matchCount || a.pageNumber - b.pageNumber)
+      : [...searchResults].sort((a, b) => a.pageNumber - b.pageNumber);
+    const idx = newSorted.findIndex((r) => r.pageNumber === currentPage);
+    if (idx !== -1) {
+      setSearchIndex(idx);
+    } else if (newSorted.length > 0) {
+      setSearchIndex(0);
+      handlePageSelect(newSorted[0].pageNumber);
+    }
+  };
+
+  const handleDoneSearch = () => {
+    setSearchQuery("");
+    setSearchResults([]);
+    setSearchIndex(-1);
+    setSearching(false);
+  };
+
+  const isSearchActive = Boolean(searchQuery.trim() && (searchResults.length > 0 || searching));
 
   if (loadingDoc) {
     return (
@@ -1195,16 +1479,22 @@ export function ReaderPage({
           <div className="reader-sidebar__tabs">
             <button
               type="button"
-              className={`reader-sidebar__tab ${sidebarTab === "pages" ? "is-active" : ""}`}
-              onClick={() => setSidebarTab("pages")}
+              className={`reader-sidebar__tab ${!isSearchActive && sidebarTab === "pages" ? "is-active" : ""}`}
+              onClick={() => {
+                if (isSearchActive) handleDoneSearch();
+                setSidebarTab("pages");
+              }}
             >
               Pages
             </button>
             {outline && (
               <button
-              type="button"
-              className={`reader-sidebar__tab ${sidebarTab === "outline" ? "is-active" : ""}`}
-              onClick={() => setSidebarTab("outline")}
+                type="button"
+                className={`reader-sidebar__tab ${!isSearchActive && sidebarTab === "outline" ? "is-active" : ""}`}
+                onClick={() => {
+                  if (isSearchActive) handleDoneSearch();
+                  setSidebarTab("outline");
+                }}
               >
                 Outline
               </button>
@@ -1214,7 +1504,33 @@ export function ReaderPage({
 
         {/* Content */}
         <ScrollArea ref={thumbnailListRef} className="reader-sidebar__content">
-          {sidebarTab === "pages" ? (
+          {isSearchActive ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingRight: "12px" }}>
+              {searching ? (
+                <div style={{ padding: "16px 8px", color: "var(--text-secondary)", fontSize: "12px", textAlign: "center" }}>
+                  Searching document...
+                </div>
+              ) : sortedResults.length === 0 ? (
+                <div style={{ padding: "16px 8px", color: "var(--text-secondary)", fontSize: "12px", textAlign: "center" }}>
+                  No matches found
+                </div>
+              ) : (
+                sortedResults.map((result, idx) => (
+                  <SearchResultSidebarItem
+                    key={result.pageNumber}
+                    pdfDoc={pdfDoc!}
+                    result={result}
+                    query={searchQuery}
+                    active={currentPage === result.pageNumber}
+                    onClick={() => {
+                      setSearchIndex(idx);
+                      handlePageSelect(result.pageNumber);
+                    }}
+                  />
+                ))
+              )}
+            </div>
+          ) : sidebarTab === "pages" ? (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
               {pagesArray.map((pageNumber) => (
                 <ThumbnailPage
@@ -1408,6 +1724,7 @@ export function ReaderPage({
                       documentId: document.id,
                       page: currentPage,
                       quote: "",
+                      rects: [],
                     });
                   }
                 }}
@@ -1417,33 +1734,110 @@ export function ReaderPage({
             )}
 
             {/* Search box */}
-            <form className="reader-search" onSubmit={(e) => void handleSearch(e)}>
+            <form
+              className="reader-search"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (searchResults.length > 0 && searchQuery.trim()) {
+                  handleNextSearchResult();
+                } else {
+                  void handleSearch(e);
+                }
+              }}
+            >
               <input
                 type="search"
                 className="reader-search__input"
                 placeholder="Search in PDF..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (e.target.value === "") {
+                    setSearchResults([]);
+                    setSearchIndex(-1);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    handleDoneSearch();
+                  }
+                }}
               />
-              {searchResults.length > 0 && (
-                <div className="reader-search__results">
-                  <span>
-                    {searchIndex + 1}/{searchResults.length}
-                  </span>
-                  <button
-                    type="button"
-                    className="reader-icon-button"
-                    aria-label="Next search match"
-                    onClick={handleNextSearchResult}
-                  >
-                    Next Match
-                  </button>
-                </div>
-              )}
-              {searching && <span className="reader-search__results">Searching...</span>}
             </form>
           </div>
         </header>
+
+        {/* Secondary Search Results Bar (macOS Preview style) */}
+        {isSearchActive && (
+          <div className="reader-search-bar" role="toolbar" aria-label="PDF Search Controls">
+            <div className="reader-search-bar__left">
+              <span className="reader-search-bar__label">Sort By:</span>
+              <div className="reader-sort-segmented" role="radiogroup" aria-label="Sort search results">
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={sortBy === "rank"}
+                  className={`reader-sort-segmented__btn ${sortBy === "rank" ? "is-active" : ""}`}
+                  onClick={() => handleSortChange("rank")}
+                >
+                  Search Rank
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={sortBy === "page"}
+                  className={`reader-sort-segmented__btn ${sortBy === "page" ? "is-active" : ""}`}
+                  onClick={() => handleSortChange("page")}
+                >
+                  Page Order
+                </button>
+              </div>
+            </div>
+
+            <div className="reader-search-bar__right">
+              <span className="reader-search-bar__count">
+                {searching
+                  ? "Searching..."
+                  : sortedResults.length === 0
+                  ? "No matches found"
+                  : `Found on ${sortedResults.length} ${sortedResults.length === 1 ? "page" : "pages"}`}
+              </span>
+              <div className="reader-search-bar__actions">
+                <div className="reader-search-nav-group" role="group" aria-label="Search result navigation">
+                  <button
+                    type="button"
+                    className="reader-search-nav-btn"
+                    aria-label="Previous search match"
+                    title="Previous match"
+                    disabled={sortedResults.length === 0}
+                    onClick={handlePrevSearchResult}
+                  >
+                    ‹
+                  </button>
+                  <div className="reader-search-nav-divider" />
+                  <button
+                    type="button"
+                    className="reader-search-nav-btn"
+                    aria-label="Next search match"
+                    title="Next match"
+                    disabled={sortedResults.length === 0}
+                    onClick={handleNextSearchResult}
+                  >
+                    ›
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="reader-search-done-btn"
+                  onClick={handleDoneSearch}
+                  aria-label="Done searching"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Scrollable pages container */}
         <ScrollArea
@@ -1499,6 +1893,7 @@ export function ReaderPage({
                 }}
                 onSelection={handleSelection}
                 highlightRects={sourceHighlight?.page === pageNumber ? sourceHighlight.rects : null}
+                searchQuery={searchQuery}
               />
             ))}
             </div>

@@ -22,6 +22,8 @@ import {
   getCanvasPixelRatio,
   getCenteredPageOffset,
   getZoomAnchorScrollPosition,
+  extractSnippets,
+  applySearchHighlight,
 } from "./ReaderPage";
 
 beforeAll(() => {
@@ -701,6 +703,7 @@ it("opens and toggles the card composer when the Memora toolbar button is clicke
     documentId: "linear-algebra",
     page: 1,
     quote: "",
+    rects: [],
   });
 
   // When composer is open, button has is-active and clicking closes it
@@ -712,7 +715,7 @@ it("opens and toggles the card composer when the Memora toolbar button is clicke
       onPageChange={vi.fn().mockResolvedValue(undefined)}
       onCreateCard={onCreateCard}
       onCloseComposer={onCloseComposer}
-      composerSource={{ documentId: "linear-algebra", page: 1, quote: "" }}
+      composerSource={{ documentId: "linear-algebra", page: 1, quote: "", rects: [] }}
       composerDecks={[]}
       onSaveCard={vi.fn()}
     />,
@@ -723,4 +726,93 @@ it("opens and toggles the card composer when the Memora toolbar button is clicke
 
   fireEvent.click(activeMemoraBtn);
   expect(onCloseComposer).toHaveBeenCalled();
+});
+
+it("extracts text snippets around matched query", () => {
+  const text = "A quick brown fox jumps over the lazy dog and runs away";
+  const snippets = extractSnippets(text, "fox", 2, 10);
+  expect(snippets).toHaveLength(1);
+  expect(snippets[0]).toContain("fox");
+});
+
+it("applies and removes search highlights in textLayer DOM", () => {
+  const container = globalThis.document.createElement("div");
+  const span1 = globalThis.document.createElement("span");
+  span1.textContent = "Vector space and linear transformation";
+  container.appendChild(span1);
+
+  applySearchHighlight(container, "Vector");
+  const marks = container.querySelectorAll("mark.reader-search-highlight");
+  expect(marks).toHaveLength(1);
+  expect(marks[0].textContent).toBe("Vector");
+
+  // Clear query
+  applySearchHighlight(container, "");
+  expect(container.querySelectorAll("mark.reader-search-highlight")).toHaveLength(0);
+  expect(span1.textContent).toBe("Vector space and linear transformation");
+});
+
+it("performs search, shows macOS Preview secondary bar, sidebar results, and Done button", async () => {
+  render(
+    <ReaderPage
+      document={document}
+      onBack={() => {}}
+      getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+      onPageChange={vi.fn().mockResolvedValue(undefined)}
+    />,
+  );
+
+  await waitFor(() => {
+    expect(screen.getByRole("heading", { name: "Linear Algebra" })).toBeInTheDocument();
+  });
+
+  const searchInput = screen.getByPlaceholderText("Search in PDF...");
+  fireEvent.change(searchInput, { target: { value: "match" } });
+  fireEvent.submit(searchInput.closest("form")!);
+
+  // Secondary search bar should appear
+  await waitFor(() => {
+    expect(screen.getByRole("toolbar", { name: "PDF Search Controls" })).toBeInTheDocument();
+  });
+
+  expect(screen.getByText("Sort By:")).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "Search Rank" })).toBeInTheDocument();
+  expect(screen.getByRole("radio", { name: "Page Order" })).toBeInTheDocument();
+  expect(screen.getByText("Found on 3 pages")).toBeInTheDocument();
+
+  // Sidebar should switch to search results
+  expect(screen.getByRole("button", { name: /Page 1, 1 match/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Page 2, 1 match/i })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Page 3, 1 match/i })).toBeInTheDocument();
+
+  // Switching sort order
+  const pageOrderBtn = screen.getByRole("radio", { name: "Page Order" });
+  fireEvent.click(pageOrderBtn);
+  expect(pageOrderBtn).toHaveClass("is-active");
+
+  const searchRankBtn = screen.getByRole("radio", { name: "Search Rank" });
+  fireEvent.click(searchRankBtn);
+  expect(searchRankBtn).toHaveClass("is-active");
+
+  // Navigating with Next and Prev buttons
+  const nextBtn = screen.getByRole("button", { name: "Next search match" });
+  const prevBtn = screen.getByRole("button", { name: "Previous search match" });
+  expect(nextBtn).toBeInTheDocument();
+  expect(prevBtn).toBeInTheDocument();
+  fireEvent.click(nextBtn);
+  fireEvent.click(prevBtn);
+
+  // Clicking sidebar result item
+  const page2Result = screen.getByRole("button", { name: /Page 2, 1 match/i });
+  fireEvent.click(page2Result);
+
+  // Clicking Done button
+  const doneBtn = screen.getByRole("button", { name: "Done searching" });
+  fireEvent.click(doneBtn);
+
+  // Search bar and search results disappear, returning to standard pages list
+  await waitFor(() => {
+    expect(screen.queryByRole("toolbar", { name: "PDF Search Controls" })).not.toBeInTheDocument();
+  });
+  expect(screen.getByRole("button", { name: "Go to page 1" })).toBeInTheDocument();
 });
