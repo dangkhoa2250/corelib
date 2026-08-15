@@ -155,6 +155,15 @@ test("keeps Deck/Front/Back and actions unscrolled, routing only the image picke
   expect(panel).not.toMatch(/overflow[A-Za-z]*\s*:\s*(auto|scroll)/);
 });
 
+test("pads the panel image picker content so focus rings are not clipped", () => {
+  const composer = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardComposer.tsx"), "utf8"));
+
+  // The panel's picker scroll content pads all four sides. A right-only inset
+  // would let ScrollArea's overflow:hidden clip the search input's focus ring
+  // (box-shadow 3px + 2px outline) on the top and left edges.
+  expect(composer).toMatch(/padding:\s*["']4px 16px 4px 4px["']/);
+});
+
 test("keeps panel Front and Back content at a fixed 140px ScrollArea viewport", () => {
   const composer = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardComposer.tsx"), "utf8"));
   const editorCss = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardRichTextEditor.css"), "utf8"));

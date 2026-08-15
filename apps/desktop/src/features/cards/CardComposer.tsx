@@ -894,7 +894,7 @@ export function CardComposer({
         {pickerOpen ? (
           <div style={{ flex: "1 1 auto", minHeight: 0, marginTop: "16px", display: "flex", flexDirection: "column" }}>
             <ScrollArea style={{ flex: 1, minHeight: 0 }}>
-              <div style={{ paddingRight: "16px" }}>
+              <div style={{ padding: "4px 16px 4px 4px" }}>
                 <MediaPicker frontText={frontText} onClose={() => setPickerOpen(false)} onSearch={searchMultiSourceImagesBridge} onStage={handleStageRemote} />
               </div>
             </ScrollArea>
