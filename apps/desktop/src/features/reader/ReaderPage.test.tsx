@@ -676,3 +676,51 @@ it("calls onPageChange when page rendering succeeds", async () => {
     expect(onPageChange.mock.calls[0][1]).toBe(1);
   });
 });
+
+it("opens and toggles the card composer when the Memora toolbar button is clicked", async () => {
+  const onCreateCard = vi.fn();
+  const onCloseComposer = vi.fn();
+
+  const { rerender } = render(
+    <ReaderPage
+      document={document}
+      onBack={() => {}}
+      getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+      onPageChange={vi.fn().mockResolvedValue(undefined)}
+      onCreateCard={onCreateCard}
+      onCloseComposer={onCloseComposer}
+    />,
+  );
+
+  const memoraBtn = await screen.findByRole("button", { name: "Memora flashcards" });
+  expect(memoraBtn).toBeInTheDocument();
+  expect(memoraBtn).not.toHaveClass("is-active");
+
+  fireEvent.click(memoraBtn);
+  expect(onCreateCard).toHaveBeenCalledWith({
+    documentId: "linear-algebra",
+    page: 1,
+    quote: "",
+  });
+
+  // When composer is open, button has is-active and clicking closes it
+  rerender(
+    <ReaderPage
+      document={document}
+      onBack={() => {}}
+      getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+      onPageChange={vi.fn().mockResolvedValue(undefined)}
+      onCreateCard={onCreateCard}
+      onCloseComposer={onCloseComposer}
+      composerSource={{ documentId: "linear-algebra", page: 1, quote: "" }}
+      composerDecks={[]}
+      onSaveCard={vi.fn()}
+    />,
+  );
+
+  const activeMemoraBtn = await screen.findByRole("button", { name: "Memora flashcards" });
+  expect(activeMemoraBtn).toHaveClass("is-active");
+
+  fireEvent.click(activeMemoraBtn);
+  expect(onCloseComposer).toHaveBeenCalled();
+});

@@ -170,7 +170,7 @@
 .reader-toolbar__right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
   margin-left: auto;
   flex-shrink: 0;
 }
@@ -179,6 +179,8 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 4px;
+  height: 36px;
+  box-sizing: border-box;
   border: 1px solid var(--border-subtle);
   border-radius: 9999px;
   background: var(--toolbar-bg);
@@ -189,8 +191,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 0;
   border-radius: 9999px;
@@ -216,7 +218,7 @@
 
 .reader-zoom-pill__divider {
   width: 1px;
-  height: 14px;
+  height: 16px;
   background: var(--border-subtle);
   margin: 0 1px;
 }
@@ -251,6 +253,48 @@
   background: var(--interactive-pressed);
 }
 
+.reader-toolbar-circle-button,
+.reader-memora-button,
+.reader-tag-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  color: var(--text-secondary);
+  background: var(--toolbar-bg);
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.04));
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.reader-toolbar-circle-button:hover:not(:disabled),
+.reader-memora-button:hover:not(:disabled),
+.reader-tag-button:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--interactive-hover);
+  border-color: var(--border-strong);
+}
+
+.reader-toolbar-circle-button.is-active,
+.reader-memora-button.is-active,
+.reader-tag-button.is-active {
+  color: var(--text-primary);
+  background: var(--interactive-selected);
+  border-color: var(--border-strong);
+}
+
+.reader-toolbar-circle-button:focus-visible,
+.reader-memora-button:focus-visible,
+.reader-tag-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
 .reader-icon-button:disabled {
   color: var(--text-disabled);
   cursor: default;
@@ -282,18 +326,20 @@
   gap: 4px;
   min-width: 170px;
   max-width: 260px;
+  height: 36px;
 }
 
 .reader-search__input {
   width: 100%;
-  height: 30px;
-  padding: 0 10px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 12px;
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: 10px;
   outline: 0;
   color: inherit;
   background: var(--color-reader-glass);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .reader-search__results {

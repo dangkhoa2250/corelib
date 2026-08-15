@@ -129,6 +129,11 @@ export interface CardComposerProps {
    */
   confirmDiscardOnClose?: boolean;
   /**
+   * When true, saving a card clears front/back and keeps the panel open for
+   * creating further cards without closing.
+   */
+  resetOnSave?: boolean;
+  /**
    * Media bridge overrides (all default to the typed Tauri wrappers). They are
    * injectable so tests can verify staging/discard wiring without the backend.
    */
@@ -170,13 +175,13 @@ function blobToBase64(blob: Blob): Promise<string> {
     reader.onload = () => {
       const result = reader.result;
       if (typeof result !== "string") {
-        reject(new Error("Could not read the image data."));
+        reject(new Error("Expected data URL"));
         return;
       }
       const comma = result.indexOf(",");
       resolve(comma >= 0 ? result.slice(comma + 1) : result);
     };
-    reader.onerror = () => reject(new Error("Could not read the image data."));
+    reader.onerror = () => reject(reader.error ?? new Error("FileReader error"));
     reader.readAsDataURL(blob);
   });
 }
@@ -187,10 +192,10 @@ export function CardComposer({
   onSave,
   onCancel,
   onTranslate,
-  defaultBackLanguage,
+  defaultBackLanguage = null,
   onStageMedia,
   variant = "modal",
-  externalError,
+  externalError = null,
   heading = "Create flashcard",
   subtitle = "Your selected text is ready to edit on the front of the card.",
   initialFrontDoc,
@@ -201,6 +206,7 @@ export function CardComposer({
   initialMediaUrls,
   onDirtyChange,
   confirmDiscardOnClose = false,
+  resetOnSave = false,
   stageCardMedia: stageCardMediaBridge = stageCardMedia,
   discardMediaDraft: discardMediaDraftBridge = discardMediaDraft,
   searchMultiSourceImages: searchMultiSourceImagesBridge = searchMultiSourceImages,
@@ -222,7 +228,7 @@ export function CardComposer({
   const [autoTranslating, setAutoTranslating] = useState(false);
   const [closed, setClosed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mediaDraftId] = useState(() => createDraftId());
+  const [mediaDraftId, setMediaDraftId] = useState(() => createDraftId());
   const [pickerOpen, setPickerOpen] = useState(false);
   const draftDiscardedRef = useRef(false);
   // Set once the user takes over the back face (typing, images, or a manual
@@ -536,6 +542,24 @@ export function CardComposer({
     } catch (saveError) {
       setError(errorMessage(saveError));
       setSaving(false);
+      return;
+    }
+
+    if (resetOnSave) {
+      setMediaDraftId(createDraftId());
+      const emptyDoc = paragraphDocFromText("");
+      setFrontDoc(emptyDoc);
+      setBackDoc(emptyDoc);
+      setStagedMediaUrls({});
+      setFrontLanguage(null);
+      setIsManualLanguage(false);
+      setSaving(false);
+      setError(null);
+      backEditedRef.current = false;
+      initialSnapshotRef.current = { frontDoc: emptyDoc, backDoc: emptyDoc, deckValue, frontLanguage: null };
+      frontEditorRef.current?.getEditor()?.commands.setContent(emptyDoc);
+      backEditorRef.current?.getEditor()?.commands.setContent(emptyDoc);
+      frontEditorRef.current?.focus();
       return;
     }
 

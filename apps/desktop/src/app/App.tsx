@@ -489,7 +489,6 @@ export function App({
 
   const handleSaveCard = useCallback(async (input: CardSaveInput) => {
     await learning.createCard(input);
-    setComposerSource(null);
   }, [learning]);
 
   const handleCloseComposer = useCallback(() => {

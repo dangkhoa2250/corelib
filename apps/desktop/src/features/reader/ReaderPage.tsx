@@ -12,6 +12,7 @@ import { createPageRenderQueue, PageRenderQueueError, type PageRenderQueueToken 
 import { ScrollArea } from "../../components/ScrollArea";
 import { useReadingActivitySession, type StatisticsActivityApi } from "./useReadingActivitySession";
 import { startActivitySession, checkpointActivitySession, finishActivitySession } from "../../lib/statistics";
+import { IconMemora } from "../../app/icons";
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
@@ -1272,56 +1273,6 @@ export function ReaderPage({
           </div>
 
           <div className="reader-toolbar__right">
-            {togglePageTag && (
-              <div className="reader-tag-menu">
-                <button
-                  type="button"
-                  className="reader-icon-button"
-                  aria-label="Page tags"
-                  title="Page tags"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setTagMenuOpen(!tagMenuOpen);
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-                    <line x1="7" y1="7" x2="7.01" y2="7" />
-                  </svg>
-                </button>
-                {tagMenuOpen && (
-                  <div className="reader-tag-dropdown" onClick={(e) => e.stopPropagation()}>
-                    <button
-                      type="button"
-                      className="reader-tag-dropdown__toggle"
-                      onClick={() => void handleToggleTag()}
-                    >
-                      {currentTagged ? `✓ Page ${currentPage} tagged` : `+ Tag Page ${currentPage}`}
-                    </button>
-                    <div className="reader-tag-dropdown__list">
-                      {pageTags.length === 0 ? (
-                        <p className="reader-tag-dropdown__empty">No tagged pages yet</p>
-                      ) : (
-                        pageTags.map((tag) => (
-                          <button
-                            key={tag.id}
-                            type="button"
-                            className={`reader-tag-dropdown__item${tag.page === currentPage ? " is-active" : ""}`}
-                            onClick={() => {
-                              handlePageSelect(tag.page);
-                              setTagMenuOpen(false);
-                            }}
-                          >
-                            Page {tag.page}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="reader-zoom-pill" role="group" aria-label="Zoom controls">
               <button
                 type="button"
@@ -1390,6 +1341,80 @@ export function ReaderPage({
                 </svg>
               </button>
             </div>
+
+            {/* Tag indicator / menu */}
+            {togglePageTag && (
+              <div className="reader-tag-menu">
+                <button
+                  type="button"
+                  className={`reader-toolbar-circle-button reader-tag-button ${tagMenuOpen || currentTagged ? "is-active" : ""}`}
+                  aria-label="Page tags"
+                  title="Page tags"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTagMenuOpen(!tagMenuOpen);
+                  }}
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+                    <line x1="7" y1="7" x2="7.01" y2="7" />
+                  </svg>
+                </button>
+                {tagMenuOpen && (
+                  <div className="reader-tag-dropdown" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      className="reader-tag-dropdown__toggle"
+                      onClick={() => void handleToggleTag()}
+                    >
+                      {currentTagged ? `✓ Page ${currentPage} tagged` : `+ Tag Page ${currentPage}`}
+                    </button>
+                    <div className="reader-tag-dropdown__list">
+                      {pageTags.length === 0 ? (
+                        <p className="reader-tag-dropdown__empty">No tagged pages yet</p>
+                      ) : (
+                        pageTags.map((tag) => (
+                          <button
+                            key={tag.id}
+                            type="button"
+                            className={`reader-tag-dropdown__item${tag.page === currentPage ? " is-active" : ""}`}
+                            onClick={() => {
+                              handlePageSelect(tag.page);
+                              setTagMenuOpen(false);
+                            }}
+                          >
+                            Page {tag.page}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Flashcard panel toggle button */}
+            {onCreateCard && (
+              <button
+                type="button"
+                className={`reader-toolbar-circle-button reader-memora-button ${composerSource ? "is-active" : ""}`}
+                aria-label="Memora flashcards"
+                title="Memora flashcards"
+                onClick={() => {
+                  if (composerSource) {
+                    onCloseComposer?.();
+                  } else {
+                    onCreateCard({
+                      documentId: document.id,
+                      page: currentPage,
+                      quote: "",
+                    });
+                  }
+                }}
+              >
+                <IconMemora size={18} />
+              </button>
+            )}
 
             {/* Search box */}
             <form className="reader-search" onSubmit={(e) => void handleSearch(e)}>
@@ -1516,6 +1541,7 @@ export function ReaderPage({
             defaultBackLanguage={composerDefaultBackLanguage}
             variant="panel"
             externalError={composerError}
+            resetOnSave
           />
         </div>
       ) : null}

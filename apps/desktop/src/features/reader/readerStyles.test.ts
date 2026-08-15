@@ -27,9 +27,12 @@ test("scopes the flashcard panel to an overlay container for narrow widths", () 
   );
 });
 
-test("renders document subtitle and zoom pill in reader toolbar", () => {
+test("renders document subtitle, zoom pill, tag button, and memora button in reader toolbar", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = normalizeNewlines(readFileSync(join(currentDir, "reader.css"), "utf8"));
   expect(css).toContain(".reader-toolbar__subtitle");
   expect(css).toContain(".reader-zoom-pill");
+  expect(css).toContain(".reader-tag-button");
+  expect(css).toContain(".reader-memora-button");
+  expect(css).toContain(".reader-toolbar-circle-button");
 });

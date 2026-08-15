@@ -851,3 +851,23 @@ test("a slow auto-translate never clobbers an image added to the back", async ()
   const input = onSave.mock.calls[0][0];
   expect(input.backDoc.content.some((block: any) => block.type === "image")).toBe(true);
 });
+
+test("when resetOnSave is true, saving keeps composer open and resets front and back", async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
+  const { user } = renderComposer({
+    resetOnSave: true,
+    onSave,
+  });
+
+  expect(editor("Front")).toHaveTextContent(draft.quote);
+  await user.type(editor("Back"), "Definition text");
+
+  await user.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+
+  // Composer stays visible and mounted
+  expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  // Front and Back are cleared
+  expect(editor("Front")).toHaveTextContent("");
+  expect(editor("Back")).toHaveTextContent("");
+});
