@@ -1246,7 +1246,7 @@ export function ReaderPage({
       </aside>
 
       {/* Main View Area */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "var(--viewer-canvas-bg)" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", background: "var(--viewer-canvas-bg)", position: "relative" }}>
       <section style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {/* Toolbar */}
         <header
@@ -1513,16 +1513,18 @@ export function ReaderPage({
         ) : null}
       </section>
       {composerSource && onSaveCard && onCloseComposer ? (
-        <CardComposer
-          draft={composerSource}
-          decks={composerDecks ?? []}
-          onCancel={onCloseComposer}
-          onSave={onSaveCard}
-          onTranslate={onTranslate}
-          defaultBackLanguage={composerDefaultBackLanguage}
-          variant="panel"
-          externalError={composerError}
-        />
+        <div className="reader-composer">
+          <CardComposer
+            draft={composerSource}
+            decks={composerDecks ?? []}
+            onCancel={onCloseComposer}
+            onSave={onSaveCard}
+            onTranslate={onTranslate}
+            defaultBackLanguage={composerDefaultBackLanguage}
+            variant="panel"
+            externalError={composerError}
+          />
+        </div>
       ) : null}
       </div>
     </main>

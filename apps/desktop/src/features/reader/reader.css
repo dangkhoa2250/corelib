@@ -257,6 +257,14 @@
   box-shadow: var(--shadow-lg) !important;
 }
 
+.reader-composer {
+  flex: 0 0 auto;
+}
+
+.reader-composer .card-composer--panel {
+  height: 100%;
+}
+
 @media (max-width: 900px) {
   .reader-sidebar {
     width: 156px !important;
@@ -277,6 +285,15 @@
 
   .reader-toolbar__overflow {
     display: inline-flex;
+  }
+
+  .reader-composer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 360px;
+    z-index: 20;
   }
 }
 
