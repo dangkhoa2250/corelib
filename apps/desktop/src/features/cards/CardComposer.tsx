@@ -853,6 +853,7 @@ export function CardComposer({
     return (
       <section
         aria-labelledby="card-composer-title"
+        className="card-composer--panel"
         onKeyDown={handleDialogKeyDown}
         ref={dialogRef}
         role="dialog"

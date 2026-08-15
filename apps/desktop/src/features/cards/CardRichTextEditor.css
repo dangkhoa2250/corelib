@@ -238,6 +238,30 @@
   min-height: 140px;
 }
 
+/* The side panel's Front/Back faces get a fixed 140px viewport that scrolls
+   internally; the modal keeps its fluid height. The scroll-content inset
+   (paddingRight: 20px) still clears ScrollArea's custom thumb. */
+.card-composer--panel .card-rich-text-editor__scroll-area {
+  flex: 0 0 140px;
+  height: 140px;
+}
+
+/* Empty panel content fits the 140px viewport exactly: the base 120px
+   min-height plus the 36px scroll-content padding overflows by 16px, so the
+   thumb always shows. 104px + 36px = 140px; long content still grows and
+   drives overflow. */
+.card-composer--panel .card-rich-text-editor .tiptap {
+  min-height: 104px;
+}
+
+/* WKWebView measures the last block's trailing 8px margin as extra scrollable
+   height (140px viewport reported scrollHeight 148), so the thumb stays on for
+   short content. Drop the trailing margin: the scroll-content's 26px bottom
+   padding already provides the breathing room. */
+.card-composer--panel .card-rich-text-editor .tiptap > :last-child {
+  margin-bottom: 0;
+}
+
 .card-rich-text-editor__scroll-content {
   box-sizing: border-box;
   min-height: 100%;

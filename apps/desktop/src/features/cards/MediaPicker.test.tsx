@@ -154,3 +154,24 @@ test("keeps Deck/Front/Back and actions unscrolled, routing only the image picke
   expect(panel).not.toContain("ScrollArea");
   expect(panel).not.toMatch(/overflow[A-Za-z]*\s*:\s*(auto|scroll)/);
 });
+
+test("keeps panel Front and Back content at a fixed 140px ScrollArea viewport", () => {
+  const composer = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardComposer.tsx"), "utf8"));
+  const editorCss = normalizeNewlines(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "CardRichTextEditor.css"), "utf8"));
+
+  expect(composer).toContain('className="card-composer--panel"');
+  expect(editorCss).toMatch(
+    /\.card-composer--panel\s+\.card-rich-text-editor__scroll-area\s*\{[\s\S]*?flex:\s*0 0 140px;[\s\S]*?height:\s*140px;/,
+  );
+  expect(editorCss).toContain(".card-rich-text-editor__scroll-content");
+  expect(editorCss).toMatch(
+    /\.card-composer--panel\s+\.card-rich-text-editor\s+\.tiptap\s*\{[\s\S]*?min-height:\s*104px;/,
+  );
+  // WKWebView measures a trailing block margin as scrollable overflow, so the
+  // panel drops the last block's 8px bottom margin to keep a short face at
+  // exactly 140px (scrollHeight == clientHeight).
+  expect(editorCss).toMatch(
+    /\.card-composer--panel\s+\.card-rich-text-editor\s+\.tiptap\s*>\s*:last-child\s*\{[\s\S]*?margin-bottom:\s*0;/,
+  );
+  expect(composer).not.toMatch(/overflowY:\s*["'](auto|scroll)["']/);
+});

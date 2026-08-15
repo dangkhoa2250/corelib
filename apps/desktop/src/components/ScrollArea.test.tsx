@@ -189,3 +189,57 @@ test("updates the thumb position when a split pane adds a sibling", async () => 
   const thumb = document.querySelector<HTMLElement>(".scroll-area__thumb--vertical");
   await waitFor(() => expect(thumb).toHaveStyle({ left: "188px" }));
 });
+
+test("recomputes the vertical thumb when nested text length changes", async () => {
+  let text = "short";
+  const harness = (value: string) => (
+    <ScrollArea data-testid="scroll-area">
+      <div>
+        <p>{value}</p>
+      </div>
+    </ScrollArea>
+  );
+
+  const { getByTestId, rerender } = render(harness(text));
+  const area = getByTestId("scroll-area") as HTMLDivElement;
+
+  Object.defineProperties(area, {
+    clientHeight: { configurable: true, value: 200 },
+    scrollHeight: {
+      configurable: true,
+      get: () => (text === "short" ? 200 : 1_000),
+    },
+    scrollTop: { configurable: true, value: 0, writable: true },
+    scrollLeft: { configurable: true, value: 0, writable: true },
+  });
+  area.getBoundingClientRect = () => new DOMRect(100, 20, 300, 200);
+
+  // Initialize metrics for short content (scrollHeight 200 === clientHeight
+  // 200, so no thumb) via a scroll event. Drain the animation frame so no
+  // stale scroll-triggered metric update can satisfy the "long" assertion
+  // below without the observer firing.
+  fireEvent.scroll(area);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const thumb = document.querySelector<HTMLElement>(".scroll-area__thumb--vertical");
+  expect(thumb).not.toBeNull();
+  await waitFor(() => expect(thumb).toHaveStyle({ display: "none" }));
+
+  // Tiptap-style typing grows nested text nodes; the thumb must appear without
+  // another scroll event. React updates the text node in place, so this is a
+  // characterData mutation, not a direct child-list change.
+  text = "long";
+  rerender(harness("long"));
+  await waitFor(
+    () => expect(thumb).toHaveStyle({ display: "block" }),
+    { timeout: 3_000 },
+  );
+
+  // Deleting back to short content must hide the thumb immediately, again
+  // without a scroll event.
+  text = "short";
+  rerender(harness("short"));
+  await waitFor(
+    () => expect(thumb).toHaveStyle({ display: "none" }),
+    { timeout: 3_000 },
+  );
+});

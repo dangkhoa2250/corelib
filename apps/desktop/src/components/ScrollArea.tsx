@@ -153,7 +153,11 @@ export const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(func
       }
       scheduleMetricsUpdate();
     });
-    mutationObserver.observe(element, { childList: true });
+    mutationObserver.observe(element, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
     const parentMutationObserver = parent
       ? new MutationObserver(scheduleMetricsUpdate)
       : null;
