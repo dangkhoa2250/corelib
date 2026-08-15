@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 
 import {
   parseLoadCommands,
@@ -12,6 +14,15 @@ const REEXPORT = "LC_REEXPORT_DYLIB";
 const TRANSLATION = "/System/Library/Frameworks/Translation.framework/Versions/A/Translation";
 const TRANSLATION_SWIFTUI = "/System/Library/Frameworks/_Translation_SwiftUI.framework/Versions/A/_Translation_SwiftUI";
 const WEBKIT = "/System/Library/Frameworks/WebKit.framework/Versions/A/WebKit";
+
+it("keeps the verifier importable by cross-platform test loaders", () => {
+  const source = readFileSync(
+    path.join(process.cwd(), "scripts", "verify-macos-universal.mjs"),
+    "utf8",
+  );
+
+  expect(source.startsWith("#!")).toBe(false);
+});
 
 function block(index, command, name = null) {
   const lines = [`Load command ${index}`, `          cmd ${command}`, "      cmdsize 48"];
