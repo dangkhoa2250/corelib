@@ -373,8 +373,8 @@
   padding: 6px;
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
-  background: var(--surface-1);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-lg);
   z-index: 100;
 }
 

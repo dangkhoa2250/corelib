@@ -318,44 +318,7 @@ export function MemoraPage({ listDecks, getStudyReadyCounts, onReviewToday, crea
       <header className="memora-page__header">
         <h1>Memora</h1>
         <div className="memora-page__actions">
-          {creatingDeck ? (
-            <form
-              className="memora-new-deck"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submitNewDeck();
-              }}
-            >
-              <input
-                aria-label="New deck name"
-                autoFocus
-                disabled={saving}
-                onChange={(event) => setNewDeckName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    setCreatingDeck(false);
-                    setNewDeckName("");
-                  }
-                }}
-                placeholder="Deck name"
-                value={newDeckName}
-              />
-              <Button disabled={saving || !newDeckName.trim()} type="submit" variant="primary">
-                Create
-              </Button>
-              <Button
-                onClick={() => {
-                  setCreatingDeck(false);
-                  setNewDeckName("");
-                }}
-                variant="secondary"
-              >
-                Cancel
-              </Button>
-            </form>
-          ) : (
-            <Button onClick={() => setCreatingDeck(true)} variant="primary">New Deck</Button>
-          )}
+          <Button onClick={() => setCreatingDeck(true)} variant="primary">New Deck</Button>
           <Button
             onClick={onReviewToday}
             variant="secondary"
@@ -364,6 +327,66 @@ export function MemoraPage({ listDecks, getStudyReadyCounts, onReviewToday, crea
           </Button>
         </div>
       </header>
+      {creatingDeck ? (
+        <div aria-labelledby="new-deck-dialog-title" aria-modal="true" className="deck-learning-dialog__backdrop" role="dialog">
+          <div className="deck-learning-dialog">
+            <div className="deck-learning-dialog__header">
+              <h2 id="new-deck-dialog-title">New Deck</h2>
+              <button
+                aria-label="Close dialog"
+                className="deck-learning-dialog__close"
+                onClick={() => {
+                  setCreatingDeck(false);
+                  setNewDeckName("");
+                }}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                submitNewDeck();
+              }}
+              style={{ display: "grid", gap: "16px" }}
+            >
+              <label className="deck-learning-dialog__field">
+                <span>Deck name</span>
+                <input
+                  aria-label="New deck name"
+                  autoFocus
+                  disabled={saving}
+                  onChange={(event) => setNewDeckName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setCreatingDeck(false);
+                      setNewDeckName("");
+                    }
+                  }}
+                  placeholder="e.g. Spanish Vocabulary"
+                  value={newDeckName}
+                />
+              </label>
+              <div className="deck-learning-dialog__actions">
+                <Button disabled={saving || !newDeckName.trim()} type="submit" variant="primary">
+                  {saving ? "Creating…" : "Create"}
+                </Button>
+                <Button
+                  disabled={saving}
+                  onClick={() => {
+                    setCreatingDeck(false);
+                    setNewDeckName("");
+                  }}
+                  variant="secondary"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
       {error ? (
         <div role="alert">
           <p>{error}</p>

@@ -103,4 +103,27 @@ describe("MemoraPage", () => {
       name: "Settings for English",
     })).toBeInTheDocument();
   });
+
+  it("opens a popup dialog to create a new deck", async () => {
+    const createDeck = vi.fn().mockResolvedValue({
+      id: "math",
+      name: "Math",
+      description: null,
+      color: null,
+      archived: false,
+    });
+    renderMemora({ createDeck });
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "New Deck" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "New Deck" });
+    expect(dialog).toBeInTheDocument();
+
+    const input = screen.getByLabelText("New deck name");
+    await user.type(input, "Math");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+
+    expect(createDeck).toHaveBeenCalledWith("Math");
+  });
 });

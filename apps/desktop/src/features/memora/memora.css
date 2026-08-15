@@ -133,20 +133,8 @@
 
 .memora-page__actions {
   display: flex;
-  gap: 8px;
-}
-
-.memora-new-deck {
-  display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.memora-new-deck input {
-  padding: 9px 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  font-size: 14px;
 }
 
 .memora-page__empty {
@@ -247,10 +235,10 @@
   gap: 2px;
   min-width: 120px;
   padding: 4px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: var(--main-bg);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-lg);
 }
 
 .memora-deck-list__menu-popover button {
@@ -266,7 +254,7 @@
 }
 
 .memora-deck-list__menu-popover button:hover {
-  background: var(--interactive-selected);
+  background: var(--interactive-hover);
 }
 
 .memora-deck-list__menu-delete {

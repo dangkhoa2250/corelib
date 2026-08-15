@@ -148,10 +148,10 @@
   display: grid;
   min-width: max-content;
   padding: 4px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: var(--window-bg);
-  box-shadow: var(--shadow-md);
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-lg);
 }
 
 .card-rich-text-editor__toolbar-menu--horizontal {

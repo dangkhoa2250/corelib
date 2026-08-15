@@ -43,10 +43,10 @@
   z-index: 50;
   min-width: 220px;
   padding: 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: 12px;
-  background: var(--surface-1);
-  box-shadow: var(--shadow-xl);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-lg);
 }
 
 .library-import-menu__item {
@@ -65,7 +65,7 @@
 }
 
 .library-import-menu__item:hover:not(:disabled) {
-  background: var(--interactive-selected);
+  background: var(--interactive-hover);
 }
 
 .library-import-menu__item:focus-visible,

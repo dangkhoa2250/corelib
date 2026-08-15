@@ -53,10 +53,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  height: 30px;
   min-height: 30px;
   border: 1px solid transparent;
   border-radius: 7px;
-  padding: 5px 11px;
+  padding: 0 11px;
   font: inherit;
   font-size: 13px;
   line-height: 18px;
@@ -136,10 +137,10 @@
   display: grid;
   min-width: 152px;
   padding: 4px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--panel-bg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-lg);
 }
 
 .action-menu__item {
@@ -253,9 +254,9 @@
   right: 0;
   z-index: 50;
   min-width: 180px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
-  background: var(--window-bg);
+  background: var(--panel-bg);
   box-shadow: var(--shadow-lg);
   overflow: hidden;
 }
