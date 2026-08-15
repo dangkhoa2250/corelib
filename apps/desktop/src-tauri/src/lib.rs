@@ -83,16 +83,6 @@ mod statistics_tests;
 #[cfg(test)]
 mod rich_document_tests;
 
-#[cfg(test)]
-mod account_service_config_tests {
-    use super::account_api_base_url;
-
-    #[test]
-    fn defaults_to_the_shared_pocketbase_service() {
-        assert_eq!(account_api_base_url(), "https://corelib.duckdns.org");
-    }
-}
-
 const DEFAULT_ACCOUNT_API_BASE_URL: &str = "https://corelib.duckdns.org";
 
 fn account_api_base_url() -> String {
@@ -234,4 +224,14 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod account_service_config_tests {
+    use super::account_api_base_url;
+
+    #[test]
+    fn defaults_to_the_shared_pocketbase_service() {
+        assert_eq!(account_api_base_url(), "https://corelib.duckdns.org");
+    }
 }
