@@ -18,9 +18,9 @@ test("keeps transparency macOS-only and uses standard Windows decorations", () =
   const macConfig = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.macos.conf.json"), "utf8"));
   const windowsConfig = JSON.parse(readFileSync(join(currentDir, "../../src-tauri/tauri.windows.conf.json"), "utf8"));
 
-  expect(config.app.windows[0]).toMatchObject({ transparent: false, decorations: true });
-  expect(macConfig.app.windows[0]).toMatchObject({ transparent: true, titleBarStyle: "Overlay" });
-  expect(windowsConfig.app.windows[0]).toMatchObject({ transparent: false, decorations: true });
+  expect(config.app.windows[0]).toMatchObject({ transparent: false, decorations: true, minWidth: 1200 });
+  expect(macConfig.app.windows[0]).toMatchObject({ transparent: true, titleBarStyle: "Overlay", minWidth: 1200 });
+  expect(windowsConfig.app.windows[0]).toMatchObject({ transparent: false, decorations: true, minWidth: 1200 });
   expect(windowsConfig.bundle.targets).toBe("nsis");
 });
 

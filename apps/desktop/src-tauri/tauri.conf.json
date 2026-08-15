@@ -16,6 +16,7 @@
         "title": "Corelib",
         "width": 1200,
         "height": 800,
+        "minWidth": 1200,
         "transparent": false,
         "decorations": true
       }

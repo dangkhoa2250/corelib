@@ -605,7 +605,40 @@ it("exposes a Preview-style reader layout and labeled controls", async () => {
   expect(globalThis.document.querySelector(".reader-page-stack")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Back to Library" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Reset zoom" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
+});
+
+it("resets zoom scale back to 100% when reset zoom button is clicked", async () => {
+  const requestAnimationFrame = globalThis.requestAnimationFrame;
+  globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+    queueMicrotask(() => callback(performance.now()));
+    return 1;
+  }) as typeof globalThis.requestAnimationFrame;
+  try {
+    render(
+      <ReaderPage
+        document={document}
+        onBack={() => {}}
+        getDocumentFileUrl={vi.fn().mockResolvedValue("/mocked/path.pdf")}
+        onPageChange={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await waitFor(() => expect(pageRender).toHaveBeenCalled());
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    const resetZoom = screen.getByRole("button", { name: "Reset zoom" });
+
+    for (let index = 0; index < 10; index += 1) fireEvent.click(zoomIn);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(800));
+
+    fireEvent.click(resetZoom);
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await waitFor(() => expect(globalThis.document.querySelector<HTMLCanvasElement>(".reader-canvas")?.width).toBe(400));
+  } finally {
+    globalThis.requestAnimationFrame = requestAnimationFrame;
+  }
 });
 
 it("does not force the full document column into a composited transform layer", async () => {

@@ -27,10 +27,9 @@ test("scopes the flashcard panel to an overlay container for narrow widths", () 
   );
 });
 
-test("centers the page indicator independently of the toolbar's side clusters", () => {
+test("renders document subtitle and zoom pill in reader toolbar", () => {
   const currentDir = dirname(fileURLToPath(import.meta.url));
   const css = normalizeNewlines(readFileSync(join(currentDir, "reader.css"), "utf8"));
-  expect(css).toMatch(
-    /\.reader-toolbar__group--page\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?left:\s*50%;[\s\S]*?transform:\s*translate\(-50%,\s*-50%\);/,
-  );
+  expect(css).toContain(".reader-toolbar__subtitle");
+  expect(css).toContain(".reader-zoom-pill");
 });

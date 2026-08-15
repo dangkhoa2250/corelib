@@ -7,7 +7,6 @@ import type { LibraryDocument, PageTag } from "../../domain/document";
 import type { CardSource, SelectionRect } from "../../domain/learning";
 import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
-import { ReaderToolbarOverflowMenu } from "./ReaderToolbarOverflowMenu";
 import { CardComposer, type CardSaveInput, type CardComposerDeck } from "../cards/CardComposer";
 import { createPageRenderQueue, PageRenderQueueError, type PageRenderQueueToken } from "./pageRenderQueue";
 import { ScrollArea } from "../../components/ScrollArea";
@@ -779,7 +778,6 @@ export function ReaderPage({
 
   const [pageTags, setPageTags] = useState<PageTag[]>([]);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
-  const [zoomPercent, setZoomPercent] = useState(100);
 
   const readingActivityApi: StatisticsActivityApi = useMemo(() => ({
     start: (input) => startActivitySession(input),
@@ -872,7 +870,6 @@ export function ReaderPage({
       scalingDivRef.current.style.left = `${getCenteredPageOffset(viewportWidth, contentWidth)}px`;
       if (pagesContainerRef.current && contentWidth <= viewportWidth) pagesContainerRef.current.scrollLeft = 0;
     }
-    setZoomPercent(Math.round(scale * 100));
   }, [renderScale, stackContentSize.width]);
 
   // Promote the final zoom scale into real layout only after the debounce has
@@ -971,12 +968,6 @@ export function ReaderPage({
     const baseScale = pendingZoomRef.current?.scale ?? scaleRef.current;
     zoomAtViewportPoint(baseScale + delta, pointerX, pointerY);
   }, [zoomAtViewportPoint]);
-
-  const handleZoomBy = useCallback((delta: number) => {
-    const container = pagesContainerRef.current;
-    if (!container) return;
-    zoomBy(delta, container.clientWidth / 2, container.clientHeight / 2);
-  }, [zoomBy]);
 
   useEffect(() => {
     let active = true;
@@ -1261,21 +1252,28 @@ export function ReaderPage({
             padding: "0 20px",
           }}
         >
-          <button
-            type="button"
-            className="reader-icon-button reader-icon-button--back"
-            aria-label="Back to Library"
-            title="Back to Library"
-            onClick={onBack}
-          >
-            ‹
-          </button>
+          <div className="reader-toolbar__left">
+            <button
+              type="button"
+              className="reader-icon-button reader-icon-button--back"
+              aria-label="Back to Library"
+              title="Back to Library"
+              onClick={onBack}
+            >
+              ‹
+            </button>
 
-          <h1 className="reader-toolbar__title">{document.title}</h1>
+            <div className="reader-toolbar__heading">
+              <h1 className="reader-toolbar__title" title={document.title}>{document.title}</h1>
+              <span className="reader-toolbar__subtitle">
+                Page {currentPage} of {pdfDoc?.numPages ?? 0}
+              </span>
+            </div>
+          </div>
 
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "3px" }}>
+          <div className="reader-toolbar__right">
             {togglePageTag && (
-              <div className="reader-tag-menu reader-toolbar__collapsible">
+              <div className="reader-tag-menu">
                 <button
                   type="button"
                   className="reader-icon-button"
@@ -1324,107 +1322,102 @@ export function ReaderPage({
               </div>
             )}
 
-            <div className="reader-toolbar__group reader-toolbar__group--page">
+            <div className="reader-zoom-pill" role="group" aria-label="Zoom controls">
               <button
                 type="button"
-                className="reader-icon-button"
-                aria-label="Previous page"
-                title="Previous page"
-                disabled={currentPage <= 1}
-                onClick={() => handlePageSelect(currentPage - 1)}
+                className="reader-zoom-pill__button"
+                aria-label="Zoom out"
+                title="Zoom out"
+                onClick={() => {
+                  const container = pagesContainerRef.current;
+                  if (!container) return;
+                  zoomBy(
+                    -0.1,
+                    container.clientWidth / 2,
+                    container.clientHeight / 2,
+                  );
+                }}
               >
-                ‹
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="10" cy="10" r="7" />
+                  <line x1="21" y1="21" x2="15" y2="15" />
+                  <line x1="7" y1="10" x2="13" y2="10" />
+                </svg>
               </button>
-              <span className="reader-page-indicator">
-                Page {currentPage} of {pdfDoc?.numPages}
-              </span>
+              <div className="reader-zoom-pill__divider" />
               <button
                 type="button"
-                className="reader-icon-button"
-                aria-label="Next page"
-                title="Next page"
-                disabled={currentPage >= (pdfDoc?.numPages ?? 1)}
-                onClick={() => handlePageSelect(currentPage + 1)}
+                className="reader-zoom-pill__button"
+                aria-label="Reset zoom"
+                title="Reset zoom to 100%"
+                onClick={() => {
+                  const container = pagesContainerRef.current;
+                  if (!container) return;
+                  zoomAtViewportPoint(
+                    1.0,
+                    container.clientWidth / 2,
+                    container.clientHeight / 2,
+                  );
+                }}
               >
-                ›
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="10" cy="10" r="7" />
+                  <line x1="21" y1="21" x2="15" y2="15" />
+                  <path d="M9 8.8l1.6 -0.8v5.5" />
+                </svg>
+              </button>
+              <div className="reader-zoom-pill__divider" />
+              <button
+                type="button"
+                className="reader-zoom-pill__button"
+                aria-label="Zoom in"
+                title="Zoom in"
+                onClick={() => {
+                  const container = pagesContainerRef.current;
+                  if (!container) return;
+                  zoomBy(
+                    0.1,
+                    container.clientWidth / 2,
+                    container.clientHeight / 2,
+                  );
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="10" cy="10" r="7" />
+                  <line x1="21" y1="21" x2="15" y2="15" />
+                  <line x1="10" y1="7" x2="10" y2="13" />
+                  <line x1="7" y1="10" x2="13" y2="10" />
+                </svg>
               </button>
             </div>
+
+            {/* Search box */}
+            <form className="reader-search" onSubmit={(e) => void handleSearch(e)}>
+              <input
+                type="search"
+                className="reader-search__input"
+                placeholder="Search in PDF..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchResults.length > 0 && (
+                <div className="reader-search__results">
+                  <span>
+                    {searchIndex + 1}/{searchResults.length}
+                  </span>
+                  <button
+                    type="button"
+                    className="reader-icon-button"
+                    aria-label="Next search match"
+                    onClick={handleNextSearchResult}
+                  >
+                    Next Match
+                  </button>
+                </div>
+              )}
+              {searching && <span className="reader-search__results">Searching...</span>}
+            </form>
           </div>
-
-          <div className="reader-toolbar__group reader-toolbar__collapsible">
-            <button
-              type="button"
-              className="reader-icon-button"
-              aria-label="Zoom out"
-              title="Zoom out"
-              onClick={() => {
-                const container = pagesContainerRef.current;
-                if (!container) return;
-                zoomBy(
-                  -0.1,
-                  container.clientWidth / 2,
-                  container.clientHeight / 2,
-                );
-              }}
-            >
-              −
-            </button>
-            <span className="reader-zoom-label">{zoomPercent}%</span>
-            <button
-              type="button"
-              className="reader-icon-button"
-              aria-label="Zoom in"
-              title="Zoom in"
-              onClick={() => {
-                const container = pagesContainerRef.current;
-                if (!container) return;
-                zoomBy(
-                  0.1,
-                  container.clientWidth / 2,
-                  container.clientHeight / 2,
-                );
-              }}
-            >
-              +
-            </button>
-          </div>
-
-          <ReaderToolbarOverflowMenu
-            zoomPercent={zoomPercent}
-            onZoomBy={handleZoomBy}
-            currentTagged={togglePageTag ? currentTagged : undefined}
-            currentPage={togglePageTag ? currentPage : undefined}
-            pageTags={togglePageTag ? pageTags : []}
-            onToggleTag={togglePageTag ? handleToggleTag : undefined}
-            onSelectTaggedPage={togglePageTag ? handlePageSelect : undefined}
-          />
-
-          {/* Search box */}
-          <form className="reader-search" onSubmit={(e) => void handleSearch(e)}>
-            <input
-              type="search"
-              className="reader-search__input"
-              placeholder="Search in PDF..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchResults.length > 0 && (
-              <div className="reader-search__results">
-                <span>
-                  {searchIndex + 1}/{searchResults.length}
-                </span>
-                <button
-                  type="button"
-                  className="reader-icon-button"
-                  aria-label="Next search match"
-                  onClick={handleNextSearchResult}
-                >
-                  Next Match
-                </button>
-              </div>
-            )}
-            {searching && <span className="reader-search__results">Searching...</span>}
-          </form>
         </header>
 
         {/* Scrollable pages container */}
