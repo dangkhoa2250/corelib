@@ -7,6 +7,7 @@ import type { LibraryDocument, PageTag } from "../../domain/document";
 import type { CardSource, SelectionRect } from "../../domain/learning";
 import { selectionDraft, selectionIsWithinPage } from "./readerSelection";
 import { CardSelectionToolbar } from "./CardSelectionToolbar";
+import { ReaderToolbarOverflowMenu } from "./ReaderToolbarOverflowMenu";
 import { CardComposer, type CardSaveInput, type CardComposerDeck } from "../cards/CardComposer";
 import { createPageRenderQueue, PageRenderQueueError, type PageRenderQueueToken } from "./pageRenderQueue";
 import { ScrollArea } from "../../components/ScrollArea";
@@ -759,7 +760,6 @@ export function ReaderPage({
   const thumbnailListRef = useRef<HTMLDivElement | null>(null);
   const zoomLayoutRef = useRef<HTMLDivElement | null>(null);
   const scalingDivRef = useRef<HTMLDivElement | null>(null);
-  const zoomLabelRef = useRef<HTMLSpanElement | null>(null);
   const savePageTimeoutRef = useRef<any>(null);
   const scaleRef = useRef(1.0);
   const isZoomingRef = useRef(false);
@@ -779,6 +779,7 @@ export function ReaderPage({
 
   const [pageTags, setPageTags] = useState<PageTag[]>([]);
   const [tagMenuOpen, setTagMenuOpen] = useState(false);
+  const [zoomPercent, setZoomPercent] = useState(100);
 
   const readingActivityApi: StatisticsActivityApi = useMemo(() => ({
     start: (input) => startActivitySession(input),
@@ -871,9 +872,7 @@ export function ReaderPage({
       scalingDivRef.current.style.left = `${getCenteredPageOffset(viewportWidth, contentWidth)}px`;
       if (pagesContainerRef.current && contentWidth <= viewportWidth) pagesContainerRef.current.scrollLeft = 0;
     }
-    if (zoomLabelRef.current) {
-      zoomLabelRef.current.textContent = `${Math.round(scale * 100)}%`;
-    }
+    setZoomPercent(Math.round(scale * 100));
   }, [renderScale, stackContentSize.width]);
 
   // Promote the final zoom scale into real layout only after the debounce has
@@ -972,6 +971,12 @@ export function ReaderPage({
     const baseScale = pendingZoomRef.current?.scale ?? scaleRef.current;
     zoomAtViewportPoint(baseScale + delta, pointerX, pointerY);
   }, [zoomAtViewportPoint]);
+
+  const handleZoomBy = useCallback((delta: number) => {
+    const container = pagesContainerRef.current;
+    if (!container) return;
+    zoomBy(delta, container.clientWidth / 2, container.clientHeight / 2);
+  }, [zoomBy]);
 
   useEffect(() => {
     let active = true;
@@ -1270,7 +1275,7 @@ export function ReaderPage({
 
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "3px" }}>
             {togglePageTag && (
-              <div className="reader-tag-menu">
+              <div className="reader-tag-menu reader-toolbar__collapsible">
                 <button
                   type="button"
                   className="reader-icon-button"
@@ -1346,7 +1351,7 @@ export function ReaderPage({
             </div>
           </div>
 
-          <div className="reader-toolbar__group">
+          <div className="reader-toolbar__group reader-toolbar__collapsible">
             <button
               type="button"
               className="reader-icon-button"
@@ -1364,9 +1369,7 @@ export function ReaderPage({
             >
               −
             </button>
-            <span ref={zoomLabelRef} className="reader-zoom-label">
-              100%
-            </span>
+            <span className="reader-zoom-label">{zoomPercent}%</span>
             <button
               type="button"
               className="reader-icon-button"
@@ -1385,6 +1388,16 @@ export function ReaderPage({
               +
             </button>
           </div>
+
+          <ReaderToolbarOverflowMenu
+            zoomPercent={zoomPercent}
+            onZoomBy={handleZoomBy}
+            currentTagged={togglePageTag ? currentTagged : undefined}
+            currentPage={togglePageTag ? currentPage : undefined}
+            pageTags={togglePageTag ? pageTags : []}
+            onToggleTag={togglePageTag ? handleToggleTag : undefined}
+            onSelectTaggedPage={togglePageTag ? handlePageSelect : undefined}
+          />
 
           {/* Search box */}
           <form className="reader-search" onSubmit={(e) => void handleSearch(e)}>
@@ -1427,8 +1440,8 @@ export function ReaderPage({
             ref={zoomLayoutRef}
             className="reader-page-stack"
             style={{
-              width: `${(stackContentSize.width + 48) * scaleRef.current}px`,
-              height: `${(stackContentSize.height + 48) * scaleRef.current}px`,
+              width: `${(stackContentSize.width + 48) * renderScale}px`,
+              height: `${(stackContentSize.height + 48) * renderScale}px`,
               position: "relative",
             }}
           >
