@@ -346,7 +346,6 @@
   flex: 1;
   min-height: 0;
   gap: 16px;
-  padding-right: 16px;
 }
 
 .deck-detail-page__body {
@@ -358,7 +357,7 @@
 }
 
 .deck-detail-page__split > .source-viewer {
-  margin: 16px 0;
+  margin: 16px 16px 16px 0;
 }
 
 .deck-detail-page__error {
@@ -369,7 +368,9 @@
 
 .deck-detail-page__card-browser {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .memora-deck-cards__back {
