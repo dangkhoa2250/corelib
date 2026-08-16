@@ -395,9 +395,8 @@ it("renders the final zoom scale after a fast zoom-out and zoom-in", async () =>
       />,
     );
 
-    await waitFor(() => expect(pageRender).toHaveBeenCalled());
-    const zoomOut = screen.getByRole("button", { name: "Zoom out" });
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    const zoomOut = await screen.findByRole("button", { name: "Zoom out" });
+    const zoomIn = await screen.findByRole("button", { name: "Zoom in" });
     for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 350));
@@ -434,8 +433,7 @@ it("renders one full-resolution canvas at high zoom without tile overlays", asyn
       />,
     );
 
-    await waitFor(() => expect(pageRender).toHaveBeenCalled());
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    const zoomIn = await screen.findByRole("button", { name: "Zoom in" });
     for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
     await new Promise((resolve) => setTimeout(resolve, 350));
 
@@ -462,11 +460,14 @@ it("keeps the page DOM geometry stable while raster resolution catches up", asyn
       />,
     );
 
-    await waitFor(() => expect(pageRender).toHaveBeenCalled());
-    const pageContent = globalThis.document.querySelector<HTMLElement>("#pdf-page-1 > div");
+    const pageContent = await waitFor(() => {
+      const el = globalThis.document.querySelector<HTMLElement>("#pdf-page-1 > div");
+      expect(el).not.toBeNull();
+      return el!;
+    });
     expect(pageContent).toHaveStyle({ width: "200px", height: "300px", transform: "none" });
 
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    const zoomIn = await screen.findByRole("button", { name: "Zoom in" });
     for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
     await new Promise((resolve) => setTimeout(resolve, 160));
 
@@ -492,11 +493,14 @@ it("keeps the page stack geometry at its committed scale during an active zoom",
       />,
     );
 
-    await waitFor(() => expect(pageRender).toHaveBeenCalled());
-    const stack = globalThis.document.querySelector<HTMLElement>(".reader-page-stack");
+    const stack = await waitFor(() => {
+      const el = globalThis.document.querySelector<HTMLElement>(".reader-page-stack");
+      expect(el).not.toBeNull();
+      return el!;
+    });
     expect(stack).toHaveStyle({ width: "248px" });
 
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    const zoomIn = await screen.findByRole("button", { name: "Zoom in" });
     for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
     await new Promise((resolve) => setTimeout(resolve, 160));
 
@@ -539,8 +543,7 @@ it("commits settled zoom into the canvas layout instead of a parent transform", 
       />,
     );
 
-    await waitFor(() => expect(pageRender).toHaveBeenCalled());
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    const zoomIn = await screen.findByRole("button", { name: "Zoom in" });
     for (let index = 0; index < 25; index += 1) fireEvent.click(zoomIn);
     await new Promise((resolve) => setTimeout(resolve, 350));
 
@@ -627,9 +630,8 @@ it("resets zoom scale back to 100% when reset zoom button is clicked", async () 
       />,
     );
 
-    await waitFor(() => expect(pageRender).toHaveBeenCalled());
-    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
-    const resetZoom = screen.getByRole("button", { name: "Reset zoom" });
+    const zoomIn = await screen.findByRole("button", { name: "Zoom in" });
+    const resetZoom = await screen.findByRole("button", { name: "Reset zoom" });
 
     for (let index = 0; index < 10; index += 1) fireEvent.click(zoomIn);
     await new Promise((resolve) => setTimeout(resolve, 350));
