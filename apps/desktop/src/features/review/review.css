@@ -306,12 +306,12 @@
 .rich-document img {
   max-width: 100%;
   max-height: min(180px, 30vh);
-  width: auto;
+  width: auto !important;
   height: auto;
   object-fit: contain;
-  border-radius: 12px;
-  border: 1px solid var(--border-subtle);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+  border-radius: 8px;
+  border: none;
+  box-shadow: none;
   margin: 8px auto 0 auto;
   display: block;
   flex-shrink: 1;
