@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import type { Deck, DeckStatistics, CardSource } from "../../domain/learning";
 import { CardBrowser, type CardBrowserProps } from "../cards/CardBrowser";
-import { SourceViewer } from "../cards/SourceViewer";
+import { SourceModal } from "../cards/SourceModal";
 import { Button } from "../../components/Button";
 
 export interface DeckDetailPageProps {
@@ -104,6 +104,7 @@ export function DeckDetailPage({
               createCard={createCard}
               updateAndMoveCard={updateAndMoveCard}
               hideSourcePanel
+              hideDeckColumn
               headerTitle={`${deck.name} Card Browser`}
               headerActions={(
                 <>
@@ -134,14 +135,14 @@ export function DeckDetailPage({
             />
           </div>
         </div>
-        {sourceView && getDocumentFileUrl ? (
-          <SourceViewer
-            source={sourceView}
-            getDocumentFileUrl={getDocumentFileUrl}
-            onClose={() => setSourceView(null)}
-          />
-        ) : null}
       </div>
+      {sourceView && getDocumentFileUrl ? (
+        <SourceModal
+          source={sourceView}
+          getDocumentFileUrl={getDocumentFileUrl}
+          onClose={() => setSourceView(null)}
+        />
+      ) : null}
     </main>
   );
 }

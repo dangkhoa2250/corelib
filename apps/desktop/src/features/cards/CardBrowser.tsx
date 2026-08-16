@@ -3,6 +3,7 @@ import type { Deck, CardBrowserRow, CardLifecycleState, CardSort, CardSource } f
 import { queryDeckCards, moveCards, setCardsSuspended, trashCards, listActiveTags, createCard, updateAndMoveCard } from "../../lib/learning";
 import { CardSidePanel } from "./CardSidePanel";
 import { SourceViewer } from "./SourceViewer";
+import { SourceModal } from "./SourceModal";
 import { Combobox } from "../../components/Combobox";
 import { Button } from "../../components/Button";
 
@@ -29,6 +30,7 @@ export interface CardBrowserProps {
   sourceView?: CardSource | null;
   onSourceViewChange?: (source: CardSource | null) => void;
   hideSourcePanel?: boolean;
+  hideDeckColumn?: boolean;
   headerTitle?: string;
   headerActions?: ReactNode;
 }
@@ -58,6 +60,7 @@ export function CardBrowser({
   sourceView: controlledSourceView,
   onSourceViewChange,
   hideSourcePanel = false,
+  hideDeckColumn = false,
   headerTitle = "Card Browser",
   headerActions,
 }: CardBrowserProps) {
@@ -521,13 +524,13 @@ export function CardBrowser({
                       onChange={handleToggleSelectAll}
                     />
                   </th>
-                  <th>Front</th>
-                  <th>Back</th>
-                  <th>Deck</th>
-                  <th>State</th>
-                  <th>Due Date</th>
-                  <th>Updated</th>
-                  <th>Source</th>
+                  <th className="card-browser__th-front">Front</th>
+                  <th className="card-browser__th-back">Back</th>
+                  {!hideDeckColumn && <th className="card-browser__th-deck">Deck</th>}
+                  <th className="card-browser__th-state">State</th>
+                  <th className="card-browser__th-date">Due Date</th>
+                  <th className="card-browser__th-date">Updated</th>
+                  <th className="card-browser__th-source">Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -550,7 +553,7 @@ export function CardBrowser({
                       <td className="card-browser__td-text card-browser__td-front">
                         <div className="card-browser__cell-text">{row.front}</div>
                         {row.tags.length > 0 && (
-                          <div className="card-browser__cell-tags">
+                           <div className="card-browser__cell-tags">
                             {row.tags.map(t => <span key={t} className="card-browser__cell-tag">#{t}</span>)}
                           </div>
                         )}
@@ -558,21 +561,23 @@ export function CardBrowser({
                       <td className="card-browser__td-text card-browser__td-back">
                         <div className="card-browser__cell-text">{row.back}</div>
                       </td>
-                      <td>
-                        <span className="card-browser__deck-badge">{row.deckName}</span>
-                      </td>
-                      <td>
+                      {!hideDeckColumn && (
+                        <td className="card-browser__td-deck">
+                          <span className="card-browser__deck-badge">{row.deckName}</span>
+                        </td>
+                      )}
+                      <td className="card-browser__td-state">
                         <span className={`card-browser__state-badge card-browser__state-badge--${row.state}`}>
                           {row.state}
                         </span>
                       </td>
-                      <td>
+                      <td className="card-browser__td-date">
                         <span className="card-browser__date-cell">{formatDate(row.dueAt)}</span>
                       </td>
-                      <td>
+                      <td className="card-browser__td-date">
                         <span className="card-browser__date-cell">{formatDate(row.updatedAt)}</span>
                       </td>
-                      <td>
+                      <td className="card-browser__td-source">
                         {row.source?.documentId ? (
                           <button
                             type="button"
@@ -592,7 +597,7 @@ export function CardBrowser({
                 })}
                 {rows.length === 0 && !loading && (
                   <tr>
-                    <td colSpan={8} className="card-browser__empty">
+                    <td colSpan={hideDeckColumn ? 7 : 8} className="card-browser__empty">
                       No cards found matching current filters.
                     </td>
                   </tr>
@@ -608,14 +613,14 @@ export function CardBrowser({
             )}
           </div>
         </div>
-        {!hideSourcePanel && sourceView && customGetDocumentFileUrl ? (
-          <SourceViewer
-            source={sourceView}
-            getDocumentFileUrl={customGetDocumentFileUrl}
-            onClose={() => setSourceView(null)}
-          />
-        ) : null}
       </div>
+      {!hideSourcePanel && sourceView && customGetDocumentFileUrl ? (
+        <SourceModal
+          source={sourceView}
+          getDocumentFileUrl={customGetDocumentFileUrl}
+          onClose={() => setSourceView(null)}
+        />
+      ) : null}
       </div>
 
       {/* Card Edit Side Panel: a row-sibling of `.card-browser__content`

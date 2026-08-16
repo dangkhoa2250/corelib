@@ -24,19 +24,24 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 20px;
 }
 
 .card-browser__title-group {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .card-browser__header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .card-browser__back {
@@ -59,11 +64,14 @@
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
+  line-height: 1.25;
 }
 
 .card-browser__count {
   font-size: 14px;
   color: var(--text-disabled);
+  white-space: nowrap;
+  line-height: 1.25;
 }
 
 .card-browser__empty-trash-btn {
@@ -85,16 +93,18 @@
 .card-browser__toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   background: var(--main-bg);
   padding: 12px 16px;
   border-radius: 12px;
   box-shadow: var(--shadow-card);
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .card-browser__search-box {
-  flex: 1;
+  flex: 1 1 220px;
+  min-width: 180px;
 }
 
 .card-browser__search-input {
@@ -357,21 +367,24 @@
   background: var(--main-bg);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   border: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
 .card-browser__table {
   width: 100%;
+  min-width: 480px;
   border-collapse: collapse;
   text-align: left;
 }
 
 .card-browser__table th,
 .card-browser__table td {
-  padding: 12px 16px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 14px;
   vertical-align: middle;
@@ -388,12 +401,22 @@
 
 .card-browser__th-select,
 .card-browser__td-select {
-  width: 48px;
+  width: 40px;
   text-align: center !important;
 }
 
+.card-browser__th-front,
+.card-browser__td-front {
+  max-width: 120px;
+}
+
+.card-browser__th-back,
+.card-browser__td-back {
+  max-width: 140px;
+}
+
 .card-browser__td-text {
-  max-width: 260px;
+  max-width: 140px;
 }
 
 .card-browser__cell-text {
@@ -401,6 +424,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-primary);
+  max-width: 100%;
+}
+
+.card-browser__th-deck,
+.card-browser__td-deck,
+.card-browser__th-state,
+.card-browser__td-state,
+.card-browser__th-date,
+.card-browser__td-date,
+.card-browser__th-source,
+.card-browser__td-source {
+  white-space: nowrap;
+  width: 1%;
+}
+
+.card-browser__th-source,
+.card-browser__td-source {
+  text-align: center;
 }
 
 .card-browser__cell-tags {
@@ -534,10 +575,92 @@
   background: var(--window-bg);
 }
 
-/* Source Viewer Panel */
+/* Source Viewer Modal & Panel */
+.source-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.source-modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay);
+  backdrop-filter: blur(4px);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.source-modal__content {
+  position: relative;
+  width: min(1180px, 95vw);
+  height: min(92vh, 920px);
+  background: var(--main-bg);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1;
+  animation: sourceModalIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.source-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-1);
+}
+
+.source-modal__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.source-modal__close-btn {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.source-modal__close-btn:hover {
+  background: var(--interactive-hover);
+  color: var(--text-primary);
+}
+
+@keyframes sourceModalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .source-viewer {
   flex: 1 1 0;
-  min-width: 420px;
+  min-width: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--main-bg);
@@ -709,7 +832,8 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: 460px;
+  width: min(460px, 92vw);
+  max-width: 100%;
   background: var(--main-bg);
   box-shadow: var(--shadow-xl);
   display: flex;

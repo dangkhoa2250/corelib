@@ -219,4 +219,38 @@ describe("CardBrowser component", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close composer" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
+
+  it("omits the deck column when hideDeckColumn is true", async () => {
+    vi.mocked(queryDeckCards).mockResolvedValue({
+      rows: mockRows,
+      total: 1,
+      nextCursor: null,
+    });
+
+    const { rerender } = render(
+      <CardBrowser
+        decks={mockDecks}
+        initialDeckId="d1"
+        selectedIds={new Set()}
+        setSelectedIds={vi.fn()}
+        hideDeckColumn={false}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("columnheader", { name: "Deck" })).toBeInTheDocument();
+    });
+
+    rerender(
+      <CardBrowser
+        decks={mockDecks}
+        initialDeckId="d1"
+        selectedIds={new Set()}
+        setSelectedIds={vi.fn()}
+        hideDeckColumn={true}
+      />
+    );
+
+    expect(screen.queryByRole("columnheader", { name: "Deck" })).not.toBeInTheDocument();
+  });
 });

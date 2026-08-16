@@ -10,11 +10,12 @@
 
 .card-rich-text-editor__toolbar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
   align-items: center;
-  gap: 0;
+  gap: 1px;
   flex-shrink: 0;
-  padding: 3px;
+  padding: 3px 4px;
   border-radius: 8px;
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-2);
