@@ -305,14 +305,14 @@
 
 .rich-document img {
   max-width: 100%;
-  max-height: min(220px, 36vh);
+  max-height: min(180px, 30vh);
   width: auto;
   height: auto;
   object-fit: contain;
   border-radius: 12px;
   border: 1px solid var(--border-subtle);
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
-  margin: 6px auto;
+  margin: 8px auto 0 auto;
   display: block;
   flex-shrink: 1;
 }
@@ -320,6 +320,7 @@
 .review-page__back-front {
   text-align: center;
   opacity: 0.85;
+  flex-shrink: 0;
 }
 
 .review-page__back-front .review-page__content--small {
@@ -331,9 +332,11 @@
 .review-page__divider {
   border: 0;
   height: 1px;
-  width: min(200px, 45%);
+  width: min(240px, 50%);
   background: linear-gradient(to right, transparent, var(--border-strong), transparent);
-  margin: 12px auto;
+  margin: 10px auto;
+  flex-shrink: 0;
+  display: block;
 }
 
 .review-page__back-main {
