@@ -270,7 +270,7 @@
   align-items: center;
   text-align: center;
   min-height: 140px;
-  padding: 16px 0;
+  padding: 24px 0 12px 0;
 }
 
 .review-page__card-back-content {
@@ -281,8 +281,40 @@
   align-items: center;
   text-align: center;
   min-height: 140px;
-  padding: 16px 0;
+  padding: 24px 0 12px 0;
   gap: 4px;
+}
+
+/* Rich Document & Auto-resizing Media */
+.rich-document {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  gap: 8px;
+}
+
+.rich-document p,
+.rich-document h1,
+.rich-document h2,
+.rich-document h3 {
+  margin: 0;
+  text-align: center;
+}
+
+.rich-document img {
+  max-width: 100%;
+  max-height: min(220px, 36vh);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.22);
+  margin: 6px auto;
+  display: block;
+  flex-shrink: 1;
 }
 
 .review-page__back-front {
