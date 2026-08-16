@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ClickableFrontText } from "./ClickableFrontText";
 
 import type {
   BulletListNode,
@@ -26,16 +27,29 @@ import type {
 export interface RichDocumentRendererProps {
   document: RichDocument;
   resolveMedia: (mediaId: string) => string;
+  onWordSelect?: (word: string) => void;
+  selectedWord?: string | null;
+  frontLanguage?: string | null;
 }
 
 export function RichDocumentRenderer({
   document,
   resolveMedia,
+  onWordSelect,
+  selectedWord,
+  frontLanguage,
 }: RichDocumentRendererProps) {
   return (
     <div className="rich-document">
       {document.content.map((block, index) => (
-        <Block key={index} node={block} resolveMedia={resolveMedia} />
+        <Block
+          key={index}
+          node={block}
+          resolveMedia={resolveMedia}
+          onWordSelect={onWordSelect}
+          selectedWord={selectedWord}
+          frontLanguage={frontLanguage}
+        />
       ))}
     </div>
   );
@@ -44,33 +58,59 @@ export function RichDocumentRenderer({
 function Block({
   node,
   resolveMedia,
+  onWordSelect,
+  selectedWord,
+  frontLanguage,
 }: {
   node: RichBlock | ListItemNode;
   resolveMedia: (mediaId: string) => string;
+  onWordSelect?: (word: string) => void;
+  selectedWord?: string | null;
+  frontLanguage?: string | null;
 }) {
   switch (node.type) {
     case "paragraph":
-      return <Paragraph node={node} />;
+      return <Paragraph node={node} onWordSelect={onWordSelect} selectedWord={selectedWord} frontLanguage={frontLanguage} />;
     case "heading":
-      return <Heading node={node} />;
+      return <Heading node={node} onWordSelect={onWordSelect} selectedWord={selectedWord} frontLanguage={frontLanguage} />;
     case "bulletList":
-      return <List node={node} resolveMedia={resolveMedia} />;
+      return <List node={node} resolveMedia={resolveMedia} onWordSelect={onWordSelect} selectedWord={selectedWord} frontLanguage={frontLanguage} />;
     case "orderedList":
-      return <List node={node} resolveMedia={resolveMedia} />;
+      return <List node={node} resolveMedia={resolveMedia} onWordSelect={onWordSelect} selectedWord={selectedWord} frontLanguage={frontLanguage} />;
     case "listItem":
-      return <ListItem node={node} resolveMedia={resolveMedia} />;
+      return <ListItem node={node} resolveMedia={resolveMedia} onWordSelect={onWordSelect} selectedWord={selectedWord} frontLanguage={frontLanguage} />;
     case "image":
       return <Image node={node} resolveMedia={resolveMedia} />;
   }
 }
 
-function Paragraph({ node }: { node: ParagraphNode }) {
-  return <p>{renderInlines(node.content)}</p>;
+function Paragraph({
+  node,
+  onWordSelect,
+  selectedWord,
+  frontLanguage,
+}: {
+  node: ParagraphNode;
+  onWordSelect?: (word: string) => void;
+  selectedWord?: string | null;
+  frontLanguage?: string | null;
+}) {
+  return <p>{renderInlines(node.content, onWordSelect, selectedWord, frontLanguage)}</p>;
 }
 
-function Heading({ node }: { node: HeadingNode }) {
+function Heading({
+  node,
+  onWordSelect,
+  selectedWord,
+  frontLanguage,
+}: {
+  node: HeadingNode;
+  onWordSelect?: (word: string) => void;
+  selectedWord?: string | null;
+  frontLanguage?: string | null;
+}) {
   const Tag = headingTag(node.attrs.level);
-  return <Tag>{renderInlines(node.content)}</Tag>;
+  return <Tag>{renderInlines(node.content, onWordSelect, selectedWord, frontLanguage)}</Tag>;
 }
 
 function headingTag(level: 1 | 2 | 3) {
@@ -82,15 +122,28 @@ function headingTag(level: 1 | 2 | 3) {
 function List({
   node,
   resolveMedia,
+  onWordSelect,
+  selectedWord,
+  frontLanguage,
 }: {
   node: BulletListNode | OrderedListNode;
   resolveMedia: (mediaId: string) => string;
+  onWordSelect?: (word: string) => void;
+  selectedWord?: string | null;
+  frontLanguage?: string | null;
 }) {
   const Tag = node.type === "bulletList" ? "ul" : "ol";
   return (
     <Tag>
       {node.content.map((item, index) => (
-        <ListItem key={index} node={item} resolveMedia={resolveMedia} />
+        <ListItem
+          key={index}
+          node={item}
+          resolveMedia={resolveMedia}
+          onWordSelect={onWordSelect}
+          selectedWord={selectedWord}
+          frontLanguage={frontLanguage}
+        />
       ))}
     </Tag>
   );
@@ -99,14 +152,27 @@ function List({
 function ListItem({
   node,
   resolveMedia,
+  onWordSelect,
+  selectedWord,
+  frontLanguage,
 }: {
   node: ListItemNode;
   resolveMedia: (mediaId: string) => string;
+  onWordSelect?: (word: string) => void;
+  selectedWord?: string | null;
+  frontLanguage?: string | null;
 }) {
   return (
     <li>
       {node.content.map((block, index) => (
-        <Block key={index} node={block} resolveMedia={resolveMedia} />
+        <Block
+          key={index}
+          node={block}
+          resolveMedia={resolveMedia}
+          onWordSelect={onWordSelect}
+          selectedWord={selectedWord}
+          frontLanguage={frontLanguage}
+        />
       ))}
     </li>
   );
@@ -129,17 +195,49 @@ function Image({
   );
 }
 
-function renderInlines(nodes: RichInline[]): ReactNode {
+function renderInlines(
+  nodes: RichInline[],
+  onWordSelect?: (word: string) => void,
+  selectedWord?: string | null,
+  frontLanguage?: string | null,
+): ReactNode {
   return nodes.map((node, index) => {
     if (node.type === "hardBreak") {
       return <br key={index} />;
     }
-    return <Text key={index} node={node} />;
+    return (
+      <Text
+        key={index}
+        node={node}
+        onWordSelect={onWordSelect}
+        selectedWord={selectedWord}
+        frontLanguage={frontLanguage}
+      />
+    );
   });
 }
 
-function Text({ node }: { node: TextNode }) {
-  let content: ReactNode = node.text;
+function Text({
+  node,
+  onWordSelect,
+  selectedWord,
+  frontLanguage,
+}: {
+  node: TextNode;
+  onWordSelect?: (word: string) => void;
+  selectedWord?: string | null;
+  frontLanguage?: string | null;
+}) {
+  let content: ReactNode = onWordSelect ? (
+    <ClickableFrontText
+      text={node.text}
+      frontLanguage={frontLanguage ?? null}
+      selectedWord={selectedWord ?? null}
+      onWordSelect={onWordSelect}
+    />
+  ) : (
+    node.text
+  );
   if (node.marks) {
     for (const mark of [...node.marks].reverse()) {
       content = <Mark mark={mark}>{content}</Mark>;

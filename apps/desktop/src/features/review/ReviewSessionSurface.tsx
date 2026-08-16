@@ -128,7 +128,15 @@ export function ReviewSessionSurface({
     <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
       <div className={`review-page__content${small ? " review-page__content--small" : ""}`}>
         {card.frontDoc ? (
-          <RichDocumentRenderer document={card.frontDoc} resolveMedia={resolveMedia} />
+          <RichDocumentRenderer
+            document={card.frontDoc}
+            resolveMedia={resolveMedia}
+            onWordSelect={(word) => {
+              setActiveMedia({ kind: "youglish", word });
+            }}
+            selectedWord={selectedWord}
+            frontLanguage={card.frontLanguage}
+          />
         ) : (
           <ClickableFrontText
             text={card.front}

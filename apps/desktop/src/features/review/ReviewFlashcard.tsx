@@ -38,20 +38,37 @@ export function ReviewFlashcard({
     >
       <div className="review-page__card-inner">
         <div className="review-page__card-face review-page__card-face--front">
-          <ScrollArea className="review-page__card-face-scroll">
-            <p className="review-page__label">Front</p>
-            {front}
-          </ScrollArea>
+          {!revealed ? (
+            <ScrollArea className="review-page__card-face-scroll">
+              <p className="review-page__label">Front</p>
+              {front}
+            </ScrollArea>
+          ) : (
+            <div className="review-page__card-face-scroll">
+              <p className="review-page__label">Front</p>
+              {front}
+            </div>
+          )}
           <div className="review-page__flip-hint">Tap to flip</div>
         </div>
         <div className="review-page__card-face review-page__card-face--back">
-          <ScrollArea className="review-page__card-face-scroll">
-            <p className="review-page__label">Front</p>
-            {backFront}
-            <hr className="review-page__divider" />
-            <p className="review-page__label">Back</p>
-            {back}
-          </ScrollArea>
+          {revealed ? (
+            <ScrollArea className="review-page__card-face-scroll">
+              <p className="review-page__label">Front</p>
+              {backFront}
+              <hr className="review-page__divider" />
+              <p className="review-page__label">Back</p>
+              {back}
+            </ScrollArea>
+          ) : (
+            <div className="review-page__card-face-scroll">
+              <p className="review-page__label">Front</p>
+              {backFront}
+              <hr className="review-page__divider" />
+              <p className="review-page__label">Back</p>
+              {back}
+            </div>
+          )}
         </div>
       </div>
     </section>
