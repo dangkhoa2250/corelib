@@ -152,6 +152,7 @@ function StudyReviewPage({ session, onRate, onRefresh, onBack, getDocumentFileUr
   const preview = grant.preview;
 
   const handleRateCard = async (rating: ReviewRating) => {
+    setRevealed(false);
     setSaving(true);
     setError(null);
     try {
@@ -328,11 +329,13 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl, activityApi }: 
 
   const goToPrev = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setRevealed(false);
     setIndex((current) => Math.max(0, current - 1));
   };
 
   const goToNext = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setRevealed(false);
     setIndex((current) => Math.min(cards.length - 1, current + 1));
   };
 
@@ -365,6 +368,7 @@ function PracticeReviewPage({ cards, onBack, getDocumentFileUrl, activityApi }: 
   }
 
   const handleRateCard = (rating: ReviewRating) => {
+    setRevealed(false);
     setRatingCounts((prev) => ({ ...prev, [rating]: prev[rating] + 1 }));
     setIndex((current) => current + 1);
   };
