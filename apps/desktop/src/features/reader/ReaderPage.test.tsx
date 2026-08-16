@@ -770,20 +770,18 @@ it("performs search, shows macOS Preview secondary bar, sidebar results, and Don
   fireEvent.change(searchInput, { target: { value: "match" } });
   fireEvent.submit(searchInput.closest("form")!);
 
-  // Secondary search bar should appear
+  // Secondary search bar and search results should appear after search completes
   await waitFor(() => {
     expect(screen.getByRole("toolbar", { name: "PDF Search Controls" })).toBeInTheDocument();
+    expect(screen.getByText("Found on 3 pages")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Page 1, 1 match/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Page 2, 1 match/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Page 3, 1 match/i })).toBeInTheDocument();
   });
 
   expect(screen.getByText("Sort By:")).toBeInTheDocument();
   expect(screen.getByRole("radio", { name: "Search Rank" })).toBeInTheDocument();
   expect(screen.getByRole("radio", { name: "Page Order" })).toBeInTheDocument();
-  expect(screen.getByText("Found on 3 pages")).toBeInTheDocument();
-
-  // Sidebar should switch to search results
-  expect(screen.getByRole("button", { name: /Page 1, 1 match/i })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Page 2, 1 match/i })).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /Page 3, 1 match/i })).toBeInTheDocument();
 
   // Switching sort order
   const pageOrderBtn = screen.getByRole("radio", { name: "Page Order" });
