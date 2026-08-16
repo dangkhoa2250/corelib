@@ -124,32 +124,35 @@ export function ReviewSessionSurface({
 
   const frontText = card.frontDoc ? derivePlainText(card.frontDoc) : card.front;
 
-  const frontContent = (small: boolean) => (
-    <div style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-      <div className={`review-page__content${small ? " review-page__content--small" : ""}`}>
-        {card.frontDoc ? (
-          <RichDocumentRenderer
-            document={card.frontDoc}
-            resolveMedia={resolveMedia}
-            onWordSelect={(word) => {
-              setActiveMedia({ kind: "youglish", word });
-            }}
-            selectedWord={selectedWord}
-            frontLanguage={card.frontLanguage}
-          />
-        ) : (
-          <ClickableFrontText
-            text={card.front}
-            frontLanguage={card.frontLanguage}
-            selectedWord={selectedWord}
-            onWordSelect={(word) => {
-              setActiveMedia({ kind: "youglish", word });
-            }}
-          />
-        )}
-      </div>
+  const frontActions = (
+    <div className="review-page__card-actions">
       <PronunciationButton text={frontText} lang={detectSpeechLanguage(frontText)} />
       <SourceButton source={card.source} onOpen={(source) => setActiveMedia({ kind: "source", source })} />
+    </div>
+  );
+
+  const frontContent = (small: boolean) => (
+    <div className={`review-page__content${small ? " review-page__content--small" : ""}`}>
+      {card.frontDoc ? (
+        <RichDocumentRenderer
+          document={card.frontDoc}
+          resolveMedia={resolveMedia}
+          onWordSelect={(word) => {
+            setActiveMedia({ kind: "youglish", word });
+          }}
+          selectedWord={selectedWord}
+          frontLanguage={card.frontLanguage}
+        />
+      ) : (
+        <ClickableFrontText
+          text={card.front}
+          frontLanguage={card.frontLanguage}
+          selectedWord={selectedWord}
+          onWordSelect={(word) => {
+            setActiveMedia({ kind: "youglish", word });
+          }}
+        />
+      )}
     </div>
   );
 
@@ -162,6 +165,7 @@ export function ReviewSessionSurface({
             key={card.id}
             revealed={revealed}
             onReveal={onReveal}
+            actions={frontActions}
             front={frontContent(false)}
             backFront={frontContent(true)}
             back={

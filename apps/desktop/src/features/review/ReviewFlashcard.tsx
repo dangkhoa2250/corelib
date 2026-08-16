@@ -7,6 +7,7 @@ interface ReviewFlashcardProps {
   front: ReactNode;
   backFront: ReactNode;
   back: ReactNode;
+  actions?: ReactNode;
 }
 
 export function ReviewFlashcard({
@@ -15,6 +16,7 @@ export function ReviewFlashcard({
   front,
   backFront,
   back,
+  actions,
 }: ReviewFlashcardProps) {
   const reveal = () => {
     if (!revealed) onReveal();
@@ -38,35 +40,41 @@ export function ReviewFlashcard({
     >
       <div className="review-page__card-inner">
         <div className="review-page__card-face review-page__card-face--front">
+          <p className="review-page__label">Front</p>
+          {actions}
           {!revealed ? (
             <ScrollArea className="review-page__card-face-scroll">
-              <p className="review-page__label">Front</p>
-              {front}
+              <div className="review-page__card-center">
+                {front}
+              </div>
             </ScrollArea>
           ) : (
             <div className="review-page__card-face-scroll">
-              <p className="review-page__label">Front</p>
-              {front}
+              <div className="review-page__card-center">
+                {front}
+              </div>
             </div>
           )}
           <div className="review-page__flip-hint">Tap to flip</div>
         </div>
         <div className="review-page__card-face review-page__card-face--back">
+          <p className="review-page__label">Back</p>
+          {actions}
           {revealed ? (
             <ScrollArea className="review-page__card-face-scroll">
-              <p className="review-page__label">Front</p>
-              {backFront}
-              <hr className="review-page__divider" />
-              <p className="review-page__label">Back</p>
-              {back}
+              <div className="review-page__card-back-content">
+                <div className="review-page__back-front">{backFront}</div>
+                <hr className="review-page__divider" />
+                <div className="review-page__back-main">{back}</div>
+              </div>
             </ScrollArea>
           ) : (
             <div className="review-page__card-face-scroll">
-              <p className="review-page__label">Front</p>
-              {backFront}
-              <hr className="review-page__divider" />
-              <p className="review-page__label">Back</p>
-              {back}
+              <div className="review-page__card-back-content">
+                <div className="review-page__back-front">{backFront}</div>
+                <hr className="review-page__divider" />
+                <div className="review-page__back-main">{back}</div>
+              </div>
             </div>
           )}
         </div>
