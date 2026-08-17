@@ -19,7 +19,7 @@ function setSourceFitScale(pdfViewer: PDFViewerType, presentation: SourceViewerP
   pdfViewer.currentScaleValue = presentation === "modal" ? "1.5" : "page-fit";
 }
 
-function loadPdfViewerModule() {
+function loadPdfViewerModule(): Promise<typeof import("pdfjs-dist/web/pdf_viewer.mjs")> {
   return (pdfViewerModulePromise ??= import("pdfjs-dist/web/pdf_viewer.mjs"));
 }
 

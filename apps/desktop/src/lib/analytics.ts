@@ -121,7 +121,7 @@ export class AnalyticsClient {
   constructor(
     private api: AccountApi,
     private analyticsEnabled: boolean,
-    private appVersion = "0.1.1",
+    private appVersion = "0.1.2",
   ) {
     this.queue = loadQueue();
     this.installationId = loadInstallationId();

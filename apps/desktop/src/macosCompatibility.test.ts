@@ -49,4 +49,17 @@ describe("macOS compatibility floor", () => {
     expect(verifier).toContain('"otool"');
     expect(verifier).toContain("minos");
   });
+
+  it("ensures Promise.withResolvers polyfill and pdfjs legacy bundle aliases for WebKit/Safari on older macOS", () => {
+    const viteConfig = readSource("../vite.config.ts");
+    const indexHtml = readSource("../index.html");
+    const mainTsx = readSource("./main.tsx");
+    const polyfills = readSource("./lib/polyfills.ts");
+
+    expect(viteConfig).toContain("pdfjs-dist/legacy/build/pdf.mjs");
+    expect(viteConfig).toContain("pdfjs-dist/legacy/build/pdf.worker.mjs");
+    expect(indexHtml).toContain("Promise.withResolvers");
+    expect(mainTsx).toContain('import "./lib/polyfills";');
+    expect(polyfills).toContain("Promise.withResolvers");
+  });
 });

@@ -8,6 +8,15 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(async () => ({
   plugins: [react()],
 
+  resolve: {
+    alias: [
+      { find: /^pdfjs-dist\/build\/pdf\.worker\.mjs/, replacement: "pdfjs-dist/legacy/build/pdf.worker.mjs" },
+      { find: /^pdfjs-dist\/web\/pdf_viewer\.mjs/, replacement: "pdfjs-dist/legacy/web/pdf_viewer.mjs" },
+      { find: /^pdfjs-dist\/web\/pdf_viewer\.css/, replacement: "pdfjs-dist/legacy/web/pdf_viewer.css" },
+      { find: /^pdfjs-dist$/, replacement: "pdfjs-dist/legacy/build/pdf.mjs" },
+    ],
+  },
+
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
