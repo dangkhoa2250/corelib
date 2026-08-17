@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, useCallback, type ReactNode } from "react"
 import type { Deck, CardBrowserRow, CardLifecycleState, CardSort, CardSource } from "../../domain/learning";
 import { queryDeckCards, moveCards, setCardsSuspended, trashCards, listActiveTags, createCard, updateAndMoveCard } from "../../lib/learning";
 import { CardSidePanel } from "./CardSidePanel";
-import { SourceViewer } from "./SourceViewer";
 import { SourceModal } from "./SourceModal";
 import { Combobox } from "../../components/Combobox";
 import { Button } from "../../components/Button";
