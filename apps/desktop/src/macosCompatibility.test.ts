@@ -6,11 +6,13 @@ function readSource(relativePath: string): string {
 }
 
 describe("macOS compatibility floor", () => {
-  it("targets macOS 12 in the Tauri config and Rust linker flags", () => {
+  it("gates installs at macOS 12.3 while linking against the 12.0 floor", () => {
     const tauriConfig = JSON.parse(
       readSource("../src-tauri/tauri.macos.conf.json"),
     );
-    expect(tauriConfig.bundle.macOS.minimumSystemVersion).toBe("12.0");
+    // 12.3 ships Safari 15.4, the floor for structuredClone (pdf.js) and
+    // Array.prototype.findLast (TipTap); both are called without a guard.
+    expect(tauriConfig.bundle.macOS.minimumSystemVersion).toBe("12.3");
 
     const buildRs = readSource("../src-tauri/build.rs");
     expect(buildRs).toContain('const MACOS_DEPLOYMENT_TARGET: &str = "12.0"');
@@ -61,5 +63,43 @@ describe("macOS compatibility floor", () => {
     expect(indexHtml).toContain("Promise.withResolvers");
     expect(mainTsx).toContain('import "./lib/polyfills";');
     expect(polyfills).toContain("Promise.withResolvers");
+    expect(readSource("./lib/pdf.ts")).toContain('import "./polyfills";');
+  });
+
+  it("builds for the Safari 15 baseline and bundles the worker as an ES module", () => {
+    const viteConfig = readSource("../vite.config.ts");
+
+    expect(viteConfig).toContain('target: "safari15"');
+    // pdf.js spawns its worker with `{type: "module"}`.
+    expect(viteConfig).toContain('format: "es"');
+  });
+
+  it("keeps pdf.js off the main thread instead of installing a main-thread fake worker", () => {
+    const pdfModule = readSource("./lib/pdf.ts");
+
+    // `globalThis.pdfjsWorker` makes PDFWorker._initialize() take the
+    // _setupFakeWorker() branch unconditionally, which parses and rasterizes every
+    // page on the UI thread.
+    expect(pdfModule).not.toMatch(/\.pdfjsWorker\s*=/);
+    expect(pdfModule).toContain("GlobalWorkerOptions.workerSrc = pdfWorkerUrl");
+    expect(pdfModule).toContain("pdfjs-dist/legacy/build/pdf.worker.mjs?worker&url");
+  });
+
+  it("does not share one worker port across documents", () => {
+    const pdfModule = readSource("./lib/pdf.ts");
+
+    // The worker answers "Terminate" by destroying its own message handler, so a port
+    // shared across documents dies with the first loadingTask.destroy() and every
+    // later document hangs. DocumentCard destroys a task on every unmount.
+    expect(pdfModule).not.toContain("GlobalWorkerOptions.workerPort");
+  });
+
+  it("can report which path pdf.js actually took", () => {
+    const pdfModule = readSource("./lib/pdf.ts");
+    const settings = readSource("./features/account/AccountSettingsSection.tsx");
+
+    expect(pdfModule).toContain("detectPdfWorkerMode");
+    expect(pdfModule).toContain("_webWorker");
+    expect(settings).toContain("PDF engine:");
   });
 });

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { SessionSnapshot } from "../../domain/account";
 import { UpdaterClient, createUpdaterDeps, type UpdateState } from "../../lib/updater";
+import { detectPdfWorkerMode, type PdfWorkerMode } from "../../lib/pdf";
 
-const APP_VERSION = "0.1.0";
+const APP_VERSION = "0.1.1";
 
 export function AccountSettingsSection({
   session,
@@ -21,6 +22,17 @@ export function AccountSettingsSection({
   const internalClient = useRef<UpdaterClient | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>({ kind: "idle" });
   const [installing, setInstalling] = useState(false);
+  const [pdfWorkerMode, setPdfWorkerMode] = useState<PdfWorkerMode | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void detectPdfWorkerMode().then((mode) => {
+      if (active) setPdfWorkerMode(mode);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (updaterClient) {
@@ -157,6 +169,9 @@ export function AccountSettingsSection({
           color: #9ca3af;
           font-size: 12px;
         }
+        .settings-pdf-engine {
+          color: #6b7280;
+        }
         .settings-app-version {
           font-size: 12px;
           color: #6b7280;
@@ -221,7 +236,12 @@ export function AccountSettingsSection({
       </div>
 
       <div className="settings-app-version">
-        <span>App Version: {APP_VERSION}</span>
+        <span>
+          App Version: {APP_VERSION}
+          {pdfWorkerMode && (
+            <span className="settings-pdf-engine"> · PDF engine: {pdfWorkerMode}</span>
+          )}
+        </span>
         {renderUpdateStatus()}
       </div>
     </div>

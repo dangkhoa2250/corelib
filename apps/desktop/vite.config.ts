@@ -17,6 +17,18 @@ export default defineConfig(async () => ({
     ],
   },
 
+  // macOS 12 ships Safari/WebKit 15.x. Vite 7 would otherwise default to
+  // `baseline-widely-available` (Safari 16.0) and emit syntax that fails there.
+  build: {
+    target: "safari15",
+  },
+
+  // pdf.js spawns its worker with `{type: "module"}`, so the chunk has to be an ES
+  // module. It still goes through build.target above.
+  worker: {
+    format: "es",
+  },
+
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",

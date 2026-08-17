@@ -2,7 +2,10 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const EXPECTED_MINIMUM_SYSTEM_VERSION = "12.0";
+// Installs are gated at 12.3 because Safari 15.4 is the floor for structuredClone and
+// Array.prototype.findLast, which pdf.js and TipTap call without a guard. The binary
+// itself is still linked against the 12.0 SDK floor, hence the different minos.
+const EXPECTED_MINIMUM_SYSTEM_VERSION = "12.3";
 const EXPECTED_ARCHS = ["x86_64", "arm64"];
 const EXPECTED_MINOS = "12.0";
 const CANONICAL_TRANSLATION_FRAMEWORKS = [

@@ -64,7 +64,7 @@ function fakeRunner(overrides = {}) {
   return (command, args) => {
     if (command === "plutil") {
       if (overrides.plutilFailed) return { status: 1, stdout: "" };
-      return { status: 0, stdout: overrides.plist ?? "12.0" };
+      return { status: 0, stdout: overrides.plist ?? "12.3" };
     }
     if (command === "lipo") {
       if (overrides.lipoFailed) return { status: 1, stdout: "" };
@@ -201,7 +201,7 @@ describe("verifyApp", () => {
   it("reports a wrong LSMinimumSystemVersion", () => {
     expect(
       verifyApp("/fake/Corelib.app", fakeRunner({ plist: "11.0" })),
-    ).toEqual(["LSMinimumSystemVersion must be 12.0"]);
+    ).toEqual(["LSMinimumSystemVersion must be 12.3"]);
   });
 
   it("reports a wrong architecture set", () => {
@@ -219,7 +219,7 @@ describe("verifyApp", () => {
   it("reports failed plutil, lipo, and otool tools", () => {
     expect(
       verifyApp("/fake/Corelib.app", fakeRunner({ plutilFailed: true })),
-    ).toEqual(["LSMinimumSystemVersion must be 12.0"]);
+    ).toEqual(["LSMinimumSystemVersion must be 12.3"]);
     expect(
       verifyApp("/fake/Corelib.app", fakeRunner({ lipoFailed: true })),
     ).toEqual(["lipo architectures must be x86_64 arm64"]);
