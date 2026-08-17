@@ -1,7 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from "react";
-import * as pdfjs from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
+import { pdfjs } from "../../lib/pdf";
 
 import type { LibraryDocument, PageTag } from "../../domain/document";
 import type { CardSource, SelectionRect } from "../../domain/learning";
@@ -13,8 +12,6 @@ import { ScrollArea } from "../../components/ScrollArea";
 import { useReadingActivitySession, type StatisticsActivityApi } from "./useReadingActivitySession";
 import { startActivitySession, checkpointActivitySession, finishActivitySession } from "../../lib/statistics";
 import { IconMemora } from "../../app/icons";
-
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 let lastSelectionRange: Range | null = null;
 

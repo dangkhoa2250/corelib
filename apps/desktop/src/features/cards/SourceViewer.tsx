@@ -1,16 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import * as pdfjs from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { PDFViewer as PDFViewerType } from "pdfjs-dist/web/pdf_viewer.mjs";
 import type { CardSource } from "../../domain/learning";
 import { ScrollArea } from "../../components/ScrollArea";
-
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
-// pdfjs-dist/web/pdf_viewer.mjs reads its pdf.js API off `globalThis.pdfjsLib` at
-// module-evaluation time. Set it ourselves (and import that module dynamically,
-// below) instead of relying on static-import ordering to populate it first.
-(globalThis as { pdfjsLib?: unknown }).pdfjsLib = pdfjs;
+import { pdfjs } from "../../lib/pdf";
 
 let pdfViewerModulePromise: Promise<typeof import("pdfjs-dist/web/pdf_viewer.mjs")> | null = null;
 const SOURCE_SEARCH_CONCURRENCY = 8;

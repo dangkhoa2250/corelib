@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { SessionSnapshot } from "../../domain/account";
 import { UpdaterClient, createUpdaterDeps, type UpdateState } from "../../lib/updater";
 
-const APP_VERSION = "0.1.2";
+const APP_VERSION = "0.1.0";
 
 export function AccountSettingsSection({
   session,

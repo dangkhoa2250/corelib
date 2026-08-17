@@ -1,13 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import * as pdfjs from "pdfjs-dist";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.mjs?url";
-
+import { pdfjs } from "../../lib/pdf";
 import { documentStatusLabel, type LibraryDocument } from "../../domain/document";
 import { Button } from "../../components/Button";
 import { saveCover as saveCoverApi } from "../../lib/desktop";
-
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 interface CachedCover {
   url: string;
